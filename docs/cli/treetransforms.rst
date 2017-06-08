@@ -37,10 +37,10 @@ The following transforms are applied in the order given on the command line.
 
 Other options
 ^^^^^^^^^^^^^
---inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--inputfmt=<export|bracket|discbracket|tiger|alpino>
                 Input treebank format [default: export].
 
---outputfmt=<export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
+--outputfmt=<export|bracket|discbracket|conll|mst|tokens|wordpos>
                 Output treebank format [default: export].
                 Selecting the formats ``conll`` or ``mst`` results in an
                 unlabeled dependency conversion and requires the use of

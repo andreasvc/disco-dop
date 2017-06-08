@@ -5,30 +5,82 @@ stages=[
     split=True,  # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
     markorigin=True,  # when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
   ),
+  # dict(
+  #   name='pcfg',  # an identifier, used as filename when writing results
+  #   mode='pcfg',  # use the PCFG CKY parser
+  #   split=True,  # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+  #   markorigin=True,  # when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+  #   prune='pcfg',  # which previous chart to use to prune parsing of this stage
+  #   k=50,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
+  # ),
+  # dict(
+  #   name='dop', mode='plcfrs',
+  #   split=True,  # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+  #   markorigin=True,  # when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+  #   prune='pcfg',  # which previous chart to use to prune parsing of this stage
+  #   k=50,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
+  #   dop='doubledop',  # enable DOP mode
+  #   m=1000,  # number of derivations to sample/enumerate
+  #   estimator='rfe',  # choices: rfe, ewe, bon
+  #   objective = 'mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
+  #       # NB: w/shortest derivation, estimator only affects tie breaking.
+  # ),
+  # dict(
+  #   name='dop', mode='plcfrs',
+  #   prune='pcfg',  # which previous chart to use to prune parsing of this stage
+  #   k=50,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
+  #   dop='doubledop',  # enable DOP mode
+  #   m=1000,  # number of derivations to sample/enumerate
+  #   estimator='rfe',  # choices: rfe, ewe, bon
+  #   objective = 'mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
+  #       # NB: w/shortest derivation, estimator only affects tie breaking.
+  # ),
   dict(
-    name='plcfrs',
-    mode='plcfrs',  # use the agenda-based PLCFRS parser
+    name='dop', mode='pcfg',
     prune='pcfg',  # which previous chart to use to prune parsing of this stage
-    splitprune=True,  # VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
-    k=1000,  # number of coarse pcfg derivations to prune with; k=0 => filter only
-    estimates=None,  # compute, store & use estimates; choices: 'SX', 'SXlrgaps'
-    neverblockre=None,  # do not prune nodes with labels that match this regex
-  ),
-  dict(
-    name='dop',
-    mode='plcfrs',
-    prune='plcfrs',  # which previous chart to use to prune parsing of this stage
+    split=True,  # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+    markorigin=True,  # when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
     k=50,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
     dop='doubledop',  # enable DOP mode
     m=1000,  # number of derivations to sample/enumerate
-    sample=False, kbest=True,  # use sampling and/or kbest during marginalization
     estimator='rfe',  # choices: rfe, ewe, bon
     objective = 'mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
         # NB: w/shortest derivation, estimator only affects tie breaking.
-    iterate=False,  # for double dop, whether to include fragments of fragments
-    complement=False,  # for double dop, whether to include fragments which form
-        # the complement of the maximal recurring fragments extracted
   ),
+
+  # dict(
+  #   name='plcfrs',
+  #   mode='plcfrs',  # use the agenda-based PLCFRS parser
+  #   prune='pcfg',  # which previous chart to use to prune parsing of this stage
+  #   k=1e-5,  # number of coarse pcfg derivations to prune with; k=0 => filter only
+  #   estimates=None,  # compute, store & use estimates; choices: 'SX', 'SXlrgaps'
+  #   neverblockre=None,  # do not prune nodes with labels that match this regex
+  # ),
+  # dict(
+  #   name='plcfrs1',  # an identifier, used as filename when writing results
+  #   mode='plcfrs',  # use the PCFG CKY parser
+  #   split=True,  # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+  #   markorigin=True,  # when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+  # ),
+  # dict(
+  #   name='plcfrs2',
+  #   mode='plcfrs',  # use the agenda-based PLCFRS parser
+  #   prune='plcfrs1',  # which previous chart to use to prune parsing of this stage
+  #   k=1e-5,  # number of coarse pcfg derivations to prune with; k=0 => filter only
+  #   estimates=None,  # compute, store & use estimates; choices: 'SX', 'SXlrgaps'
+  #   neverblockre=None,  # do not prune nodes with labels that match this regex
+  # ),
+  # dict(
+  #   name='dop',
+  #   mode='plcfrs',
+  #   prune='plcfrs',  # which previous chart to use to prune parsing of this stage
+  #   k=1e-5,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
+  #   dop='doubledop',  # enable DOP mode
+  #   m=1000,  # number of derivations to sample/enumerate
+  #   estimator='rfe',  # choices: rfe, ewe, bon
+  #   objective = 'mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
+  #       # NB: w/shortest derivation, estimator only affects tie breaking.
+  # ),
   # dict(name='mcdop', mode='mc-rerank', prune=True, k=50)
 ],
 
@@ -124,5 +176,5 @@ binarization=dict(
 ),
 
 # misc
-verbosity=2,  # 0=silent; 1=summary report; 2=per sentence results; 3=dump derivations/parse trees.
+verbosity=4,  # 0=silent; 1=summary report; 2=per sentence results; 3=dump derivations/parse trees.
 numproc=1,  # increase to use multiple CPUs. Set to None to use all CPUs.

@@ -77,6 +77,17 @@ Binarization
     :fanout_marks_before_bin: whether to add fanout markers before binarization
     :labelfun: specify a function from nodes to labels; can be used to change
         how labels appear in markovization, e.g., to strip of annotations.
+    :dot: if ``True``, horizontal context will include all siblings not yet
+		generated, separated with a dot from the siblings that have been.
+        This option overrules ``h`` and ``revh``.
+    :filterlabels: filter any labels matching this sequence from the
+		horizontal markovization context. If labels are of the form ``A/B``,
+		only A is used to match against this sequence. Also, ``labelfun`` is
+		first applied to the label, if given. Can be used to filter out
+		modifiers, s.t. the context contains only required elements.
+	:param direction: if True, mark the the direction of the binarization with
+		l, r, or m; l is everything before the head, r to the right, and m
+		just before introducing the head.
 
 
 Stages
@@ -102,15 +113,13 @@ Where the keys and values are:
 
     :``'pcfg'``: CKY parser
     :``'plcfrs'``: use the agenda-based PLCFRS parser
-    :``'pcfg-bitpar-nbest'``: Use external bitpar parser. Produces n-best list
-        (up to n=1000) without producing a parse forest; works with
-        non-binarized grammars (experimental).
-    :``'pcfg-bitpar-forest'``: Use external bitpar parser (experimental).
     :``'dop-rerank'``: Rerank parse trees from previous stage with DOP
         reduction (experimental).
 :prune: specify the name of a previous stage to enable coarse-to-fine pruning.
-:split: split disc. nodes ``VP_2[101]`` as ``{ VP*[100], VP*[001] }``
-:splitprune: treat ``VP_2[101]`` as ``{VP*[100], VP*[001]}`` for pruning
+:split: split disc. nodes ``VP_2[101]`` as ``{ VP*[100], VP*[001] }``;
+        it is possible to use a splitted grammar as a coarse stage for pruning
+        a discontinuous, fine stage, e.g., ``VP_2[101]`` is treated as
+        ``{VP*[100], VP*[001]}`` for pruning purposes.
 :markorigin: mark origin of split nodes: ``VP_2 => {VP*1, VP*2}``
 :k: pruning parameter:
 
@@ -118,13 +127,7 @@ Where the keys and values are:
         derivation)
     :0 < k < 1: posterior threshold for inside-outside probabilities
     :k > 1: no. of coarse pcfg derivations to prune with
-:kbest: extract *m*-best derivations from chart
-:sample: sample *m* derivations from chart
-:m: number of derivations to sample / enumerate.
-:binarized: when using ``mode='pcfg-bitpar-nbest'``, this option can be set to
-    ``False``, to disable the two auxiliary binarizations needed for
-    Double-DOP. This enables bitpar to do the binarization internally, which is
-    more efficient.
+:m: number of k-best derivations to enumerate.
 :dop: enable DOP mode:
 
     :``None``: Extract treebank grammar
@@ -141,7 +144,7 @@ Where the keys and values are:
 
     :``'mpp'``: Most Probable Parse. Marginalizes over multiple derivations.
     :``'mpd'``: Most Probable Derivation.
-    :``'mcc'``:
+    :``'mcp'``:
         Maximum Constituents Parse (Goodman 1996);
         approximation as in Sangati & Zuidema (2011); experimental.
     :``'shortest'``: Most Probable Shortest Derivation;
@@ -169,9 +172,6 @@ Where the keys and values are:
            order (0, 1, and 2 in the current presets), and then add a stage
            where labels are not collapsed.
 :packedgraph: use packed graph encoding for DOP reduction
-:iterate: for Double-DOP, whether to add fragments of fragments
-:complement: for Double-DOP, whether to include fragments which
-    form the complement of the maximal recurring fragments extracted
 :neverblockre: do not prune nodes with label that match this regex
 :estimates: compute, store & use context-summary (outside) estimates
 :beam_beta: beam pruning factor, between 0 and 1; 1 to disable.

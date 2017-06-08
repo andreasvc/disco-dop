@@ -18,13 +18,12 @@ import logging
 import tempfile
 if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
-from itertools import count
 import multiprocessing
 from collections import defaultdict
 from getopt import gnu_getopt, GetoptError
 from .tree import brackettree
 from .treebank import writetree
-from .treetransforms import binarize, introducepreterminals, unbinarize
+from .treetransforms import unbinarize
 from . import _fragments
 from .util import workerfunc
 from .containers import Vocabulary
@@ -32,7 +31,7 @@ from .containers import Vocabulary
 SHORTUSAGE = '''\
 Usage: discodop fragments <treebank1> [treebank2] [options]
   or: discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]'''
-FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'alt',
+FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'alt',
 		'relfreq', 'adjacent', 'debin', 'debug', 'quiet', 'help')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=',
 		'twoterms=')
@@ -352,7 +351,7 @@ def worker(interval):
 	result = {}
 	result = _fragments.extractfragments(trees1, offset, end,
 			PARAMS['vocab'], trees2, approx=PARAMS['approx'],
-			disc=PARAMS['disc'], complement=PARAMS['complement'],
+			disc=PARAMS['disc'],
 			debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
 			adjacent=PARAMS['adjacent'])
 	logging.debug('finished %d--%d', offset, end)
@@ -414,7 +413,7 @@ def workload(numtrees, mult, numproc):
 
 
 def recurringfragments(trees, sents, numproc=1, disc=True,
-		iterate=False, complement=False, indices=True, maxdepth=1,
+		indices=True, maxdepth=1,
 		maxfrontier=999):
 	"""Get recurring fragments with exact counts in a single treebank.
 
@@ -429,7 +428,6 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	:param disc: when disc=True, assume trees with discontinuous constituents;
 		resulting fragments will be of the form (frag, sent);
 		otherwise fragments will be strings with words as leaves.
-	:param iterate, complement: see :func:`_fragments.extractfragments`
 	:param indices: when False, return integer counts instead of indices.
 	:param maxdepth: when > 0, add 'cover' fragments to result, corresponding
 		to all fragments up to given depth; pass 0 to disable.
@@ -447,7 +445,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=disc, indices=indices, approx=False, complete=False,
-			complement=complement, debug=False, adjacent=False, twoterms=None)
+			debug=False, adjacent=False, twoterms=None)
 	initworkersimple(trees, list(sents))
 	if numproc == 1:
 		mymap, myworker = map, worker
@@ -491,31 +489,6 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		pool.close()
 		pool.join()
 		del pool
-	if iterate:  # optionally collect fragments of fragments
-		logging.info('extracting fragments of recurring fragments')
-		PARAMS['complement'] = False  # needs to be turned off if it was on
-		newfrags = fragments
-		trees, sents = None, None
-		ids = count()
-		for _ in range(10):  # up to 10 iterations
-			newfrags = [brackettree(tree) for tree in newfrags]
-			newtrees = [binarize(
-					introducepreterminals(tree, sent, ids=ids),
-					childchar='}') for tree, sent in newfrags]
-			newsents = [['#%d' % next(ids) if word is None else word
-					for word in sent] for _, sent in newfrags]
-			newfrags, newcounts = iteratefragments(
-					fragments, newtrees, newsents, trees, sents, numproc)
-			if len(newfrags) == 0:
-				break
-			if trees is None:
-				trees = []
-				sents = []
-			trees.extend(newtrees)
-			sents.extend(newsents)
-			fragmentkeys.extend(newfrags)
-			counts.extend(newcounts)
-			fragments.update(zip(newfrags, newcounts))
 	logging.info('found %d fragments', len(fragmentkeys))
 	return dict(zip(fragmentkeys, counts))
 
@@ -523,53 +496,11 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 def allfragments(trees, sents, maxdepth, maxfrontier=999):
 	"""Return all fragments up to a certain depth, # frontiers."""
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
-			complement=False, debug=False, adjacent=False, twoterms=None)
+			debug=False, adjacent=False, twoterms=None)
 	initworkersimple(trees, list(sents))
 	return _fragments.allfragments(PARAMS['trees1'],
 			PARAMS['vocab'], maxdepth, maxfrontier,
 			disc=PARAMS['disc'], indices=PARAMS['indices'])
-
-
-def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
-	"""Get fragments of fragments."""
-	numtrees = len(newtrees)
-	if not numtrees:
-		raise ValueError('no trees.')
-	if numproc == 1:  # set fragments as input
-		initworkersimple(newtrees, newsents, trees, sents)
-		mymap, myworker = map, worker
-	else:
-		# since the input trees change, we need a new pool each time
-		pool = multiprocessing.Pool(
-				processes=numproc, initializer=initworkersimple,
-				initargs=(newtrees, newsents, trees, sents))
-		mymap, myworker = pool.imap, mpworker
-	newfragments = {}
-	for a in mymap(myworker, workload(numtrees, 1, numproc)):
-		newfragments.update(a)
-	logging.info('before: %d, after: %d, difference: %d',
-		len(fragments), len(set(fragments) | set(newfragments)),
-		len(set(newfragments) - set(fragments)))
-	# we have to get counts for these separately because they're not coming
-	# from the same set of trees
-	newkeys = list(set(newfragments) - set(fragments))
-	bitsets = [newfragments[a] for a in newkeys]
-	countchunk = len(bitsets) // numproc + 1
-	if countchunk == 0:
-		return newkeys, []
-	work = list(range(0, len(bitsets), countchunk))
-	work = [(n, len(work), bitsets[a:a + countchunk])
-			for n, a in enumerate(work)]
-	logging.info('getting exact counts for %d fragments', len(bitsets))
-	counts = []
-	for a in mymap(
-			exactcountworker if numproc == 1 else mpexactcountworker, work):
-		counts.extend(a)
-	if numproc != 1:
-		pool.close()
-		pool.join()
-		del pool
-	return newkeys, counts
 
 
 def altrepr(a):
@@ -626,8 +557,7 @@ def printfragments(fragments, counts, out=None):
 		zeroinvalid = False
 	# a frequency of 1 is normal when comparing two treebanks
 	# or when non-recurring fragments are added
-	elif (PARAMS.get('trees2') or PARAMS['cover']
-			or PARAMS['complement'] or PARAMS['approx']):
+	elif PARAMS.get('trees2') or PARAMS['cover'] or PARAMS['approx']:
 		threshold = 0
 		zeroinvalid = True
 	else:  # otherwise, raise alarm.
@@ -677,5 +607,5 @@ def test():
 
 __all__ = ['main', 'regular', 'batch', 'readtreebanks', 'read2ndtreebank',
 		'initworker', 'initworkersimple', 'worker', 'exactcountworker',
-		'workload', 'recurringfragments', 'iteratefragments', 'allfragments',
-		'debinarize', 'printfragments', 'altrepr', 'cpu_count']
+		'workload', 'recurringfragments', 'allfragments', 'debinarize',
+		'printfragments', 'altrepr', 'cpu_count']

@@ -19,7 +19,6 @@ Options:
                     tgrep2 queries; files are bracket corpora
                     (optionally precompiled into tgrep2 format).
 
-                :xpath: arbitrary xpath queries; files are dact XML corpora.
 -c, --counts    Report counts; multiple queries can be given.
 -s, --sents     Output sentences (default); multiple queries can be given.
 -t, --trees     Output visualizations of trees.
@@ -183,39 +182,6 @@ TGrep2 uses its own indexed file format. These files are automatically created
 when using this query engine. Given a file ``example.mrg``, the file ``example.mrg.t2c.gz``
 is created (in the same directory).
 
-XPath syntax examples
-^^^^^^^^^^^^^^^^^^^^^
-Search through treebanks in XML format with XPath; treebanks must be in
-``dact`` format. Note: XPath support depends on the ``alpinocorpus`` library;
-see https://github.com/rug-compling/alpinocorpus-python
-
-Find a particular word::
-
-//node[@word='loopt']
-
-This is case-sensitive.
-If you want to find all inflectional variants of the verb ``lopen``, do::
-
-//node[@lemma='lopen']
-
-To find main clauses::
-
-//node[@cat="smain"]
-
-Finite subordinate clauses::
-
-//node[@cat="cp" and node[@rel="body" and @cat="ssub"]]
-
-This locates ``cp`` nodes with an ``ssub`` child that has ``body`` as function
-tag (relation).
-
-General XPath overview: https://en.wikipedia.org/wiki/XPath
-Using XPath on Alpino treebanks: http://rug-compling.github.io/dact/cookbook/
-
-To create files in ``dact`` format, the alpinocorpus tools may be used.
-Alternatively, ``discodop treetransforms`` can be used::
-
-    $ discodop treetransforms --input=alpino --output=dact 'mycorpus/*.xml' mycorpus.dact
 
 Examples
 ^^^^^^^^

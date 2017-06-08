@@ -45,12 +45,11 @@ Options for simple mode
              instead, whose probability is the sum of any number of the
              k-best derivations.
 
---obj=<mpd|mpp|mcc|shortest|sl-dop>
+--obj=<mpd|mpp|mcp|shortest|sl-dop>
              Objective function to maximize [default: mpd].
 
 -m x         Use x derivations to approximate objective functions;
              mpd and shortest require only 1.
---bitpar     Use bitpar to parse with an unbinarized grammar.
 
 Examples
 ^^^^^^^^

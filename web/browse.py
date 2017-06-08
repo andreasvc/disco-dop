@@ -44,6 +44,7 @@ WORDLIST = pandas.read_table('sonar-word.freqsort.lower.gz',
 
 
 def getdeplen(item):
+	"""Compute dependency length."""
 	tree = item.tree.copy(True)
 	deps = treebank.dependencies(tree)
 	a, b = treebank.deplen(deps)
@@ -53,6 +54,7 @@ def getdeplen(item):
 
 
 def getmodifiers(item):
+	"""Count and highlight REL/PP-modifiers."""
 	nodes = list(item.tree.subtrees(lambda n: n.label in ('REL', 'PP')
 			and treebanktransforms.function(n) == 'mod'))
 	return toboolvec(len(item.sent), {a for x in nodes
@@ -60,6 +62,7 @@ def getmodifiers(item):
 
 
 def toboolvec(length, indices):
+	"""Convert a list of indices into a list of booleans."""
 	return [n in indices for n in range(length)]
 
 
@@ -87,6 +90,7 @@ FILTERS = {
 
 
 def torgb(val, mappable):
+	"""Return hexadecimal HTML color string."""
 	return '#%02x%02x%02x' % mappable.to_rgba(val, bytes=True)[:3]
 
 

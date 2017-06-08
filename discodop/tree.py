@@ -14,21 +14,17 @@
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
-import sys
+import random
 from itertools import count
 from operator import itemgetter
 from collections import defaultdict, OrderedDict
-if sys.version_info[0] == 2:
-	from cgi import escape as htmlescape
-else:
-	from html import escape as htmlescape
-	unicode = str  # pylint: disable=redefined-builtin
+from html import escape as htmlescape
 from .util import slice_bounds, ANSICOLOR
 
 PTBPUNC = {'-LRB-', '-RRB-', '-LCB-', '-RCB-', '-LSB-', '-RSB-', '-NONE-'}
 FRONTIERNTRE = re.compile(r' \)')
 SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
-INDEXRE = re.compile(r' ([0-9]+)\b')
+INDEXRE = re.compile(r' ([0-9]+)\)')
 # regex to check if the tree contains any terminals not prefixed by indices
 STRTERMRE = re.compile(r' (?![0-9]+=)[^()]*\s*\)')
 
@@ -87,12 +83,12 @@ class Tree(object):
 		if label_or_str is None:
 			return object.__new__(cls)  # used by copy.deepcopy
 		if children is None:
-			if not isinstance(label_or_str, (str, unicode)):
+			if not isinstance(label_or_str, str):
 				raise TypeError("%s: Expected a label and child list "
 						"or a single string; got: %s" % (
 						cls.__name__, type(label_or_str)))
 			return cls.parse(label_or_str)
-		if (isinstance(children, (str, unicode)) or
+		if (isinstance(children, str) or
 				not hasattr(children, '__iter__')):
 			raise TypeError("%s() argument 2 should be a list, not a "
 					"string" % cls.__name__)
@@ -178,6 +174,9 @@ class Tree(object):
 	def __len__(self):
 		return self.children.__len__()
 
+	def __bool__(self):
+		return bool(self.children)
+
 	# === Disabled list operations ==============================
 	def __mul__(self, _):
 		raise TypeError('Tree does not support multiplication')
@@ -196,7 +195,7 @@ class Tree(object):
 		if isinstance(index, (int, slice)):
 			return self.children.__getitem__(index)
 		else:
-			if len(index) == 0:
+			if index == ():
 				return self
 			elif len(index) == 1:
 				return self[int(index[0])]
@@ -206,7 +205,7 @@ class Tree(object):
 		if isinstance(index, (int, slice)):
 			return self.children.__setitem__(index, value)
 		else:
-			if len(index) == 0:
+			if index == ():
 				raise IndexError('The tree position () may not be '
 						'assigned to.')
 			elif len(index) == 1:
@@ -218,7 +217,7 @@ class Tree(object):
 		if isinstance(index, (int, slice)):
 			return self.children.__delitem__(index)
 		else:
-			if len(index) == 0:
+			if index == ():
 				raise IndexError('The tree position () may not be deleted.')
 			elif len(index) == 1:
 				del self[index[0]]
@@ -433,7 +432,7 @@ class Tree(object):
 		:returns: A tree corresponding to the string representation s.
 			If this class method is called using a subclass of Tree, then it
 			will return a tree of that type."""
-		if not isinstance(brackets, (str, unicode)) or len(brackets) != 2:
+		if not isinstance(brackets, str) or len(brackets) != 2:
 			raise TypeError('brackets must be a length-2 string')
 		if re.search(r'\s', brackets):
 			raise TypeError('whitespace brackets not allowed')
@@ -451,7 +450,7 @@ class Tree(object):
 		for match in token_re.finditer(s):
 			token = match.group()
 			if token[0] == open_b:  # Beginning of a tree/subtree
-				if len(stack) == 1 and len(stack[0][1]) > 0:
+				if len(stack) == 1 and stack[0][1]:
 					cls._parse_error(s, match, 'end-of-string')
 				label = token[1:].lstrip()
 				if parse_label is not None:
@@ -459,10 +458,10 @@ class Tree(object):
 				stack.append((label, []))
 			elif token == close_b:  # End of a tree/subtree
 				if len(stack) == 1:
-					if len(stack[0][1]) == 0:
-						cls._parse_error(s, match, open_b)
-					else:
+					if stack[0][1]:
 						cls._parse_error(s, match, 'end-of-string')
+					else:
+						cls._parse_error(s, match, open_b)
 				label, children = stack.pop()
 				stack[-1][1].append(cls(label, children))
 			else:  # Leaf node
@@ -474,10 +473,10 @@ class Tree(object):
 		# check that we got exactly one complete tree.
 		if len(stack) > 1:
 			cls._parse_error(s, 'end-of-string', close_b)
-		elif len(stack[0][1]) == 0:
-			cls._parse_error(s, 'end-of-string', open_b)
-		else:
+		elif stack[0][1]:
 			assert stack[0][0] is None and len(stack[0][1]) == 1
+		else:
+			cls._parse_error(s, 'end-of-string', open_b)
 		tree = stack[0][1][0]
 		return tree
 
@@ -525,7 +524,7 @@ class Tree(object):
 		if len(s) + indent < margin:
 			return s
 		# If it doesn't fit on one line, then write it on multi-lines.
-		if isinstance(self.label, (str, unicode)):
+		if isinstance(self.label, str):
 			s = '%s%s' % (brackets[0], self.label)
 		else:
 			s = '%s%r' % (brackets[0], self.label)
@@ -535,7 +534,7 @@ class Tree(object):
 						indent + 2, brackets)
 			elif isinstance(child, tuple):
 				s += '\n' + ' ' * (indent + 2) + '/'.join(child)
-			elif isinstance(child, (str, unicode)):
+			elif isinstance(child, str):
 				s += '\n' + ' ' * (indent + 2) + '%s' % child
 			else:
 				s += '\n' + ' ' * (indent + 2) + '%r' % child
@@ -547,11 +546,11 @@ class Tree(object):
 		for child in self.children:
 			if isinstance(child, Tree):
 				childstrs.append(child._pprint_flat(brackets))
-			elif isinstance(child, (str, unicode)) or child is None:
+			elif isinstance(child, str) or child is None:
 				childstrs.append(child or '')
 			else:
 				childstrs.append(repr(child))
-		if isinstance(self.label, (str, unicode)):
+		if isinstance(self.label, str):
 			return '%s%s %s%s' % (brackets[0], self.label,
 									' '.join(childstrs), brackets[1])
 		else:
@@ -802,7 +801,7 @@ class ParentedTree(Tree):
 				self._delparent(self[index], index)
 			# Remove the child from our child list.
 			super(ParentedTree, self).__delitem__(index)
-		elif len(index) == 0:  # del ptree[()]
+		elif index == ():  # del ptree[()]
 			raise IndexError('The tree position () may not be deleted.')
 		elif len(index) == 1:  # del ptree[(i, )]
 			del self[index[0]]
@@ -848,7 +847,7 @@ class ParentedTree(Tree):
 				self._delparent(self[index], index)
 			# Update our child list.
 			super(ParentedTree, self).__setitem__(index, value)
-		elif len(index) == 0:  # ptree[()] = value
+		elif index == ():  # ptree[()] = value
 			raise IndexError('The tree position () may not be assigned to.')
 		elif len(index) == 1:  # ptree[(i, )] = value
 			self[index[0]] = value
@@ -1008,7 +1007,7 @@ class DrawTree(object):
 			highlightfunc=()):
 		self.tree = tree
 		self.sent = sent
-		if isinstance(tree, (str, unicode)):
+		if isinstance(tree, str):
 			if sent is None:
 				self.tree, sent = brackettree(tree)
 				self.sent = sent
@@ -1016,7 +1015,7 @@ class DrawTree(object):
 				self.tree = Tree.parse(tree, parse_leaf=int)
 		if sent is None:
 			leaves = self.tree.leaves()
-			if (leaves and not any(len(a) == 0 for a in self.tree.subtrees())
+			if (leaves and all(self.tree.subtrees())
 					and all(isinstance(a, int) for a in leaves)):
 				self.sent = ['%d' % a for a in leaves]
 			else:
@@ -1025,7 +1024,7 @@ class DrawTree(object):
 				self.tree = self.tree.copy(True)
 				self.sent = []
 				for a in self.tree.subtrees():
-					if len(a) == 0:
+					if a:
 						a.append(len(self.sent))
 						self.sent.append(None)
 					elif any(not isinstance(b, Tree) for b in a):
@@ -1044,8 +1043,6 @@ class DrawTree(object):
 				self.tree, self.sent, highlight, highlightfunc)
 
 	def __str__(self):
-		if sys.version_info[0] == 2:
-			return self.text(unicodelines=True).encode('utf8')
 		return self.text(unicodelines=True)
 
 	def __repr__(self):
@@ -1224,7 +1221,7 @@ class DrawTree(object):
 				# add column to the set of children for its parent
 				if m != ():
 					childcols[m[:-1]].add((rowidx, i))
-		assert len(positions) == 0
+		assert not positions
 
 		# remove unused columns, right to left
 		for m in range(scale * len(sent) - 1, -1, -1):
@@ -1635,6 +1632,93 @@ class DrawTree(object):
 			'\\end{tikzpicture}'])
 
 
+class DrawDependencies(object):
+	def __init__(self, sent, pos, deps):
+		self.sent = sent
+		self.pos = pos
+		self.deps = deps
+
+	@classmethod
+	def fromconll(cls, data):
+		lines = [line.split() for line in data.strip().splitlines()]
+		return cls(
+			[a[1] for a in lines],
+			[a[3] if not a[4].strip('-') else a[4] for a in lines],
+			[(int(a[0]), a[7], int(a[6])) for a in lines])
+
+	def svg(self):
+		"""Return SVG representation of dependencies."""
+		# Implementation ported from https://github.com/sobhe/dependency-parse-tree
+		def levelheight(level):
+			return 2 + (level + 0.8) ** 1.8 * 10
+
+		def under(e1, e1h, e2, e2h):
+			l, h = sorted((e1, e1h))
+			return e1 != e2 and e2 >= l and e2h >= l and e2 <= h and e2h <= h
+
+		wordheight = 20
+		levels = [0] + [1 for _ in self.deps]
+		for _ in self.deps:
+			for n, _, head in self.deps:
+				levels[n] = (1 + max((levels[m]
+						for m, _, mh in self.deps if under(n, head, m, mh)),
+						default=0))
+		height = levelheight(max(levels, default=0)) + 2 * wordheight
+		x = 30
+		xpos = {0: x}
+		for word, pos, (n, _, _) in zip(self.sent, self.pos, self.deps):
+			x += 13 * max((3, len(word), len(pos)))
+			xpos[n] = x
+		result = ["<defs><marker id='head' orient='auto' markerWidth='6' "
+				+ "markerHeight='4' refX='0.1' refY='1.5'>",
+				"	<path d='M0,0 V3 L5,2 Z' class=arrow />",
+				"</marker></defs>",
+				'<text class="word w%d" x=%d y=%d text-anchor=middle>'
+				'ROOT</text>' % (0, xpos[0], height - wordheight)]
+		for word, pos, (n, _, _) in zip(self.sent, self.pos, self.deps):
+			result.append('<text class="word w%d" x=%d y=%d '
+					'fill=red  text-anchor=middle '
+					'onmouseover="highlightdep(\'w%d\'); " '
+					'onmouseout="nohighlightdep(); "'
+					'>%s</text>' % (
+					n, xpos[n], height - wordheight, n, word))
+			result.append('<text class="tag w%d" x=%d y=%d '
+					'onmouseover="highlightdep(\'w%d\'); " '
+					'onmouseout="nohighlightdep(); "'
+					'fill=blue text-anchor=middle>%s</text>' % (
+					n, xpos[n], height - 4, n, pos))
+
+		for n, deplabel, head in self.deps:
+			start = xpos[head] + random.randint(0, 4) * 5
+			end = xpos[n] + random.randint(-1, 1) * 2
+			mid = (start + end) / 2
+			diff = (start - end) / 4
+			bottom = height - 2 * wordheight
+			top = bottom - levelheight(levels[n])
+			arrow = top + (bottom - top) * 0.25
+			# FIXME: properly adjust x start and end so arcs do not overlap
+			path = 'M%d,%d C%d,%d %d,%d %d,%d' % (
+					start, bottom, mid + diff, top,
+					mid - diff, top, end, bottom - 5)
+			# FIXME: highlight crossing edges
+			result.append("<path class='edge w%d w%d' d='%s' fill='none' "
+					"stroke='gray' stroke-width='1.5' "
+					"marker-end='url(#head)'/>" % (head, n, path))
+			result.append('<text class="dependency w%d w%d" x=%d y=%d '
+					'fill=green text-anchor=middle>%s</text>' % (
+						head, n, mid, arrow + 15, deplabel))
+		width = x + 30
+		result.insert(0, '<svg xmlns="http://www.w3.org/2000/svg" '
+				'width=%d height=%d style="font-family: monospace; ">' % (
+				width, height))
+		result.append('</svg>')
+		return '\n'.join(result)
+
+	def _repr_svg_(self):
+		"""Return a rich representation for IPython notebook."""
+		return self.svg()
+
+
 def latexlabel(label):
 	"""Quote/format label for latex."""
 	newlabel = label.replace('$', r'\$').replace('_', r'\_')
@@ -1696,14 +1780,14 @@ def brackettree(treestr):
 def writebrackettree(tree, sent):
 	"""Return a tree in bracket notation with words as leaves."""
 	return INDEXRE.sub(
-			lambda x: ' %s' % escape(sent[int(x.group(1))]),
+			lambda x: ' %s)' % escape(sent[int(x.group(1))]),
 			str(tree)) + '\n'
 
 
 def writediscbrackettree(tree, sent):
 	"""Return tree in bracket notation with leaves as ``index=word``."""
 	return INDEXRE.sub(
-			lambda x: ' %s=%s' % (x.group(1), escape(sent[int(x.group(1))])),
+			lambda x: ' %s=%s)' % (x.group(1), escape(sent[int(x.group(1))])),
 			str(tree)) + '\n'
 
 

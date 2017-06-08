@@ -3,7 +3,7 @@
 <title>
 {{ form.get('engine', 'tgrep2') + ' ' + form['query'] if 'query' in form else 'Treebank Search' }}
 </title>
-<script src="static/main.js"></script>
+<script src="static/script.js"></script>
 <link type="text/css" rel="stylesheet" href="static/style.css">
 <style>
 div.barplot {
@@ -39,9 +39,9 @@ div.barplot span {
 }
 </style>
 
-<body onLoad="triggerForm('output', '{{ output }}'); triggerForm('norm', '{{
-    form.get('norm', 'sents') }}'); triggerForm('engine', '{{ form.get('engine',
-    'xpath' if havexpath else 'tgrep2') }}'); " >
+<body onLoad="triggerForm('output', '{{ output }}');
+	  triggerForm('norm', '{{ form.get('norm', 'sents') }}');
+	  triggerForm('engine', '{{ form.get('engine', 'tgrep2') }}'); " >
 <div class="content">
 <h3>Treebank Search</h3>
 
@@ -54,9 +54,6 @@ div.barplot span {
     {% if havetgrep %}
     <a href="javascript: toggle('tgrephelp'); ">TGrep2</a>,
     {% endif %}
-    {% if havexpath %}
-    <a href="javascript: toggle('xpathphelp'); ">XPath</a>,
-    {% endif %}
     <a href="javascript: toggle('fraghelp'); ">fragment</a>,
     <a href="javascript: toggle('regexhelp'); ">regex</a>.
     <br>
@@ -64,9 +61,6 @@ div.barplot span {
     Available macros:
     {% if havetgrep %}
     <a href="static/tgrepmacros.txt">TGrep2</a>,
-    {% endif %}
-    {% if havexpath %}
-    <a href="static/xpathmacros.txt">XPath</a>,
     {% endif %}
     <a href="static/regexmacros.txt">regex</a>.
     <br>
@@ -104,11 +98,6 @@ div.barplot span {
     <label><input type=radio name=engine value=tgrep2{{
         ' checked' if form.get('engine', default) == 'tgrep2'
         }} onChange="show('treesoutput', '');">TGrep2</label>
-    {% endif %}
-    {% if havexpath %}
-    <label><input type=radio name=engine value=xpath{{
-        ' checked' if form.get('engine', default) == 'xpath'
-        }} onChange="show('treesoutput', '');">XPath</label>
     {% endif %}
     {% if havefrag %}
     <label><input type=radio name=engine value=frag{{
@@ -255,29 +244,6 @@ div.barplot span {
   A = B       A is also matched by B.
 """|e }}</pre>
 <a href="http://tedlab.mit.edu/~dr/Tgrep2/">More information</a>
-</div>
-<div id=xpathhelp style="display: none; "><pre>Find a particular word:
-
-//node[@word='loopt']
-
-This is case-sensitive.
-If you want to find all inflectional variants of the verb 'lopen', do:
-
-//node[@lemma='lopen']
-
-To find main clauses:
-
-//node[@cat="smain"]
-
-Finite subordinate clauses:
-
-//node[@cat="cp" and node[@rel="body" and @cat="ssub"]]
-
-This locates "cp" nodes with an "ssub" child that has "body" as function tag (relation).
-</pre>
-More information:<br>
-<a href="https://en.wikipedia.org/wiki/XPath">General XPath overview</a><br>
-<a href="http://rug-compling.github.io/dact/cookbook/">Using XPath on Alpino treebanks</a>.
 </div>
 <div id=fraghelp style="display: none; "><pre>{{ """Tree fragments.
 

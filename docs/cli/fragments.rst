@@ -16,7 +16,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
 ^^^^^^^^
---fmt=<export|bracket|discbracket|tiger|alpino|dact>
+--fmt=<export|bracket|discbracket|tiger|alpino>
               when format is not ``bracket``, work with discontinuous trees;
               output is in ``discbracket`` format:
               tree<TAB>sentence<TAB>frequency

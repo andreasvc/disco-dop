@@ -1,6 +1,6 @@
-"""Web interface to search a treebank. Requires Flask, tgrep2
-or alpinocorpus-python (for xpath queries), style. Expects one or more
-treebanks with .mrg or .dact extension in the directory corpus/"""
+"""Web interface to search a treebank.
+
+Expects one or more supported treebanks in the directory corpus/"""
 # stdlib
 from __future__ import print_function, absolute_import
 import io
@@ -20,15 +20,9 @@ from operator import itemgetter
 from collections import Counter, OrderedDict, defaultdict
 from itertools import islice, groupby
 from functools import wraps
-if sys.version_info[0] == 2:
-	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
-	import cPickle as pickle  # pylint: disable=import-error
-	from urllib import quote  # pylint: disable=no-name-in-module
-	from cgi import escape as htmlescape
-else:
-	import pickle
-	from urllib.parse import quote  # pylint: disable=F0401,E0611
-	from html import escape as htmlescape
+import pickle
+from urllib.parse import quote  # pylint: disable=F0401,E0611
+from html import escape as htmlescape
 try:
 	import matplotlib
 	matplotlib.use('AGG')
@@ -43,15 +37,8 @@ except ImportError:
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
 from werkzeug.urls import url_encode
-# alpinocorpus
-try:
-	import alpinocorpus
-	import xml.etree.cElementTree as ElementTree
-	ALPINOCORPUSLIB = True
-except ImportError:
-	ALPINOCORPUSLIB = False
 # disco-dop
-from discodop import treebank, fragments, treesearch
+from discodop import fragments, treesearch
 from discodop.tree import Tree, DiscTree, DrawTree
 from discodop.util import which
 
@@ -70,7 +57,6 @@ CORPUS_DIR = "corpus/"
 PASSWD = None  # optionally, dict with user=>pass strings
 
 APP = Flask(__name__)
-STANDALONE = __name__ == '__main__'
 
 MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
@@ -120,6 +106,7 @@ def requires_auth(f):
 
 
 def iscategorical(vec):
+	"""Heuristic to detect categorical variables."""
 	return (not numpy.issubdtype(vec.dtype, numpy.number)
 			and vec.nunique() <= 30)
 
@@ -145,9 +132,8 @@ def main():
 			selectedtexts=selected,
 			output='counts',
 			havetgrep='tgrep2' in CORPORA,
-			havexpath='xpath' in CORPORA,
 			havefrag='frag' in CORPORA,
-			default=[a for a in ['tgrep2', 'xpath', 'frag', 'regex']
+			default=[a for a in ['tgrep2', 'frag', 'regex']
 					if a in CORPORA][0],
 			metadata=METADATA,
 			categoricalcolumns=None if METADATA is None else
@@ -185,10 +171,7 @@ def export(form, output):
 		results = fragmentsinresults(form, doexport=True)
 		filename = 'fragments.txt'
 	elif output in ('sents', 'brackets', 'trees'):
-		if engine == 'xpath' and output != 'sents':
-			fmt = '<!-- %s:%s -->\n%s\n\n'  # hack
-		else:
-			fmt = '%s:%s|%s\n'
+		fmt = '%s:%s|%s\n'
 		results = CORPORA[engine].sents(
 				form['query'], selected, maxresults=SENTLIMIT,
 				brackets=output in ('brackets', 'trees'))
@@ -349,6 +332,7 @@ def counts(form, doexport=False):
 			yield df.to_csv(None)
 	else:
 		def fmt(x):
+			"""Compact float repr."""
 			return '%g' % round(x, 1)
 
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
@@ -420,7 +404,7 @@ def trees(form):
 						cnt, DrawTree(match, match.sent).text(
 							unicodelines=True, html=True))
 			continue
-		for m, (filename, sentno, tree, sent, high) in enumerate(results):
+		for m, (_filename, sentno, tree, sent, high) in enumerate(results):
 			if m == 0:
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
@@ -488,7 +472,7 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield '%5d  %s\n' % (cnt, match)
 			continue
-		for m, (filename, sentno, sent, high1, high2) in enumerate(results):
+		for m, (_filename, sentno, sent, high1, high2) in enumerate(results):
 			if m == 0:
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
@@ -559,7 +543,7 @@ def brackets(form):
 def fragmentsinresults(form, doexport=False):
 	"""Extract recurring fragments from search results."""
 	engine = form.get('engine', 'tgrep2')
-	if engine not in ('tgrep2', 'xpath', 'frag'):
+	if engine not in ('tgrep2', 'frag'):
 		yield "Only applicable to treebanks."
 		return
 	gotresults = False
@@ -591,10 +575,6 @@ def fragmentsinresults(form, doexport=False):
 			gotresults = True
 		if engine == 'tgrep2':
 			line = treestr.replace(" )", " -NONE-)") + '\n'
-		elif engine == 'xpath':
-			item = treebank.alpinotree(
-					ElementTree.fromstring(treestr.encode('utf8')))
-			line = '%s\t%s\n' % (str(item.tree), ' '.join(item.sent))
 		elif engine == 'frag':
 			line = treestr + '\n'
 		else:
@@ -707,7 +687,6 @@ def style():
 				selectedtexts=selectedtexts(request.args), output='style',
 				results=generate(),
 				havetgrep='tgrep2' in CORPORA,
-				havexpath='xpath' in CORPORA,
 				havefrag='frag' in CORPORA,
 				))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
@@ -730,11 +709,7 @@ def draw():
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
-	if 'xpath' in CORPORA:
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
-		tree, sent = CORPORA['xpath'].extract(
-				filename, [sentno], nofunc, nomorph).pop()
-	elif 'tgrep2' in CORPORA:
+	if 'tgrep2' in CORPORA:
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		tree, sent = CORPORA['tgrep2'].extract(
 				filename, [sentno], nofunc, nomorph).pop()
@@ -761,13 +736,7 @@ def browsetrees():
 		maxtree = min(start + chunk, CORPUSINFO[engine][textno].len + 1)
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
-		if 'xpath' in CORPORA:
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
-			drawntrees = [DrawTree(tree, sent).text(
-					unicodelines=True, html=True)
-					for tree, sent in CORPORA['xpath'].extract(
-						filename, range(start, maxtree), nofunc, nomorph)]
-		elif 'tgrep2' in CORPORA:
+		if 'tgrep2' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
@@ -823,15 +792,13 @@ def browsesents():
 		maxsent = min(start + chunk, CORPUSINFO[engine][textno].len + 1)
 		if engine is None:
 			try:
-				engine = [a for a in ['tgrep2', 'xpath', 'regex', 'frag']
+				engine = [a for a in ['tgrep2', 'regex', 'frag']
 						if a in CORPORA][0]
 			except IndexError:
 				raise ValueError(
 						'no treebank available for "%s".' % TEXTS[textno])
 		if engine == 'tgrep2':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		elif engine == 'xpath':
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
 		elif engine == 'regex':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
 		elif engine == 'frag':
@@ -1076,11 +1043,6 @@ def tokenize(filename):
 			converted = [' '.join(GETLEAVES.findall(line)
 					).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
 					for line in inp]
-	elif os.path.exists(base + '.dact'):
-		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
-				'sentence').text + '\n' for entry
-				in alpinocorpus.CorpusReader(base + '.dact').entries()}
-		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	elif ucto and filename.endswith('.txt'):
 		newfile = base + '.tok'
 		proc = subprocess.Popen(args=[which('ucto'),
@@ -1137,10 +1099,9 @@ def getcorpus():
 			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.export.ct'))
 			)]
-	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
 	# get tokenized sents from trees or ucto
-	for filename in tfiles or afiles or txtfiles:
+	for filename in tfiles or txtfiles:
 		tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
@@ -1152,31 +1113,26 @@ def getcorpus():
 				ffiles, macros='static/fragmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('frag corpus loaded.')
-	if afiles and ALPINOCORPUSLIB and set(afiles) != set(
-			corpora.get('xpath', ())):
-		corpora['xpath'] = treesearch.DactSearcher(
-				afiles, macros='static/xpathmacros.txt', numproc=NUMPROC)
-		log.info('xpath corpus loaded.')
 	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
 		corpora['regex'] = treesearch.RegexSearcher(
 				tokfiles, macros='static/regexmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('regex corpus loaded.')
 
-	assert tfiles or afiles or ffiles or tokfiles, (
+	assert tfiles or ffiles or tokfiles, (
 			'no corpus files with extension .mrg, .dbr, .export, .dact, '
 			'or .txt found in %s' % CORPUS_DIR)
 	assert len(set(
 			frozenset(b.rsplit('.', 1)[0] for b in files)
-			for files in (tfiles, afiles, ffiles, tokfiles) if files)) == 1, (
+			for files in (tfiles, ffiles, tokfiles) if files)) == 1, (
 			'files in different formats do not match.')
 	picklemtime = 0
 	if os.path.exists(picklefile):
 		picklemtime = os.stat(picklefile).st_mtime
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
-		for filename in tfiles + afiles + ffiles + tokfiles}
+		for filename in tfiles + ffiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
-				for a in tfiles + afiles + ffiles + tokfiles)):
+				for a in tfiles + ffiles + tokfiles)):
 		corpusinfo = {}
 		for engine in corpora:
 			corpusinfo[engine] = []
@@ -1185,7 +1141,7 @@ def getcorpus():
 		if not corpusinfo:
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in tfiles or afiles or ffiles or tokfiles]
+				for a in tfiles or ffiles or tokfiles]
 		styletable = getreadabilitymeasures(
 				[a.len for a in next(iter(corpusinfo.values()))])
 		with open(picklefile, 'wb') as out:
@@ -1259,7 +1215,7 @@ log.setLevel(logging.DEBUG)
 log.handlers[0].setFormatter(logging.Formatter(
 		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.info('loading corpus.')
-if STANDALONE:
+if __name__ == '__main__':
 	from getopt import gnu_getopt, GetoptError
 	try:
 		opts, _args = gnu_getopt(sys.argv[1:], '',
@@ -1282,7 +1238,7 @@ try:
 	log.info('password protection enabled.')
 except IOError:
 	log.info('no password protection.')
-if STANDALONE:
+if __name__ == '__main__':
 	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),
 			port=int(opts.get('--port', 5001)),

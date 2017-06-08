@@ -29,10 +29,10 @@ from .treetransforms import binarize, handledisc
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
-from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint32_t, uint64_t, SIZE_MAX
 from cpython.array cimport array, clone, extend_buffer, resize
 from .containers cimport Node, NodeArray, Ctrees, Vocabulary, Rule, \
-		yieldranges, termidx, PY2
+		yieldranges, termidx
 from .bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
@@ -42,10 +42,10 @@ cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b) nogil
 
 # a template to create arrays of this type
-cdef array ulongarray = array(b'L' if PY2 else 'L')
-cdef array uintarray = array(b'I' if PY2 else 'I')
-cdef array intarray = array(b'i' if PY2 else 'i')
-cdef array shortarray = array(b'h' if PY2 else 'h')
+cdef array ulongarray = array('L')
+cdef array uintarray = array('I')
+cdef array intarray = array('i')
+cdef array shortarray = array('h')
 
 FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?:=|:[0-9]+\b)')  # all leaves
 TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)=[^ ()]+\)')  # term. indices
@@ -109,8 +109,7 @@ cdef inline void setrootid(uint64_t *data, short root, uint32_t id,
 cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		Ctrees trees2=None, int start2=0, int end2=0,
 		bint approx=True, bint debug=False,
-		bint disc=False, bint complement=False,
-		str twoterms=None, bint adjacent=False):
+		bint disc=False, str twoterms=None, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use::
@@ -126,8 +125,6 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 	:param debug: if True, a table of common productions is printed for each
 		pair of trees
 	:param disc: if True, return trees with indices as leaves.
-	:param complement: if True, the complement of the recurring
-		fragments in each pair of trees is extracted as well.
 	:param twoterms: only return fragments with at least two terminals,
 		one of which has a POS tag matching the given regex.
 	:param adjacent: only extract fragments from sentences with adjacent
@@ -170,7 +167,7 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		if adjacent:
 			m = n + 1
 			if m < trees2.len:
-				extractfrompair(a, anodes, trees2, n, m, complement, debug,
+				extractfrompair(a, anodes, trees2, n, m, debug,
 						vocab, inter, minterms, matrix, scratch, SLOTS)
 		elif twoterms:
 			for m in twoterminals(a, anodes, trees2,
@@ -181,14 +178,14 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 					continue
 				elif m < 0 or m >= trees2.len:
 					raise ValueError('illegal index %d' % m)
-				extractfrompair(a, anodes, trees2, n, m, complement, debug,
+				extractfrompair(a, anodes, trees2, n, m, debug,
 						vocab, inter, minterms, matrix, scratch, SLOTS)
 		else:  # all pairs
 			if trees1 is trees2:
 				start2 = max(n + 1, start2)
 			for m in range(start2, end2):
 				extractfrompair(a, anodes, trees2, n, m,
-						complement, debug, vocab, inter, minterms, matrix,
+						debug, vocab, inter, minterms, matrix,
 						scratch, SLOTS)
 		collectfragments(fragments, inter, anodes, asent, vocab,
 				disc, approx, False, tmp, SLOTS)
@@ -198,7 +195,7 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 
 
 cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
-		int n, int m, bint complement, bint debug, Vocabulary vocab, set inter,
+		int n, int m, bint debug, Vocabulary vocab, set inter,
 		short minterms, uint64_t *matrix, uint64_t *scratch, short SLOTS):
 	"""Extract the bitsets of maximal overlapping fragments for a tree pair."""
 	cdef NodeArray b = trees2.trees[m]
@@ -214,15 +211,6 @@ cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 	# extract results
 	extractbitsets(matrix, anodes, bnodes, b.root, n,
 			inter, minterms, scratch, SLOTS)
-	# extract complementary fragments?
-	if complement:
-		# combine bitsets of inter together with bitwise or
-		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
-		for wrapper in inter:
-			setunioninplace(scratch, getpointer(wrapper), SLOTS)
-		# extract bitsets in A from result, without regard for B
-		extractcompbitsets(scratch, anodes, a.root, n, inter,
-				SLOTS, NULL)
 
 
 cdef inline collectfragments(dict fragments, set inter, Node *anodes,
@@ -440,8 +428,9 @@ cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
 		list theindices = None
 		object candidates  # RoaringBitmap
 		short i, SLOTS
-		size_t nummatches = 0, cnt = 0, allocated = 1024
-		size_t maxresults_ = maxresults or -1
+		size_t nummatches = 0, allocated = 1024
+		size_t maxresults_ = maxresults or SIZE_MAX
+		long cnt = 0
 		uint32_t n, numcandidates
 		uint32_t *countsp = NULL
 		uint32_t *treenums = NULL
@@ -535,7 +524,7 @@ cdef int countbitset(uint64_t *bitset, Node *anodes, int i, int n,
 					cnt += 1
 					if nummatches[0] >= maxresults:
 						return cnt
-					elif cnt >= allocated[0]:
+					elif <size_t>cnt >= allocated[0]:
 						allocated[0] = cnt * 2
 						treenums[0] = <uint32_t *>realloc(
 								treenums[0], 2 * cnt * sizeof(int))
@@ -660,33 +649,8 @@ cdef twoterminals(NodeArray a, Node *anodes,
 	return candidates
 
 
-cdef extractcompbitsets(uint64_t *bitset, Node *a,
-		int i, int n, set results, short SLOTS, uint64_t *scratch):
-	"""Like ``extractbitsets()`` but following complement of ``bitset``."""
-	cdef bint start = scratch is NULL and not TESTBIT(bitset, i)
-	if start:  # start extracting a fragment
-		# need to create a new array because further down in the recursion
-		# other fragments may be encountered which should not overwrite
-		# this one
-		scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
-		if scratch is NULL:
-			raise MemoryError('allocation error')
-		setrootid(scratch, i, n, SLOTS)
-	elif TESTBIT(bitset, i):  # stop extracting for this fragment
-		scratch = NULL
-	if scratch is not NULL:
-		SETBIT(scratch, i)
-	if a[i].left >= 0:
-		extractcompbitsets(bitset, a, a[i].left, n, results, SLOTS, scratch)
-		if a[i].right >= 0:
-			extractcompbitsets(bitset, a, a[i].right, n, results, SLOTS, scratch)
-	if start:  # store fragment
-		results.add(wrap(scratch, SLOTS))
-		free(scratch)
-
-
 def allfragments(Ctrees trees, Vocabulary vocab,
-		int maxdepth, int maxfrontier=999, bint disc=True,
+		unsigned int maxdepth, unsigned int maxfrontier=999, bint disc=True,
 		bint indices=False):
 	"""Return all fragments of trees up to maxdepth.
 
@@ -721,7 +685,7 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 				# the depth and frontiers of fragments; replace these
 				depth = getroot(getpointer(frag), SLOTS)
 				frontiers = getid(getpointer(frag), SLOTS)
-				assert depth <= maxdepth
+				assert <size_t>depth <= maxdepth
 				assert frontiers <= maxfrontier
 				memcpy(scratch, getpointer(frag), SLOTS * sizeof(uint64_t))
 				setrootid(scratch, i, n, SLOTS)
@@ -873,10 +837,10 @@ def pygetsent(str frag):
 cdef getsent(str frag):
 	"""Renumber indices in fragment and select terminals it contains.
 
-	Returns a transformed copy of fragment and sentence. Replace words that do
-	not occur in the fragment with None and renumber terminals in fragment such
-	that the first index is 0 and any gaps have a width of 1. Expects a tree as
-	string where frontier nodes are marked with intervals."""
+	Returns a transformed copy of fragment. Renumber terminals and substitution
+	sites in fragment such that the first index is 0 and any gaps have a width
+	of 1. Expects a tree as string where frontier nodes are marked with
+	closed intervals ``n:m``, while terminals are denoted with ``n=word``."""
 	cdef int n, m = 0, maxl
 	cdef dict leafmap = {}
 	cdef dict spans = {int(start): int(end) + 1

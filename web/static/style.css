@@ -2,10 +2,9 @@ body { font-family: Helvetica, Arial, sans-serif; }
 blockquote.intro { width: 600px; text-align: justify;  }
 span.r { color: red; }
 span.b { color: blue; }
-span.tt { font-family: monospace; }
 .m { background: #ffe96c; }
 
-tt, pre {
+pre, .mono, .deptree, span.tt {
 	font-family:
 		"Liberation Mono",
 		"Ubuntu Monospace",
@@ -17,4 +16,27 @@ tt, pre {
 	font-size: 10pt;
 }
 
-.item { white-space: nowrap; display: inline;  }
+.item {
+	white-space: nowrap;
+	display: inline;
+}
+
+.deptree {
+	overflow-y: hidden;
+	overflow-x: auto;
+}
+.word {
+	fill: red;
+	cursor: default;
+}
+.tag { fill: blue; }
+.edge, .arrow { stroke: gray !important; }
+.arrow { fill: gray; }
+.dependency { fill: green; }
+.dependency.active { fill: green; }
+.word.active, { stroke: red !important; }
+.edge.active, .arrow.active {
+	stroke: #000 !important;
+	stroke-width: 1.5;
+}
+.word.w0, .tag.w0, .dependency.w0 { fill: gray; }

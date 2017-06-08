@@ -17,7 +17,7 @@ Options
 --disconly       Only evaluate discontinuous bracketings (affects bracketing
                  scores: precision, recall, f-measure, exact match).
 
---goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino>
                  Specify corpus format [default: export].
 
 --fmt=<...>      Shorthand for setting both ``--goldfmt`` and ``--parsesfmt``.
@@ -29,9 +29,10 @@ Options
 --ted            Enable tree-edit distance evaluation.
                  NB: it is not clear whether this score is applicable to
                  discontinuous trees.
---headrules=x    Specify file with rules for head assignment of constituents
-                 that do not already have a child marked as head; this
-                 enables dependency evaluation.
+--headrules=x    Specify file with heuristic rules for head assignment of
+                 constituents that do not already have a child marked as head.
+                 This enables dependency evaluation. NB: this evaluation is
+                 affected by the quality of the head markings and heuristics.
 
 --functions=x    'remove'=default: strip functions off labels,
                  'leave': leave syntactic labels as is,

@@ -5,6 +5,7 @@ import sys
 import gzip
 import codecs
 import traceback
+from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections import Set, Iterable
 
@@ -50,6 +51,14 @@ def openread(filename, encoding='utf8'):
 		return codecs.getreader(encoding)(gzip.open(filename))
 	else:
 		return io.open(filename, encoding=encoding)
+
+
+def readbytes(filename):
+	"""Read binary file, return bytes; decompress .gz files on-the-fly."""
+	with (gzip.open(filename, 'rb') if filename.endswith('.gz')
+			else open(filename, 'rb')) as inp:
+		result = inp.read()
+	return result
 
 
 def slice_bounds(seq, slice_obj, allow_step=False):
@@ -133,6 +142,206 @@ class OrderedSet(Set):
 		if not isinstance(other, Iterable):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
+
+
+INVALID = 0
+
+
+class Entry(object):
+	"""A PyAgenda entry."""
+	def __init__(self, key, value, count):
+		self.key = key
+		self.value = value
+		self.count = count
+
+	def __lt__(self, b):
+		return (self.value < b.value
+				or (self.value == b.value and self.count < b.count))
+
+	def __repr__(self):
+		return '%s(%r, %r, %r)' % (
+				self.__class__.__name__, self.key, self.value, self.count)
+
+
+class PyAgenda:
+	"""Priority Queue implemented with array-based heap.
+
+	Implements decrease-key and remove operations by marking entries as
+	invalid. Provides dictionary-like interface.
+
+	Can be initialized with an iterable; equivalent values are preserved in
+	insertion order and the best priorities are retained on duplicate keys."""
+	def __init__(self, iterable=None):
+		entry = None
+		self.counter = 1
+		self.length = 0
+		self.heap = []
+		self.mapping = {}
+		if iterable:
+			for k, v in iterable:
+				entry = Entry(k, v, self.counter)
+				if k in self.mapping:
+					oldentry = self.mapping[k]
+					if entry < oldentry:
+						entry.count = oldentry.count
+						oldentry.count = INVALID
+						self.mapping[k] = entry
+						self.heap.append(entry)
+				else:
+					self.mapping[k] = entry
+					self.heap.append(entry)
+					self.counter += 1
+			self.length = len(self.mapping)
+			heapify(self.heap)
+
+	def peekitem(self):
+		"""Get the current best (key, value) pair; keep it on the agenda."""
+		n = len(self.heap)
+		if n == 0:
+			raise IndexError("peek at empty heap")
+		entry = self.heap[0]
+		while entry.count == 0:
+			if n == 1:
+				raise IndexError("peek at empty heap")
+			entry = heappop(self.heap)
+			n -= 1
+		return entry.key, entry.value
+
+	# standard dict() methods
+	def pop(self, key):
+		""":returns: value for agenda[key] and remove it."""
+		if key is None:
+			return self.popitem()[1]
+		entry = self.mapping.pop(key)
+		entry.count = INVALID
+		self.length -= 1
+		return entry.value
+
+	def popitem(self):
+		""":returns: best scoring (key, value) pair; removed from agenda."""
+		entry = None
+		entry = heappop(self.heap)
+		while not entry.count:
+			entry = heappop(self.heap)
+		del self.mapping[entry.key]
+		self.length -= 1
+		return entry.key, entry.value
+
+	def update(self, *a, **kw):
+		"""Change score of items given a sequence of (key, value) pairs."""
+		for b in a:
+			for k, v in b:
+				self[k] = v
+		for k, v in kw.items():
+			self[k] = v
+
+	def clear(self):
+		"""Remove all items from agenda."""
+		self.counter = 1
+		del self.heap[:]
+		self.mapping.clear()
+
+	def __contains__(self, key):
+		return key in self.mapping
+
+	def __getitem__(self, key):
+		return self.mapping[key].value
+
+	def __setitem__(self, key, value):
+		entry = Entry(key, value, self.counter)
+		if key in self.mapping:
+			oldentry = self.mapping[key]
+			entry.count = oldentry.count
+			oldentry.count = INVALID
+		else:
+			self.length += 1
+			self.counter += 1
+		self.mapping[key] = entry
+		heappush(self.heap, entry)
+
+	def __delitem__(self, key):
+		"""Remove key from heap."""
+		self.mapping[key].count = INVALID
+		self.length -= 1
+		del self.mapping[key]
+
+	def __repr__(self):
+		return '%s({%s})' % (self.__class__.__name__, ", ".join(
+				['%r: %r' % (a.key, a.value) for a in self.heap if a.count]))
+
+	def __str__(self):
+		return self.__repr__()
+
+	def __iter__(self):
+		return iter(self.mapping)
+
+	def __len__(self):
+		return self.length
+
+	def __bool__(self):
+		return self.length != 0
+
+	def keys(self):
+		""":returns: keys in agenda."""
+		return self.mapping.keys()
+
+	def values(self):
+		""":returns: values in agenda."""
+		return [entry.value for entry in self.mapping.values()]
+
+	def items(self):
+		""":returns: (key, value) pairs in agenda."""
+		return zip(self.keys(), self.values())
+
+
+def merge(*iterables, key=None):
+	"""Generator that performs an n-way merge of sorted iterables.
+
+	>>> list(merge([0, 1, 2], [0, 1, 2, 3]))
+	[0, 0, 1, 1, 2, 2, 3]
+
+	Similar to ``heapq.merge``, but ``key`` can be specified.
+
+	NB: while a sort key may be specified, the individual iterables must
+	already be sorted with this key."""
+	def defaultkey(x):
+		"""Default key() function (identity)."""
+		return x
+
+	heap = []
+	entry = None
+	if key is None:
+		key = defaultkey
+
+	for cnt, it in enumerate(iterables, 1):
+		items = iter(it)
+		try:
+			item = next(items)
+		except StopIteration:
+			pass
+		else:
+			heap.append(Entry((item, items), key(item), cnt))
+	heapify(heap)
+
+	while len(heap) > 1:
+		try:
+			while True:
+				entry = heap[0]
+				item, iterable = entry.key
+				yield item
+				item = next(iterable)
+				entry.key = (item, iterable)
+				entry.value = key(item)
+				heapreplace(heap, entry)
+		except StopIteration:
+			heappop(heap)
+
+	if heap:  # only a single iterator remains, skip heap
+		entry = heappop(heap)
+		item, iterable = entry.key
+		yield item
+		for item in iterable:
+			yield item
 
 
 ANSICOLOR = {

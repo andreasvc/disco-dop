@@ -14,12 +14,7 @@ import sys
 from getopt import gnu_getopt, GetoptError
 from decimal import Decimal, InvalidOperation
 from collections import defaultdict, Counter  # == multiset
-if sys.version_info[0] == 2:
-	from itertools import count, \
-			izip_longest as zip_longest  # pylint: disable=no-name-in-module
-else:
-	from itertools import count, \
-			zip_longest  # pylint: disable=no-name-in-module
+from itertools import count, zip_longest
 from . import grammar
 from .tree import Tree, DrawTree, isdisc, bitfanout
 from .treebank import READERS, dependencies, handlefunctions
@@ -623,7 +618,8 @@ def main():
 		print('error: Wrong number of arguments.', file=sys.stderr)
 		print(SHORTUSAGE)
 		sys.exit(2)
-	goldfile, parsesfile = args[:2]
+	goldfile = args[0]
+	parsesfile = args[1]
 	param = readparam(args[2] if len(args) == 3 else None)
 	param['CUTOFF_LEN'] = int(opts.get('--cutofflen', param['CUTOFF_LEN']))
 	param['DISC_ONLY'] = '--disconly' in opts
@@ -676,8 +672,11 @@ def readparam(filename):
 				'DISC_ONLY': 0, 'LA': 0, 'TED': 0, 'DEP': 0,
 				'DELETE_ROOT_PRETERMS': 0}
 	seen = set()
-	for a in io.open(filename, encoding='utf8') if filename else ():
-		line = a.strip()
+	lines = []
+	if filename:
+		with io.open(filename, encoding='utf8') as inp:
+			lines = inp.read().splitlines()
+	for line in lines:
 		if line and not line.startswith('#'):
 			key, val = line.split(None, 1)
 			if key in validkeysonce:

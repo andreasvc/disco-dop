@@ -46,7 +46,7 @@ LHS, such as the ones created by this tool.
 
 Options
 ^^^^^^^
---inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--inputfmt=<export|bracket|discbracket|tiger|alpino>
           The treebank format [default: export].
 
 --inputenc=<utf-8|iso-8859-1|...>
@@ -61,9 +61,6 @@ Options
 
 --packed
           use packed graph encoding for DOP reduction.
-
---bitpar
-          produce an unbinarized grammar for use with bitpar.
 
 -s X
           start symbol to use for PTSG.

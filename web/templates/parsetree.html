@@ -2,13 +2,15 @@
 <pre style="display: block;" id=n{{ randid }}>
 {{ nbest }}
 </pre>
-<pre style="display: block;" id=f{{ randid }}>
-{{ frags }}
-</pre>
 <pre style="display: block;" id=i{{ randid }}>
 {{ info }}
+{%- if dep -%}
+Dependency conversion:
+<span id=dep{{ randid }}>{{ dep }}</span>
+{%- endif -%}
 </pre>
+<div class=deptree style="display: block; " id="d{{ randid }}">{{ depsvg }}</div>
 <pre>
 {{ result }}
-(<a href='javascript: togglelink("f{{ randid }}")' id=linkf{{ randid }}>hide fragments</a>; <a href='javascript: togglelink("n{{ randid }}")' id=linkn{{ randid }}>hide alternative analyses</a>; <a href='javascript: togglelink("i{{ randid }}")' id=linki{{ randid }}>hide info</a>; <a href="{{ link }}">link</a>)
+show/hide (<a href='javascript: toggle("n{{ randid }}")'>alternative analyses/fragments</a>; <a href="javascript: toggle('d{{ randid }}'); ">dependencies</a>; <a href='javascript: toggle("i{{ randid }}")'>info</a>); <a href="{{ link }}">link</a>)
 </pre>

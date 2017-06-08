@@ -122,15 +122,15 @@ class AnnotatedTree(object):
 		while pstack:
 			n, anc = pstack.pop()
 			self.nodes.append(n)
-			if len(n) == 0:
+			if n:
+				lmd = leftmostdescendents[n.head]
+			else:
 				lmd = i
 				for a in anc:
 					if a in leftmostdescendents:
 						break
 					else:
 						leftmostdescendents[a] = i
-			else:
-				lmd = leftmostdescendents[n.head]
 			self.leftmostdescendents.append(lmd)
 			keyroots[lmd] = i
 			i += 1

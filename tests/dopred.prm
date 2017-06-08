@@ -9,26 +9,23 @@ stages=[  # DOP reduction
     prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
-    kbest=True, sample=False,
     estimator="rfe", objective="mpp",
   ),
 
   dict(
-	name='mpd', mode='plcfrs',
-	prune='pcfg', splitprune=True,
-	dop='reduction',
-	k=50, m=1000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="mpd",
+    name='mpd', mode='plcfrs',
+    prune='pcfg', splitprune=True,
+    dop='reduction',
+    k=50, m=1000,
+    estimator="rfe", objective="mpd",
   ),
 
   dict(
-	name='short', mode='plcfrs',
-	prune='pcfg', splitprune=True,
-	dop='reduction',
-	k=50, m=1000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="shortest",
+    name='short', mode='plcfrs',
+    prune='pcfg', splitprune=True,
+    dop='reduction',
+    k=50, m=1000,
+    estimator="rfe", objective="shortest",
   ),
 
   dict(
@@ -36,7 +33,6 @@ stages=[  # DOP reduction
     prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
-    kbest=True, sample=False,
     estimator="rfe", objective="sl-dop",
   ),
   
@@ -45,7 +41,6 @@ stages=[  # DOP reduction
     prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
-    kbest=True, sample=False,
     estimator="rfe", objective="sl-dop-simple",
   ),
 
@@ -54,7 +49,6 @@ stages=[  # DOP reduction
     prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
-    kbest=True, sample=False,
     estimator='bon', objective='mpp',
   ),
 
@@ -64,7 +58,6 @@ stages=[  # DOP reduction
     prune='pcfg', splitprune=True,
     dop='reduction',
     k=1e-5, m=1000,
-    kbest=True, sample=False,
     estimator="ewe", objective="mpp",
   ),
 
@@ -74,7 +67,6 @@ stages=[  # DOP reduction
     dop='reduction',
     packedgraph=True,
     k=50, m=1000,
-    kbest=True, sample=False,
     estimator="rfe", objective="mpp",
   ),
 
@@ -85,7 +77,6 @@ stages=[  # DOP reduction
     name='rerank', mode='dop-rerank',
     dop='reduction',
     prune='plcfrs', k=50,
-    kbest=True, sample=False,
     estimator="rfe", objective="mpp",
   ),
 ],

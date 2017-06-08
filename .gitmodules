@@ -1,0 +1,6 @@
+[submodule "sparsepp"]
+	path = sparsepp
+	url = https://github.com/greg7mdp/sparsepp.git
+[submodule "cpp-btree"]
+	path = cpp-btree
+	url = https://github.com/andreasvc/cpp-btree

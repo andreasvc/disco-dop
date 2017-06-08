@@ -11,27 +11,38 @@ The latter ported almost directly from rparse
 from __future__ import print_function
 from math import exp
 import numpy as np
+from .util import PyAgenda
 
-from libc.math cimport isnan, isfinite
+from cython.operator cimport dereference
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.math cimport HUGE_VAL as INFINITY
+from libcpp.utility cimport pair
 from .bit cimport nextset, nextunset, bitcount, bitlength, testbit
-from .plcfrs cimport DoubleAgenda, DoubleEntry
-from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
-		new_SmallChartItem, SmallChartItem
+from .containers cimport SmallChartItemAgenda, Agenda, Chart, Grammar, \
+		Label, Prob, ProbRule, LexicalRule, SmallChartItem
 
-INFINITY = float('infinity')
+# from libc.math cimport isnan, isfinite  # conflicts with C++ std::isfinite
+cdef extern from "<cmath>" namespace "std" nogil:
+	bint isfinite(double v)
+	bint isnan(double v)
+
+include "constants.pxi"
+
 
 cdef class Item:
-	"""Item class used in agenda for computing the  outside LR estimate."""
+	"""Item class used in agenda for computing the outside LR estimate."""
 	cdef int state, length, lr, gaps
 
 	def __hash__(Item self):
-		return self.state * 1021 + self.length * 571 + self.lr * 311 + self.gaps
+		return (self.state * 1021
+				+ self.length * 571
+				+ self.lr * 311
+				+ self.gaps)
 
 	def __richcmp__(Item self, Item other, op):
 		if op == 2:
 			return (self.state == other.state and self.length == other.length
-				and self.lr == other.lr and self.gaps == other.gaps)
+					and self.lr == other.lr and self.gaps == other.gaps)
 		a = (self.state, self.length, self.lr, self.gaps)
 		b = (other.state, other.length, other.lr, other.gaps)
 		if op == 0:
@@ -47,7 +58,7 @@ cdef class Item:
 
 	def __repr__(Item self):
 		return "%s(%4d, %2d, %2d, %2d)" % (self.__class__.__name__,
-			self.state, self.length, self.lr, self.gaps)
+				self.state, self.length, self.lr, self.gaps)
 
 
 cdef inline Item new_Item(int state, int length, int lr, int gaps):
@@ -60,7 +71,7 @@ cdef inline Item new_Item(int state, int length, int lr, int gaps):
 
 
 cdef inline double getoutside(double [:, :, :, :] outside,
-		uint32_t maxlen, uint32_t slen, uint32_t label, uint64_t vec):
+		uint32_t maxlen, uint32_t slen, Label label, uint64_t vec):
 	"""Query for outside estimate.
 
 	NB: if this would be used, it should be in a .pxd with `inline`.
@@ -81,23 +92,23 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 	the constituent)
 	insidescores is a 2-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed."""
-	cdef double x
-	cdef DoubleAgenda agenda = DoubleAgenda()
+	cdef SmallChartItemAgenda[double] agenda
+	cdef pair[SmallChartItem, double] entry
 	cdef SmallChartItem I
-	cdef DoubleEntry entry
-	cdef LexicalRule lexrule
+	cdef double x
 	cdef ProbRule rule
 	cdef size_t i
 	cdef uint64_t vec
-
-	for i in grammar.lexicalbylhs:
-		agenda[new_SmallChartItem(i, 1)] = min([lexrule.prob
-			for lexrule in grammar.lexicalbylhs[i].values()])
-
-	while agenda.length:
-		entry = agenda.popentry()
-		I = entry.key
-		x = entry.value
+	for lhsrules in grammar.lexicalbylhs:
+		agenda.setitem(
+				SmallChartItem(lhsrules.first, 1),
+				min([grammar.lexical[wordlexrule.second].prob
+					for wordlexrule in lhsrules.second]))
+		# 			for lexruleno in grammar.lexicalbylhs[i].values()]))
+	while not agenda.empty():
+		entry = agenda.pop()
+		I = entry.first
+		x = entry.second
 
 		# This comparison catches the case when insidescores has a higher
 		# value than x, but also when it is NaN, because all comparisons
@@ -105,7 +116,7 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 		# if not x >= insidescores[I.label, I.vec]:
 		# Mory explicitly:
 		if (isnan(insidescores[I.label, I.vec])
-			or x < insidescores[I.label, I.vec]):
+				or x < insidescores[I.label, I.vec]):
 			insidescores[I.label, I.vec] = x
 
 		for i in range(grammar.nonterminals):
@@ -114,7 +125,7 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 				break
 			elif isnan(insidescores[rule.lhs, I.vec]):
 				agenda.setifbetter(
-						new_SmallChartItem(rule.lhs, I.vec), rule.prob + x)
+						SmallChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
@@ -122,9 +133,9 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs2, vec])
-					and isnan(insidescores[rule.lhs, I.vec + vec])):
+						and isnan(insidescores[rule.lhs, I.vec + vec])):
 					agenda.setifbetter(
-							new_SmallChartItem(rule.lhs, I.vec + vec),
+							SmallChartItem(rule.lhs, I.vec + vec),
 							rule.prob + x + insidescores[rule.rhs2, vec])
 
 		for i in range(grammar.nonterminals):
@@ -133,9 +144,9 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs1, vec])
-					and isnan(insidescores[rule.lhs, vec + I.vec])):
+						and isnan(insidescores[rule.lhs, vec + I.vec])):
 					agenda.setifbetter(
-							new_SmallChartItem(rule.lhs, vec + I.vec),
+							SmallChartItem(rule.lhs, vec + I.vec),
 							rule.prob + insidescores[rule.rhs1, vec] + x)
 
 	# anything not reached so far is still NaN and gets probability zero:
@@ -147,19 +158,20 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 
 	(not used)."""
 	cdef SmallChartItem I
-	cdef DoubleEntry entry
-	cdef LexicalRule lexrule
+	cdef SmallChartItemAgenda[double] agenda
+	cdef pair[SmallChartItem, double] entry
 	cdef size_t i
-	agenda = DoubleAgenda()
 
-	for i in grammar.lexicalbylhs:
-		agenda[new_SmallChartItem(i, 1)] = min([lexrule.prob
-			for lexrule in grammar.lexicalbylhs[i].values()])
+	for lhsrules in grammar.lexicalbylhs:
+		agenda.setitem(
+				SmallChartItem(lhsrules.first, 1),
+				min([grammar.lexical[wordlexrule.second].prob
+					for wordlexrule in lhsrules.second]))
 
-	while agenda.length:
-		entry = agenda.popentry()
-		I = entry.key
-		x = entry.value
+	while not agenda.empty():
+		entry = agenda.pop()
+		I = entry.first
+		x = entry.second
 		if I.label not in insidescores:
 			insidescores[I.label] = {}
 		if x < insidescores[I.label].get(I.vec, INFINITY):
@@ -170,9 +182,9 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 			if rule.rhs1 != I.label:
 				break
 			elif (rule.lhs not in insidescores
-				or I.vec not in insidescores[rule.lhs]):
+					or I.vec not in insidescores[rule.lhs]):
 				agenda.setifbetter(
-					new_SmallChartItem(rule.lhs, I.vec), rule.prob + x)
+						SmallChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
@@ -183,9 +195,9 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 			for vec in insidescores[rule.rhs2]:
 				left = insideconcat(I.vec, vec, rule, grammar, maxlen)
 				if left and (rule.lhs not in insidescores
-					or left not in insidescores[rule.lhs]):
-					agenda.setifbetter(new_SmallChartItem(rule.lhs, left),
-						rule.prob + x + insidescores[rule.rhs2][vec])
+						or left not in insidescores[rule.lhs]):
+					agenda.setifbetter(SmallChartItem(rule.lhs, left),
+							rule.prob + x + insidescores[rule.rhs2][vec])
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.rbinary[I.label][i]
@@ -196,9 +208,9 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 			for vec in insidescores[rule.rhs1]:
 				right = insideconcat(vec, I.vec, rule, grammar, maxlen)
 				if right and (rule.lhs not in insidescores
-					or right not in insidescores[rule.lhs]):
-					agenda.setifbetter(new_SmallChartItem(rule.lhs, right),
-						rule.prob + insidescores[rule.rhs1][vec] + x)
+						or right not in insidescores[rule.lhs]):
+					agenda.setifbetter(SmallChartItem(rule.lhs, right),
+							rule.prob + insidescores[rule.rhs1][vec] + x)
 
 	return insidescores
 
@@ -228,10 +240,8 @@ cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, ProbRule rule,
 
 
 def outsidelr(Grammar grammar, double [:, :] insidescores,
-		uint32_t maxlen, uint32_t goal, double [:, :, :, :] outside):
+		uint32_t maxlen, Label goal, double [:, :, :, :] outside):
 	"""Compute the outside SX simple LR estimate in top down fashion."""
-	cdef DoubleAgenda agenda = DoubleAgenda()
-	cdef DoubleEntry entry
 	cdef Item I
 	cdef ProbRule rule
 	cdef double x, insidescore, current, score
@@ -239,20 +249,19 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 	cdef int lenA, lenB, lr, ga
 	cdef size_t i
 	cdef bint stopaddleft, stopaddright
+	agenda = PyAgenda()
 
 	for n in range(1, maxlen + 1):
 		agenda[new_Item(goal, n, 0, 0)] = 0.0
 		outside[goal, n, 0, 0] = 0.0
 	print("initialized")
 
-	while agenda.length:
-		entry = agenda.popentry()
-		I = entry.key
-		x = entry.value
-		if agenda.length % 10000 == 0:
+	while agenda:
+		I, x = agenda.popitem()
+		if len(agenda) % 10000 == 0:
 			print('agenda size: %dk top: %r, %g %s' % (
-				agenda.length / 1000, I, exp(-x),
-				grammar.tolabel[I.state]))
+					len(agenda) / 1000, I, exp(-x),
+					grammar.tolabel[I.state]))
 		totlen = I.length + I.lr + I.gaps
 		i = 0
 		rule = grammar.bylhs[I.state][i]
@@ -261,8 +270,8 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 			if rule.rhs2 == 0:
 				score = rule.prob + x
 				if score < outside[rule.rhs1, I.length, I.lr, I.gaps]:
-					agenda.setitem(
-						new_Item(rule.rhs1, I.length, I.lr, I.gaps), score)
+					agenda[new_Item(rule.rhs1, I.length, I.lr, I.gaps)
+							] = score
 					outside[rule.rhs1, I.length, I.lr, I.gaps] = score
 				i += 1
 				rule = grammar.bylhs[I.state][i]
@@ -291,12 +300,12 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 						continue
 					for ga in range(leftfanout - 1, totlen + 1):
 						if (lenA + lr + ga == I.length + I.lr + I.gaps
-							and ga >= addgaps):
+								and ga >= addgaps):
 							score = rule.prob + x + insidescore
 							current = outside[rule.rhs1, lenA, lr, ga]
 							if score < current:
-								agenda.setitem(
-									new_Item(rule.rhs1, lenA, lr, ga), score)
+								agenda[new_Item(rule.rhs1, lenA, lr, ga)
+										] = score
 								outside[rule.rhs1, lenA, lr, ga] = score
 
 			# X -> B A
@@ -324,21 +333,22 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 				for lr in range(I.lr, I.lr + lenB + 2):  # FIXME: why 2?
 					for ga in range(rightfanout - 1, totlen + 1):
 						if (lenA + lr + ga == I.length + I.lr + I.gaps
-							and ga >= addgaps):
+								and ga >= addgaps):
 							score = rule.prob + insidescore + x
 							current = outside[rule.rhs2, lenA, lr, ga]
 							if score < current:
-								agenda.setitem(
-									new_Item(rule.rhs2, lenA, lr, ga), score)
+								agenda[new_Item(rule.rhs2, lenA, lr, ga)
+										] = score
 								outside[rule.rhs2, lenA, lr, ga] = score
 			i += 1
 			rule = grammar.bylhs[I.state][i]
 		# end while rule.lhs == I.state:
-	# end while agenda.length:
+	# end while agenda:
 
 
-def getestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
+def getestimates(Grammar grammar, uint32_t maxlen, str rootlabel):
 	"""Compute table of outside SX simple LR estimates for a PLCFRS."""
+	cdef Label goal = grammar.toid[rootlabel]
 	print("allocating outside matrix:",
 		(8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
 			* (maxlen + 1) / 1024 ** 2), 'MB')
@@ -354,7 +364,7 @@ def getestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
 
 
 cdef inline double getpcfgoutside(dict outsidescores,
-		uint32_t maxlen, uint32_t slen, uint32_t label, uint64_t vec):
+		uint32_t maxlen, uint32_t slen, Label label, uint64_t vec):
 	"""Query for a PCFG A* estimate. For documentation purposes."""
 	cdef int length = bitcount(vec)
 	cdef int left = nextset(vec, 0)
@@ -364,9 +374,10 @@ cdef inline double getpcfgoutside(dict outsidescores,
 	return outsidescores[label, left, right]
 
 
-cpdef getpcfgestimates(Grammar grammar, uint32_t maxlen, uint32_t goal,
+cpdef getpcfgestimates(Grammar grammar, uint32_t maxlen, str rootlabel,
 		bint debug=False):
 	"""Compute table of outside SX estimates for a PCFG."""
+	cdef Label goal = grammar.toid[rootlabel]
 	insidescores = pcfginsidesx(grammar, maxlen)
 	outside = pcfgoutsidesx(grammar, insidescores, goal, maxlen)
 	if debug:
@@ -375,7 +386,7 @@ cpdef getpcfgestimates(Grammar grammar, uint32_t maxlen, uint32_t goal,
 			for k, v in sorted(insidescores[span].items()):
 				if v < INFINITY:
 					print("%s[%d] %g" % (grammar.tolabel[k],
-						span, exp(-v)))
+							span, exp(-v)))
 		print('infinite:', end=' ')
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
@@ -398,22 +409,22 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 
 	Adapted from: Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse
 	Selection."""
-	cdef size_t n
 	cdef uint64_t vec
 	cdef SmallChartItem I
-	cdef DoubleEntry entry
+	cdef SmallChartItemAgenda[double] agenda
+	cdef pair[SmallChartItem, double] entry
 	cdef ProbRule rule
-	cdef LexicalRule lexrule
-	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef double x
-	cdef list insidescores = [{} for n in range(maxlen + 1)]
-	for n in grammar.lexicalbylhs:
-		x = min([lexrule.prob for lexrule in grammar.lexicalbylhs[n].values()])
-		agenda[new_SmallChartItem(n, 1)] = x
-	while agenda.length:
-		entry = agenda.popentry()
-		I = entry.key
-		x = entry.value
+	cdef list insidescores = [{} for _ in range(maxlen + 1)]
+	for lhsrules in grammar.lexicalbylhs:
+		agenda.setitem(
+				SmallChartItem(lhsrules.first, 1),
+				min([grammar.lexical[wordlexrule.second].prob
+					for wordlexrule in lhsrules.second]))
+	while not agenda.empty():
+		entry = agenda.pop()
+		I = entry.first
+		x = entry.second
 		if (I.label not in insidescores[I.vec]
 				or x < insidescores[I.vec][I.label]):
 			insidescores[I.vec][I.label] = x
@@ -424,7 +435,7 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 				break
 			elif rule.lhs not in insidescores[I.vec]:
 				agenda.setifbetter(
-						new_SmallChartItem(rule.lhs, I.vec), rule.prob + x)
+						SmallChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
@@ -432,9 +443,9 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (rule.rhs2 in insidescores[vec]
-					and rule.lhs not in insidescores[I.vec + vec]):
+						and rule.lhs not in insidescores[I.vec + vec]):
 					agenda.setifbetter(
-							new_SmallChartItem(rule.lhs, I.vec + vec),
+							SmallChartItem(rule.lhs, I.vec + vec),
 							rule.prob + x + insidescores[vec][rule.rhs2])
 
 		for i in range(grammar.nonterminals):
@@ -443,18 +454,16 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (rule.rhs1 in insidescores[vec]
-					and rule.lhs not in insidescores[vec + I.vec]):
+						and rule.lhs not in insidescores[vec + I.vec]):
 					agenda.setifbetter(
-							new_SmallChartItem(rule.lhs, vec + I.vec),
+							SmallChartItem(rule.lhs, vec + I.vec),
 							rule.prob + insidescores[vec][rule.rhs1] + x)
 	return insidescores
 
 
-cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
+cdef pcfgoutsidesx(Grammar grammar, list insidescores, Label goal,
 		uint32_t maxlen):
 	"""outsideSX estimate for a PCFG, agenda-based version."""
-	cdef DoubleAgenda agenda = DoubleAgenda()
-	cdef DoubleEntry entry
 	cdef tuple I
 	cdef ProbRule rule
 	cdef double x, insidescore, current, score
@@ -464,16 +473,15 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 			(grammar.nonterminals, maxlen + 1, maxlen + 1, 1), dtype='d')
 	outside[...] = np.inf
 
+	agenda = PyAgenda()
 	agenda[goal, 0, 0] = outside[goal, 0, 0, 0] = 0.0
-	while agenda.length:
-		entry = agenda.popentry()
-		I = entry.key
-		x = entry.value
+	while agenda:
+		I, x = agenda.popitem()
 		state, left, right = I
-		if agenda.length % 10000 == 0:
+		if len(agenda) % 10000 == 0:
 			print('agenda size: %dk top: %r, %g %s' % (
-				agenda.length / 1000, I, exp(-x),
-				grammar.tolabel[state]))
+					len(agenda) / 1000, I, exp(-x),
+					grammar.tolabel[state]))
 		i = 0
 		rule = grammar.bylhs[state][i]
 		while rule.lhs == state:
@@ -481,7 +489,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 			if rule.rhs2 == 0:
 				score = rule.prob + x
 				if score < outside[rule.rhs1, left, right, 0]:
-					agenda.setitem((rule.rhs1, left, right), score)
+					agenda[(rule.rhs1, left, right)] = score
 					outside[rule.rhs1, left, right, 0] = score
 				i += 1
 				rule = grammar.bylhs[state][i]
@@ -493,7 +501,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 				score = rule.prob + x + insidescore
 				current = outside[rule.rhs1, left, right + sibsize, 0]
 				if score < current:
-					agenda.setitem((rule.rhs1, left, right + sibsize), score)
+					agenda[(rule.rhs1, left, right + sibsize)] = score
 					outside[rule.rhs1, left, right + sibsize, 0] = score
 
 			# item is on the right: X -> B A
@@ -502,26 +510,27 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 				score = rule.prob + insidescore + x
 				current = outside[rule.rhs2, left + sibsize, right, 0]
 				if score < current:
-					agenda.setitem((rule.rhs2, left + sibsize, right), score)
+					agenda[(rule.rhs2, left + sibsize, right)] = score
 					outside[rule.rhs2, left + sibsize, right, 0] = score
 
 			i += 1
 			rule = grammar.bylhs[state][i]
 		# end while rule.lhs == state:
-	# end while agenda.length:
+	# end while agenda:
 	return outside.base
 
 
-cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, uint32_t goal,
+cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, Label goal,
 	bint debug=False):
 	insidescores = [{} for _ in range(maxlen + 1)]
 	outsidescores = {}
 	for span in range(1, maxlen + 1):
 		insidescores[span][goal] = pcfginsidesxrec(
-			grammar, insidescores, goal, span)
+				grammar, insidescores, goal, span)
 	for lspan in range(maxlen + 1):
 		for rspan in range(maxlen - lspan + 1):
-			for lhs in grammar.lexicalbylhs:
+			for lhsrules in grammar.lexicalbylhs:
+				lhs = lhsrules.first
 				if (lhs, lspan, rspan) in outsidescores:
 					continue
 				outsidescores[lhs, lspan, rspan] = pcfgoutsidesxrec(grammar,
@@ -561,7 +570,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, uint32_t goal,
 	return outside
 
 
-cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
+cdef pcfginsidesxrec(Grammar grammar, list insidescores, Label state,
 		int span):
 	"""Compute insideSX estimate for a PCFG.
 
@@ -570,12 +579,12 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, split
 	cdef ProbRule rule
-	cdef LexicalRule lexrule
 	if span == 0:
 		return 0 if state == 0 else INFINITY
-	if span == 1 and state in grammar.lexicalbylhs:
-		score = min([lexrule.prob for lexrule
-				in grammar.lexicalbylhs[state].values()])
+	it = grammar.lexicalbylhs.find(state)
+	if span == 1 and it != grammar.lexicalbylhs.end():
+		score = min([grammar.lexical[wordruleno.second].prob
+				for wordruleno in dereference(it).second])
 	else:
 		score = INFINITY
 	for split in range(1, span + 1):
@@ -590,7 +599,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
 			else:
 				insidescores[split][rule.rhs1] = -1  # mark to avoid cycles.
 				inleft = pcfginsidesxrec(
-					grammar, insidescores, rule.rhs1, split)
+						grammar, insidescores, rule.rhs1, split)
 				insidescores[split][rule.rhs1] = inleft
 			if rule.rhs2 == 0:
 				if split == span:
@@ -603,7 +612,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
 				inright = insidescores[span - split][rule.rhs2]
 			else:
 				inright = pcfginsidesxrec(
-					grammar, insidescores, rule.rhs2, span - split)
+						grammar, insidescores, rule.rhs2, span - split)
 				insidescores[span - split][rule.rhs2] = inright
 			cost = inleft + inright + rule.prob
 			if cost < score:
@@ -614,7 +623,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
 
 
 cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
-		uint32_t goal, uint32_t state, int lspan, int rspan):
+		Label goal, Label state, int lspan, int rspan):
 	"""outsideSX estimate for a PCFG."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, sibsize
@@ -636,8 +645,9 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 				continue
 		else:
 			outsidescores[item] = -1  # mark to avoid cycles
-			outsidescores[item] = out = pcfgoutsidesxrec(grammar,
-				insidescores, outsidescores, goal, rule.lhs, lspan, rspan)
+			outsidescores[item] = out = pcfgoutsidesxrec(
+					grammar, insidescores, outsidescores, goal,
+					rule.lhs, lspan, rspan)
 		cost = out + rule.prob
 		if cost < score:
 			score = cost
@@ -652,9 +662,9 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 			if item in outsidescores:
 				out = outsidescores[item]
 			else:
-				outsidescores[item] = out = pcfgoutsidesxrec(grammar,
-						insidescores, outsidescores, goal, rule.lhs,
-						lspan - sibsize, rspan)
+				outsidescores[item] = out = pcfgoutsidesxrec(
+						grammar, insidescores, outsidescores, goal,
+						rule.lhs, lspan - sibsize, rspan)
 			cost = (insidescores[sibsize].get(rule.rhs1, INFINITY)
 					+ out + rule.prob)
 			if cost < score:
@@ -670,8 +680,9 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 			if item in outsidescores:
 				out = outsidescores[item]
 			else:
-				out = pcfgoutsidesxrec(grammar, insidescores,
-					outsidescores, goal, rule.lhs, lspan, rspan - sibsize)
+				out = pcfgoutsidesxrec(
+						grammar, insidescores, outsidescores, goal,
+						rule.lhs, lspan, rspan - sibsize)
 				outsidescores[item] = out
 			cost = (insidescores[sibsize].get(rule.rhs2, INFINITY)
 					+ out + rule.prob)
@@ -682,7 +693,8 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 	return score
 
 
-cpdef testestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
+cpdef testestimates(Grammar grammar, uint32_t maxlen, str rootlabel):
+	cdef Label goal = grammar.toid[rootlabel]
 	print("getting inside")
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:
@@ -756,8 +768,8 @@ def test():
 	print("\ngrammar:")
 	grammar = Grammar(treebankgrammar(trees, sents))
 	print(grammar, '\n')
-	testestimates(grammar, 4, grammar.toid['ROOT'])
-	outside = getestimates(grammar, 4, grammar.toid['ROOT'])
+	testestimates(grammar, 4, 'ROOT')
+	outside = getestimates(grammar, 4, 'ROOT')
 	sent = ["a", "b", "c"]
 	print("\nwithout estimates")
 	chart, msg = plcfrs.parse(sent, grammar, estimates=None)
@@ -768,13 +780,7 @@ def test():
 			estimates=('SXlrgaps', outside))
 	print(msg)
 	print(estchart)
-	print('items avoided:')
-	print(list(chart.getitems()))
-	print()
-	print(list(estchart.getitems()))
-	for item in set(chart.getitems()) - set(estchart.getitems()):
-		print(item)
-	print()
+	print('items avoided:', chart.numitems() - estchart.numitems())
 
 	trees = [Tree(a) for a in '''\
 			(ROOT (A (a 0) (b 1)))
@@ -797,7 +803,7 @@ def test():
 	print("\npcfg grammar:")
 	grammar = Grammar(treebankgrammar(trees, sents))
 	print(grammar, '\n')
-	outside = getpcfgestimates(grammar, 4, grammar.toid['ROOT'], debug=True)
+	outside = getpcfgestimates(grammar, 4, 'ROOT', debug=True)
 	sent = ["a", "b", "c"]
 	print("\nwithout estimates")
 	chart, msg = plcfrs.parse(sent, grammar, estimates=None)
@@ -808,8 +814,7 @@ def test():
 	print(msg)
 	print(estchart)
 	print('items avoided:')
-	for item in set(chart.getitems()) - set(estchart.getitems()):
-		print(item)
+	print('items avoided:', chart.numitems() - estchart.numitems())
 
 __all__ = ['Item', 'getestimates', 'getpcfgestimates', 'inside', 'outsidelr',
 		'simpleinside']

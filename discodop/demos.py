@@ -219,7 +219,7 @@ def parse(compiledgrammar, testsent, testtags=None):
 			for a in enumerate(testtags if testtags else testsent)), end=' ')
 	if chart:
 		print()
-		results = kbest.lazykbest(chart, 10)[0]
+		results = kbest.lazykbest(chart, 10)
 		for tree, prob in results:
 			tree = Tree(tree)
 			treetransforms.unbinarize(tree)

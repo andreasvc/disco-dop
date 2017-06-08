@@ -165,13 +165,13 @@ class Test_grammar(object):
 		ids = UniqueIDs()
 		assert flatten(
 				'(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))',
-				ids, {}, True) == (
+				ids, {}) == (
 				[(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 				(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 				(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 				'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
 
-		assert flatten("(NN 0=foo)", ids, {}, True) == (
+		assert flatten("(NN 0=foo)", ids, {}) == (
 				[(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 
 		prods, frag = flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0=Das) (CNP "
@@ -180,7 +180,7 @@ class Test_grammar(object):
 				"(VAFIN 4=hatte))) (VP (VP|<ADV> (ADV 5=kuerzlich) "
 				"(VP|<NP> (NP (ART 6=dem) (NN 7=Ortsbeirat)) (VP|<NP> "
 				"(NP_2 8= 10=) (VP|<VVPP> (VVPP 9=))))))))",
-				ids, {}, True)
+				ids, {})
 		assert prods == [(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
 				(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
 				(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
@@ -205,7 +205,7 @@ class Test_grammar(object):
 
 		assert flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0=) (VP|<ADV>_2 "
 				"(ADV 2=) (VP|<VVPP> (VVPP 4=))))) (S|<VAFIN> (VAFIN 1=)))",
-				ids, {}, True) == (
+				ids, {}) == (
 				[(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 				(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 				(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
@@ -216,17 +216,11 @@ class Test_grammar(object):
 class TestHeap(TestCase):
 	testN = 100
 
-	def check_invariants(self, h):
-		from discodop.plcfrs import getparent
-		for i in range(len(h)):
-			if i > 0:
-				self.assertTrue(h.heap[getparent(i)].value <= h.heap[i].value)
-
 	def make_data(self):
 		from random import random
-		from discodop.plcfrs import Agenda
+		from discodop.util import PyAgenda
 		pairs = [(random(), random()) for _ in range(TestHeap.testN)]
-		h = Agenda()
+		h = PyAgenda()
 		d = {}
 		for k, v in pairs:
 			h[k] = v
@@ -257,25 +251,23 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_popitem_ties(self):
-		from discodop.plcfrs import Agenda
-		h = Agenda()
+		from discodop.util import PyAgenda
+		h = PyAgenda()
 		for i in range(TestHeap.testN):
 			h[i] = 0.
 		for i in range(TestHeap.testN):
 			_, v = h.popitem()
 			self.assertEqual(v, 0.)
-			self.check_invariants(h)
 
 	def test_popitem_ties_fifo(self):
-		from discodop.plcfrs import Agenda
-		h = Agenda()
+		from discodop.util import PyAgenda
+		h = PyAgenda()
 		for i in range(TestHeap.testN):
 			h[i] = 0.
 		for i in range(TestHeap.testN):
 			k, v = h.popitem()
 			self.assertEqual(k, i)
 			self.assertEqual(v, 0.)
-			self.check_invariants(h)
 
 	def test_peek(self):
 		h, pairs, _ = self.make_data()
@@ -339,9 +331,9 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_init(self):
-		from discodop.plcfrs import Agenda
+		from discodop.util import PyAgenda
 		h, pairs, d = self.make_data()
-		h = Agenda(d.items())
+		h = PyAgenda(d.items())
 		while pairs:
 			v = h.popitem()
 			v2 = pairs.pop()
@@ -351,12 +343,12 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_init_small(self):
-		from discodop.plcfrs import Agenda
+		from discodop.util import PyAgenda
 		for data in (
 				[(0, 3), (1, 7), (2, 1)],
 				[(0, 7), (1, 3), (2, 1)],
 				[(0, 7), (1, 3), (2, 7)]):
-			h = Agenda(data)
+			h = PyAgenda(data)
 			self.assertEqual(
 					[h.popitem(), h.popitem(), h.popitem()],
 					sorted(data, key=itemgetter(1)))
@@ -365,13 +357,13 @@ class TestHeap(TestCase):
 	def test_repr(self):
 		h, _pairs, d = self.make_data()
 		# self.assertEqual(h, eval(repr(h)))
-		tmp = repr(h)  # 'Agenda({....})'
+		tmp = repr(h)  # 'PyAgenda({....})'
 		# strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))  # pylint: disable=eval-used
 
 	def test_merge(self):
-		from discodop.plcfrs import merge
+		from discodop.util import merge
 		_h, _pairs, d1 = self.make_data()
 		self.assertEqual(
 				list(merge(sorted(d1.keys()), sorted(d1.values()))),
@@ -478,8 +470,8 @@ def test_allfragments():
 				'(NP|<DT.JJ,NN> (JJ 4) (NN 5)))))')],
 			[['The', 'cat', 'saw', 'the', 'hungry', 'dog']],
 			disc=False, indices=False, maxdepth=3, maxfrontier=999)
-	assert len(model) > 0
-	assert len(answers) > 0
+	assert model
+	assert answers
 	assert answers == model
 
 
@@ -489,10 +481,8 @@ def test_grammar(debug=False):
 	from discodop import plcfrs
 	from discodop.containers import Grammar
 	from discodop.treebank import NegraCorpusReader
-	from discodop.treetransforms import addfanoutmarkers, removefanoutmarkers
-	from discodop.disambiguation import recoverfragments
-	from discodop.kbest import lazykbest
-	from math import exp
+	from discodop.treetransforms import addfanoutmarkers
+	from discodop.disambiguation import getderivations, marginalize
 	corpus = NegraCorpusReader('alpinosample.export', punct='move')
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
@@ -506,12 +496,12 @@ def test_grammar(debug=False):
 		print(grammar)
 	_ = grammar.testgrammar()
 
-	grammarx, backtransform, _, _ = doubledop(trees, sents,
+	grammarx, _backtransform, _, _ = doubledop(trees, sents,
 			debug=False, numproc=1)
 	if debug:
 		print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
-	grammar.getmapping(grammar, striplabelre=None,
+	grammar.getmapping(None, striplabelre=None,
 			neverblockre=re.compile('^#[0-9]+|.+}<'),
 			splitprune=False, markorigin=False)
 	if debug:
@@ -525,25 +515,8 @@ def test_grammar(debug=False):
 		if debug:
 			print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
 		if chart:
-			mpp, parsetrees = {}, {}
-			derivations, _ = lazykbest(chart, 1000, '}<')
-			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
-				r = Tree(recoverfragments(d.key, chart, backtransform))
-				r = str(removefanoutmarkers(unbinarize(r)))
-				mpp[r] = mpp.get(r, 0.0) + exp(-p)
-				parsetrees.setdefault(r, []).append((t, p))
-			if debug:
-				print(len(mpp), 'parsetrees',
-						sum(map(len, parsetrees.values())), 'derivations')
-			for t, tp in sorted(mpp.items(), key=itemgetter(1)):
-				if debug:
-					print(tp, t, '\nmatch:', t == str(tree))
-				if len(set(parsetrees[t])) != len(parsetrees[t]):
-					print('chart:\n', chart)
-					assert len(set(parsetrees[t])) == len(parsetrees[t])
-				if debug:
-					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
-						print(' <= %6g %s' % (exp(-p), deriv))
+			getderivations(chart, 100)
+			_parses, _msg = marginalize('mpp', chart)
 		elif debug:
 			print('no parse\n', chart)
 		if debug:

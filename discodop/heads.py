@@ -45,21 +45,22 @@ def readheadrules(filename):
 	traverse siblings of an S constituent from right to left, the first child
 	with a label of vmfin, vafin, or vaimp will be marked as head."""
 	headrules = {}
-	for line in io.open(filename, encoding='utf8'):
-		line = line.strip().upper()
-		if line and not line.startswith("%") and len(line.split()) > 2:
-			try:
-				label, direction, heads = HEADRULERE.match(line).groups()
-			except AttributeError:
-				print('no match:', line)
-				raise
-			if heads is None:
-				heads = ''
-			headrules.setdefault(label, [])
-			if direction == 'LIKE':
-				headrules[label].extend(headrules[heads])
-			else:
-				headrules[label].append((direction, heads.split()))
+	with io.open(filename, encoding='utf8') as inp:
+		for line in inp:
+			line = line.strip().upper()
+			if line and not line.startswith("%") and len(line.split()) > 2:
+				try:
+					label, direction, heads = HEADRULERE.match(line).groups()
+				except AttributeError:
+					print('no match:', line)
+					raise
+				if heads is None:
+					heads = ''
+				headrules.setdefault(label, [])
+				if direction == 'LIKE':
+					headrules[label].extend(headrules[heads])
+				else:
+					headrules[label].append((direction, heads.split()))
 	return headrules
 
 
@@ -81,10 +82,15 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 						and child.label.split('[')[0] == head):
 					return child
 
-	candidates = [a for a in tree if getattr(a, 'source', None)
-			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
-	if candidates:
-		return candidates[0]
+	# check if we already have head information:
+	for child in tree:
+		if getattr(child, 'head', False):
+			return child
+	for child in tree:
+		if (getattr(child, 'source', None) and not headlabels.isdisjoint(
+				child.source[FUNC].upper().split('-'))):
+			return child
+	# apply heuristic rules:
 	head = None
 	children = tree
 	for direction, heads in headrules.get(tree.label, []):
@@ -98,6 +104,8 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 			head = invfind(heads, children)
 		else:
 			head = find(heads, children)
+		if head is not None:
+			break
 	if head is None:
 		# default head is initial/last nonterminal (depending on direction)
 		for child in children:
@@ -120,16 +128,17 @@ def sethead(child):
 
 
 def saveheads(tree, tailmarker):
-	"""Store head as grammatical function when inferrable from binarization."""
+	"""Infer head from binarization and store."""
 	if tailmarker:
 		for node in tree.subtrees(lambda n: tailmarker in n.label):
 			sethead(node)
-	# assume head-outward binarization; the last binarized node has the head.
-	for node in tree.subtrees(lambda n: '|<' in n.label
-			and not any(child.label.startswith(
-				n.label[:n.label.index('|<') + 2])
-				for child in n)):
-		sethead(node[-1])
+	else:
+		# assume head-outward binarization; the last binarized node has the head.
+		for node in tree.subtrees(lambda n: '|<' in n.label
+				and not any(child.label.startswith(
+					n.label[:n.label.index('|<') + 2])
+					for child in n)):
+			sethead(node[-1])
 
 
 def headstats(trees):

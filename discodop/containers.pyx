@@ -1,175 +1,37 @@
 """Data types for chart items, edges, &c."""
 from __future__ import print_function
+import io
 import os
+import re
 import mmap
+import logging
+import numpy as np
 from array import array
-from math import exp, log, fsum
-from libc.math cimport log, exp
-from libc.stdio cimport FILE, fopen, fwrite, fclose
-from cpython.buffer cimport PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer, \
-		PyObject_GetBuffer, PyBuffer_Release
+from math import isinf, fsum
 from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
+from .tree import escape, unescape
+from .util import readbytes
 from .tree import Tree
-from cpython.array cimport array, clone
-from .bit cimport nextset, nextunset, anextset, anextunset, bit_popcount
 cimport cython
-cdef extern from "Python.h":
-	int PyObject_CheckReadBuffer(object)
-	int PyObject_AsReadBuffer(object, const void **, Py_ssize_t *)
+from cython.operator cimport dereference
+from libc.string cimport strchr
 include "constants.pxi"
 
-cdef double INFINITY = float('infinity')
-maxbitveclen = SLOTS * sizeof(uint64_t) * 8
-chararray = array(b'b' if PY2 else 'b')
+cdef array chararray = array('b')
+cdef array dblarray = array('d')
+cdef int maxbitveclen = SLOTS * sizeof(uint64_t) * 8
 
 include "_grammar.pxi"
 
 
-@cython.final
-cdef class LexicalRule:
-	"""A weighted rule of the form 'non-terminal --> word'."""
-	def __init__(self, uint32_t lhs, str word, double prob):
-		self.lhs = lhs
-		self.word = word
-		self.prob = prob
-
-	def __repr__(self):
-		return "%s%r" % (self.__class__.__name__,
-				(self.lhs, self.word, self.prob))
+cdef SmallChartItem CFGtoSmallChartItem(Label label, Idx start, Idx end):
+	cdef SmallChartItem result = SmallChartItem(
+			label, (1UL << end) - (1UL << start))
+	return result
 
 
-@cython.final
-cdef class SmallChartItem:
-	"""Item with word-sized bitvector."""
-	def __init__(self, label, vec):
-		self.label = label
-		self.vec = vec
-
-	def __hash__(self):
-		"""Juxtapose bits of label and vec, rotating vec if > 33 words.
-
-		64              32            0
-		|               ..........label
-		|vec[0] 1st half
-		|               vec[0] 2nd half
-		------------------------------- XOR"""
-		return (self.label ^ (self.vec << (sizeof(self.vec) / 2 - 1))
-				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
-
-	def __richcmp__(self, other, int op):
-		cdef SmallChartItem me = <SmallChartItem>self
-		cdef SmallChartItem ob = <SmallChartItem>other
-		if op == 2:
-			return me.label == ob.label and me.vec == ob.vec
-		elif op == 3:
-			return me.label != ob.label or me.vec != ob.vec
-		elif op == 5:
-			return me.label >= ob.label or me.vec >= ob.vec
-		elif op == 1:
-			return me.label <= ob.label or me.vec <= ob.vec
-		elif op == 0:
-			return me.label < ob.label or me.vec < ob.vec
-		elif op == 4:
-			return me.label > ob.label or me.vec > ob.vec
-
-	def __bool__(self):
-		return self.label != 0 and self.vec != 0
-
-	def __repr__(self):
-		return "%s(%d, %s)" % (self.__class__.__name__,
-				self.label, self.binrepr())
-
-	def lexidx(self):
-		assert self.label == 0
-		return self.vec
-
-	cdef copy(self):
-		cdef SmallChartItem ob = new_SmallChartItem(self.label, self.vec)
-		ob.prob = self.prob
-		return ob
-
-	def binrepr(self, int lensent=0):
-		return bin(self.vec)[2:].zfill(lensent)[::-1]
-
-
-@cython.final
-cdef class FatChartItem:
-	"""Item where bitvector is a fixed-width static array."""
-	def __hash__(self):
-		"""Juxtapose bits of label and vec.
-
-		64              32            0
-		|               ..........label
-		|vec[0] 1st half
-		|               vec[0] 2nd half
-		|........ rest of vec .........
-		------------------------------- XOR"""
-		cdef long n, _hash
-		_hash = (self.label ^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
-				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
-		# add remaining bits
-		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
-			_hash *= 33 ^ (<uint8_t *>self.vec)[n]
-		return _hash
-
-	def __richcmp__(self, other, int op):
-		cdef FatChartItem me = <FatChartItem>self
-		cdef FatChartItem ob = <FatChartItem>other
-		cdef int cmp = 0
-		cdef bint labelmatch = me.label == ob.label
-		cmp = memcmp(<uint8_t *>ob.vec, <uint8_t *>me.vec, sizeof(me.vec))
-		if op == 2:
-			return labelmatch and cmp == 0
-		elif op == 3:
-			return not labelmatch or cmp != 0
-		# NB: for a proper ordering, need to reverse memcmp
-		elif op == 5:
-			return me.label >= ob.label or (labelmatch and cmp >= 0)
-		elif op == 1:
-			return me.label <= ob.label or (labelmatch and cmp <= 0)
-		elif op == 0:
-			return me.label < ob.label or (labelmatch and cmp < 0)
-		elif op == 4:
-			return me.label > ob.label or (labelmatch and cmp > 0)
-
-	def __bool__(self):
-		cdef int n
-		if self.label:
-			for n in range(SLOTS):
-				if self.vec[n]:
-					return True
-		return False
-
-	def __repr__(self):
-		return "%s(%d, %s)" % (self.__class__.__name__,
-			self.label, self.binrepr())
-
-	def lexidx(self):
-		assert self.label == 0
-		return self.vec[0]
-
-	cdef copy(self):
-		cdef int n
-		cdef FatChartItem ob = new_FatChartItem(self.label)
-		for n in range(SLOTS):
-			ob.vec[n] = self.vec[n]
-		ob.prob = self.prob
-		return ob
-
-	def binrepr(self, lensent=0):
-		cdef int n
-		cdef str result = ''
-		for n in range(SLOTS):
-			result += bin(self.vec[n])[2:].zfill(BITSIZE)[::-1]
-		return result[:lensent] if lensent else result.rstrip('0')
-
-
-cdef SmallChartItem CFGtoSmallChartItem(uint32_t label, Idx start, Idx end):
-	return new_SmallChartItem(label, (1UL << end) - (1UL << start))
-
-
-cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end):
-	cdef FatChartItem fci = new_FatChartItem(label)
+cdef FatChartItem CFGtoFatChartItem(Label label, Idx start, Idx end):
+	cdef FatChartItem fci = FatChartItem(label)
 	cdef short n
 	if BITSLOT(start) == BITSLOT(end):
 		fci.vec[BITSLOT(start)] = (1UL << end) - (1UL << start)
@@ -179,55 +41,6 @@ cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end):
 			fci.vec[n] = ~0UL
 		fci.vec[BITSLOT(end)] = BITMASK(end) - 1
 	return fci
-
-
-@cython.final
-cdef class Edges:
-	"""Object with a linked list of Edges."""
-	def __cinit__(self):
-		self.len = 0
-
-	def __repr__(self):
-		return '<%d edges>' % self.len
-
-
-@cython.final
-cdef class RankedEdge:
-	"""A derivation with backpointers.
-
-	Denotes a *k*-best derivation defined by an edge, including the chart
-	item (head) to which it points, along with ranks for its children."""
-	def __hash__(self):
-		cdef long _hash = 0x345678UL
-		_hash = (1000003UL * _hash) ^ hash(self.head)
-		_hash = (1000003UL * _hash) ^ (-1 if self.edge.rule is NULL
-				else self.edge.rule.no)
-		_hash = (1000003UL * _hash) ^ self.edge.pos.lvec
-		_hash = (1000003UL * _hash) ^ self.left
-		_hash = (1000003UL * _hash) ^ self.right
-		return _hash
-
-	def __richcmp__(RankedEdge self, RankedEdge ob, int op):
-		cdef bint result = (self.left == ob.left
-					and self.right == ob.right and self.head == ob.head
-					and memcmp(<uint8_t *>self.edge, <uint8_t *>ob.edge,
-						sizeof(ob.edge)) == 0)
-		if op == 2:  # '=='
-			return result
-		elif op == 3:  # '!='
-			return not result
-		return NotImplemented
-
-	def __repr__(self):
-		if self.edge.rule is NULL:
-			return '%s(%r, NULL, %d, %d)' % (self.__class__.__name__,
-				self.head, self.left, self.right)
-		return '%s(%r, Edge(%d/%s, ProbRule(%d, %d, %d, %g)), %d, %d)' % (
-				self.__class__.__name__, self.head,
-				self.edge.pos.mid, bin(self.edge.pos.lvec)[2:][::-1],
-				self.edge.rule.lhs, self.edge.rule.rhs1,
-				self.edge.rule.rhs2, self.edge.rule.prob,
-				self.left, self.right)
 
 
 cdef class Chart:
@@ -245,120 +58,74 @@ cdef class Chart:
 		"""Return item with root label spanning the whole sentence."""
 		raise NotImplementedError
 
-	cdef _left(self, item, Edge *edge):
+	cdef ItemNo _left(self, ItemNo itemidx, Edge edge):
 		"""Return the left item that edge points to."""
 		raise NotImplementedError
 
-	cdef _right(self, item, Edge *edge):
+	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
 		"""Return the right item that edge points to."""
 		raise NotImplementedError
 
-	cdef double subtreeprob(self, item):
+	cdef Label label(self, ItemNo itemidx):
+		raise NotImplementedError
+
+	cdef Prob subtreeprob(self, ItemNo itemidx):
 		"""Return probability of subtree headed by item."""
 		raise NotImplementedError
 
-	cdef left(self, RankedEdge rankededge):
+	cdef ItemNo left(self, RankedEdge rankededge):
 		"""Given a ranked edge, return the left item it points to."""
 		return self._left(rankededge.head, rankededge.edge)
 
-	cdef right(self, RankedEdge rankededge):
+	cdef ItemNo right(self, RankedEdge rankededge):
 		"""Given a ranked edge, return the right item it points to."""
 		return self._right(rankededge.head, rankededge.edge)
 
-	cdef copy(self, item):
-		return item
+	cdef ItemNo getitemidx(self, uint64_t n):
+		"""Get itemidx of n'th item."""
+		return n
 
-	cdef uint32_t label(self, item):
+	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
+		"""Convert/copy item to SmallChartItem instance."""
+		raise NotImplementedError
+
+	cdef FatChartItem asFatChartItem(self, ItemNo itemidx):
+		"""Convert/copy item to FatChartItem instance."""
+		raise NotImplementedError
+
+	cdef size_t asCFGspan(self, ItemNo itemidx):
+		"""Convert item for chart to compact span."""
 		raise NotImplementedError
 
 	def indices(self, item):
 		"""Return a list of indices dominated by ``item``."""
 		raise NotImplementedError
 
-	cdef int lexidx(self, Edge *edge):
+	cdef int lexidx(self, Edge edge) except -1:
 		"""Return sentence index of the terminal child given a lexical edge."""
 		cdef short result = edge.pos.mid - 1
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
-	cdef double lexprob(self, item, Edge *edge):
+	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1:
 		"""Return lexical probability given a lexical edge."""
-		label = self.label(item)
-		word = self.sent[self.lexidx(edge)]
-		return (<LexicalRule>self.grammar.lexicalbylhs[label][word]).prob
+		cdef Label label = self.label(itemidx)
+		cdef string word = self.sent[self.lexidx(edge)].encode('utf8')
+		it = self.grammar.lexicalbylhs.find(label)
+		if it != self.grammar.lexicalbylhs.end():
+			it2 = dereference(it).second.find(word)
+			if it2 != dereference(it).second.end():
+				prob = self.grammar.lexical[dereference(it2).second].prob
+				return exp(-prob) if self.logprob else prob
+		return 0 if self.logprob else 1
 
-	cdef ChartItem asChartItem(self, item):
-		"""Convert/copy item to ChartItem instance."""
-		cdef size_t itemx
-		if isinstance(item, SmallChartItem):
-			return (<SmallChartItem>item).copy()
-		elif isinstance(item, FatChartItem):
-			return (<FatChartItem>item).copy()
-		itemx = <size_t>item
-		label = self.label(itemx)
-		itemx //= self.grammar.nonterminals
-		start = itemx // self.lensent
-		end = itemx % self.lensent + 1
-		if self.lensent < 8 * sizeof(uint64_t):
-			return CFGtoSmallChartItem(label, start, end)
-		return CFGtoFatChartItem(label, start, end)
+	def numitems(self):
+		"""Number of items in chart; NB: this includes 1 sentinel item."""
+		return self.parseforest.size()
 
-	cdef size_t asCFGspan(self, item, size_t nonterminals):
-		"""Convert item for chart to compact span."""
-		cdef size_t itemx
-		cdef int start, end
-		if isinstance(item, SmallChartItem):
-			start = nextset((<SmallChartItem>item).vec, 0)
-			end = nextunset((<SmallChartItem>item).vec, start)
-			assert nextset((<SmallChartItem>item).vec, end) == -1
-		elif isinstance(item, FatChartItem):
-			start = anextset((<FatChartItem>item).vec, 0, SLOTS)
-			end = anextunset((<FatChartItem>item).vec, start, SLOTS)
-			assert anextset((<FatChartItem>item).vec, end, SLOTS) == -1
-		else:
-			itemx = <size_t>item
-			itemx //= self.grammar.nonterminals
-			start = itemx // self.lensent
-			end = itemx % self.lensent + 1
-		return compactcellidx(start, end, self.lensent, 1)
-
-	def toitem(self, node, item):
-		"""Convert Tree node with integer indices as terminals to a ChartItem.
-
-		Return type is determined by ``item``."""
-		try:
-			label = self.grammar.toid[node.label]
-		except KeyError:
-			return None
-		if isinstance(item, SmallChartItem):
-			vec = sum(1 << n for n in node.leaves())
-			return new_SmallChartItem(label, vec)
-		elif isinstance(item, FatChartItem):
-			tmp = new_FatChartItem(label)
-			for n in node.leaves():
-				if n >= SLOTS * sizeof(unsigned long) * 8:
-					return None
-				SETBIT(tmp.vec, n)
-			return tmp
-		else:
-			return cellidx(
-					min(node.leaves()),
-					max(node.leaves()) + 1,
-					self.lensent,
-					self.grammar.nonterminals) + label
-
-	cdef edgestr(self, item, Edge *edge):
-		"""Return string representation of item and edge belonging to it."""
-		if edge.rule is NULL:
-			return "%g '%s'" % (self.lexprob(item, edge),
-					self.sent[self.lexidx(edge)])
-		else:
-			return ('%g %s %s' % (
-					exp(-edge.rule.prob) if self.grammar.logprob
-					else edge.rule.prob,
-					self.itemstr(self._left(item, edge)),
-					self.itemstr(self._right(item, edge))
-						if edge.rule.rhs2 else ''))
+	def hasnode(self, node, Whitelist whitelist=None):
+		"""Check if Tree node with integer indices is in the chart."""
+		raise NotImplementedError
 
 	def __bool__(self):
 		"""Return true when the root item is in the chart.
@@ -367,124 +134,147 @@ cdef class Chart:
 		return self.root() in self
 
 	def __contains__(self, item):
-		return self.hasitem(item)
-
-	cdef Edges getedges(self, item):
-		"""Get edges for item. NB: may return ``None``."""
-		return self.parseforest[item] if item in self.parseforest else None
+		"""Return true when item is in the chart."""
+		return (item is not None
+				and item < self.parseforest.size()
+				and self.parseforest[item].size() != 0)
 
 	def filter(self):
-		"""Drop entries not part of a derivation headed by root of chart."""
-		cdef MoreEdges *edgelist
-		cdef MoreEdges *tmp
+		"""Drop edges not part of a derivation headed by root of chart."""
+		cdef set itemstokeep = set()
+		cdef ItemNo item
+		_filtersubtree(self, self.root(), itemstokeep)
+		for item in {self.getitemidx(n) for n in range(1, self.numitems())
+				} - itemstokeep:
+			self.parseforest[item].clear()
 
-		items = set()
-		_filtersubtree(self, self.root(), items)
-		if hasattr(self, 'parseforest') and isinstance(self.parseforest, dict):
-			for item in set(self.getitems()) - items:
-				edgelist = (<Edges>(self.parseforest[item])).head
-				while edgelist is not NULL:
-					tmp = edgelist
-					edgelist = edgelist.prev
-					free(tmp)
-				del self.parseforest[item]
+	cdef edgestr(self, ItemNo itemidx, Edge edge):
+		"""Return string representation of item and edge belonging to it."""
+		if edge.rule is NULL:
+			return "'%s' %g" % (
+					self.sent[self.lexidx(edge)],
+					self.lexprob(itemidx, edge))
 		else:
-			# FIXME: maybe better as method in DenseCFGChart
-			for item in set(self.getitems()) - items:
-				edgelist = (<EdgesStruct *>self.parseforest)[item].head
-				while edgelist is not NULL:
-					tmp = edgelist
-					edgelist = edgelist.prev
-					free(tmp)
-				(<EdgesStruct *>self.parseforest)[item].len = 0
-				(<EdgesStruct *>self.parseforest)[item].head = NULL
+			return '%s %s %g' % (
+					self.itemstr(self._left(itemidx, edge)),
+					self.itemstr(self._right(itemidx, edge))
+						if edge.rule.rhs2 else '',
+					exp(-edge.rule.prob)
+						if self.grammar.logprob else edge.rule.prob)
 
 	def __str__(self):
 		"""Pretty-print chart and *k*-best derivations."""
-		cdef Edges edges
-		cdef MoreEdges *edgelist
 		cdef RankedEdge rankededge
+		cdef Edge edge
+		cdef pair[RankedEdge, Prob] entry
+		cdef uint64_t n, m
+		cdef ItemNo item
 		result = []
-		for item in sorted(self.getitems()):
+		for n in range(1, self.numitems()):
+			item = self.getitemidx(n)
 			result.append(' '.join((
 					self.itemstr(item).ljust(20),
 					('vitprob=%g' % (
 						exp(-self.subtreeprob(item)) if self.logprob
 						else self.subtreeprob(item))).ljust(17),
 					((' ins=%g' % self.inside[item]).ljust(14)
-						if self.inside else ''),
+						if self.inside.size() else ''),
 					((' out=%g' % self.outside[item]).ljust(14)
-						if self.outside else ''))))
-			edges = self.getedges(item)
-			edgelist = edges.head if edges is not None else NULL
-			while edgelist is not NULL:
-				for n in range(edges.len if edgelist is edges.head
-						else EDGES_SIZE):
-					result.append('\t=> %s'
-							% self.edgestr(item, &(edgelist.data[n])))
-				edgelist = edgelist.prev
-			result.append('')
-		if self.rankededges:
-			result.append('ranked edges:')
-			for item in sorted(self.rankededges):
+						if self.outside.size() else ''))))
+			for edge in self.parseforest[item]:
+				result.append('\t=> %s' % self.edgestr(item, edge))
+		if self.rankededges.size():
+			result.append('\nranked edges:')
+			for n in range(1, self.numitems()):
+				item = self.getitemidx(n)
+				if self.rankededges[item].size() == 0:
+					continue
 				result.append(self.itemstr(item))
-				for n, entry in enumerate(self.rankededges[item]):
-					rankededge = entry.key
-					result.append('%d: %10g => %s %d %d' % (n,
-							exp(-entry.value) if self.logprob else entry.value,
+				m = 0
+				for entry in self.rankededges[item]:
+					rankededge = entry.first
+					result.append('\t%d: %10g, %s %d %d' % (
+							m, exp(-entry.second) if self.logprob
+								else entry.second,
 							self.edgestr(item, rankededge.edge),
 							rankededge.left, rankededge.right))
-				result.append('')
+					m += 1
 		return '\n'.join(result)
 
 	def stats(self):
 		"""Return a short string with counts of items, edges."""
-		items = self.getitems()
-		alledges = [self.getedges(item) for item in items]
 		return 'items %d, edges %d' % (
-				len(items),
-				sum(map(numedges, alledges)))
+				self.numitems() - 1,
+				sum([self.parseforest[self.getitemidx(n)].size()
+					for n in range(1, self.numitems())]))
 		# more stats:
-		# labels: len({self.label(item) for item in self.getitems()}),
+		# labels: len({self.label(item) for item in range(1, self.numitems())}),
 		# spans: ...
 
 
-def numedges(Edges edges):
-	cdef MoreEdges *edgelist
-	cdef size_t result
-	if edges is None:
-		return 0
-	result = edges.len
-	edgelist = edges.head.prev
-	while edgelist is not NULL:
-		result += EDGES_SIZE
-		edgelist = edgelist.prev
-	return result
-
-
 cdef void _filtersubtree(Chart chart, item, set items):
-	"""Recursively filter chart."""
-	cdef Edge *edge
-	cdef Edges edges
-	cdef MoreEdges *edgelist
+	"""Recursively collect items that lead to a complete derivation."""
+	cdef Edge edge
 	items.add(item)
-	edges = chart.getedges(item)
-	edgelist = edges.head if edges is not None else NULL
-	while edgelist is not NULL:
-		for n in range(edges.len if edgelist is edges.head
-				else EDGES_SIZE):
-			edge = &(edgelist.data[n])
-			if edge.rule is NULL:
-				continue
-			leftitem = chart._left(item, edge)
-			if leftitem not in items:
-				_filtersubtree(chart, leftitem, items)
-			if edge.rule.rhs2 == 0:
-				continue
-			rightitem = chart._right(item, edge)
-			if rightitem not in items:
-				_filtersubtree(chart, rightitem, items)
-		edgelist = edgelist.prev
+	for edge in chart.parseforest[item]:
+		if edge.rule is NULL:
+			continue
+		leftitem = chart._left(item, edge)
+		if leftitem not in items:
+			_filtersubtree(chart, leftitem, items)
+		if edge.rule.rhs2 == 0:
+			continue
+		rightitem = chart._right(item, edge)
+		if rightitem not in items:
+			_filtersubtree(chart, rightitem, items)
+
+
+@cython.final
+cdef class StringList(object):
+	"""Proxy class to expose vector<string> with read-only list interface.
+
+	Decodes utf8 to unicode."""
+	def __len__(self):
+		return self.ob.size()
+
+	def __getitem__(self, size_t i):
+		cdef string result
+		if i >= self.ob.size():
+			raise IndexError('index %d out of bounds (len=%d)' % (
+					i, self.ob.size()))
+		result = self.ob[i]
+		return result.decode('utf8')
+
+
+@cython.final
+cdef class StringIntDict(object):
+	"""Proxy class to expose sparse_hash_map with read-only dict interface.
+
+	Decodes utf8 to unicode."""
+	def __len__(self):
+		return self.ob.size()
+
+	def __getitem__(self, str key):
+		cdef string cppkey = key.encode('utf8')
+		it = self.ob.find(cppkey)
+		if it == self.ob.end():
+			raise KeyError(key)
+		return dereference(it).second
+
+	def get(self, str key, default=None):
+		cdef string cppkey = key.encode('utf8')
+		it = self.ob.find(cppkey)
+		if it == self.ob.end():
+			return default
+		return dereference(it).second
+
+	def __contains__(self, str key):
+		cdef string cppkey = key.encode('utf8')
+		return self.ob.find(cppkey) != self.ob.end()
+
+	def __iter__(self):
+		for it in self.ob:
+			yield it.first.decode('utf8')
 
 
 @cython.final
@@ -723,18 +513,19 @@ cdef class Ctrees:
 		prodidxsize = ob.prodindex.bufsize()
 		ob.trees = <NodeArray *>&(ptr[4 * sizeof(uint64_t) + prodidxsize])
 		ob.nodes = <Node *>&ob.trees[ob.len]
-		releasebuf(&buffer)
+		PyBuffer_Release(&buffer)
 		return ob
 
 
 cdef inline getyf(tuple yf, uint32_t *args, uint32_t *lengths):
 	cdef int m = 0
+	args[0] = lengths[0] = 0
 	for part in yf:
 		for a in part:
 			if a == 1:
 				args[0] += 1 << m
 			elif a != 0:
-				raise ValueError('expected: %r; got: %r' % ('0', a))
+				raise ValueError('expected: 0 or 1; got: %r' % a)
 			m += 1
 		lengths[0] |= 1 << (m - 1)
 
@@ -782,14 +573,15 @@ cdef class Vocabulary:
 	- .getlabel(): lookup label/word given prod no (no mutation, arrays only)
 	"""
 	def __init__(self):
+		cdef bytes epsilon = b'Epsilon'
 		self.prods = {}  # bytes objects => prodno
-		self.labels = {'Epsilon': 0}  # str => labelno
+		self.labels = {epsilon.decode('utf8'): 0}  # str => labelno
 		darray_init(&self.prodbuf, sizeof(char))
 		darray_init(&self.labelbuf, sizeof(char))
 		darray_init(&self.labelidx, sizeof(uint32_t))
 		darray_append_uint32(&self.labelidx, 0)
-		darray_append_uint32(&self.labelidx, 7)
-		darray_extend(&self.labelbuf, b'Epsilon')
+		darray_append_uint32(&self.labelidx, len(epsilon))
+		darray_extend(&self.labelbuf, epsilon)
 
 	def __dealloc__(self):
 		if self.prodbuf.capacity == 0:  # FixedVocabulary object
@@ -806,9 +598,9 @@ cdef class Vocabulary:
 		rule.lhs = self._getlabelid(r[0])
 		rule.rhs1 = self._getlabelid(r[1]) if len(r) > 1 else 0
 		rule.rhs2 = self._getlabelid(r[2]) if len(r) > 2 else 0
-		rule.lengths = rule.args = 0
 		if rule.rhs1 == 0 and len(r) > 1:
 			rule.args = self._getlabelid(yf[0])
+			rule.lengths = 0
 		else:
 			getyf(yf, &rule.args, &rule.lengths)
 		prod = <bytes>tmp[:sizeof(Rule)]
@@ -898,8 +690,8 @@ cdef class Vocabulary:
 	def tofile(self, str filename):
 		"""Helper function for pickling."""
 		cdef FILE *out = fopen(filename.encode('utf8'), b'wb')
-		cdef array header = array(b'I' if PY2 else 'I', [
-				len(self.prods), len(self.labels) + 1, self.labelbuf.len])
+		cdef array header = array(
+				'I', [len(self.prods), len(self.labels) + 1, self.labelbuf.len])
 		cdef size_t written = 0
 		if out is NULL:
 			raise ValueError('could not open file.')
@@ -946,7 +738,7 @@ cdef class FixedVocabulary(Vocabulary):
 		ob.labelbuf.d.aschar = &(ptr[offset])
 		ob.labelbuf.len = header[2]
 		ob.labelbuf.capacity = 0
-		releasebuf(&buffer)
+		PyBuffer_Release(&buffer)
 		return ob
 
 	def __dealloc__(self):
@@ -983,12 +775,12 @@ cdef class FixedVocabulary(Vocabulary):
 			rule.rhs2 = res
 		else:
 			rule.rhs2 = 0
-		rule.lengths = rule.args = 0
 		if rule.rhs1 == 0 and len(r) > 1:
 			res = self.labels.get(yf[0], None)
 			if res is None:
 				return None
 			rule.args = res
+			rule.lengths = 0
 		else:
 			getyf(yf, &rule.args, &rule.lengths)
 		prod = <bytes>tmp[:sizeof(Rule)]
@@ -1031,14 +823,7 @@ cdef inline int getbufptr(
 	cdef int result = -1
 	ptr[0] = NULL
 	size[0] = 0
-	if PY2:
-		# Although the new-style buffer interface was backported to Python 2.6,
-		# some modules, notably mmap, only support the old buffer interface.
-		# Cf. http://bugs.python.org/issue9229
-		if PyObject_CheckReadBuffer(obj) == 1:
-			result = PyObject_AsReadBuffer(
-					obj, <const void **>ptr, size)
-	elif PyObject_CheckBuffer(obj) == 1:  # new-style Buffer interface
+	if PyObject_CheckBuffer(obj) == 1:  # new-style Buffer interface
 		result = PyObject_GetBuffer(obj, buf, PyBUF_SIMPLE)
 		if result == 0:
 			ptr[0] = <char *>buf.buf
@@ -1046,11 +831,5 @@ cdef inline int getbufptr(
 	return result
 
 
-cdef inline void releasebuf(Py_buffer *buf):
-	"""Release buffer if necessary."""
-	if not PY2:
-		PyBuffer_Release(buf)
-
-__all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',
-		'FatChartItem', 'Edges', 'RankedEdge', 'Vocabulary', 'FixedVocabulary',
-		'numedges']
+__all__ = ['Grammar', 'Chart', 'Ctrees', 'SmallChartItem', 'FatChartItem',
+		'Edges', 'RankedEdge', 'Vocabulary', 'FixedVocabulary']

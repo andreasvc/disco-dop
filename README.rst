@@ -52,16 +52,13 @@ Requirements:
 - Cython 0.21+    http://www.cython.org
 - Numpy 1.5+      http://numpy.org/
 
-Python 2.7 is supported, but Python 3 is recommended.
-Install the ``futures`` package when running Python 2.7.
-
 Debian, Ubuntu based systems
 ----------------------------
 To compile the latest development version on an `Ubuntu <http://www.ubuntu.com>`_ system,
 run the following sequence of commands::
 
     sudo apt-get install build-essential python3-dev python3-numpy python3-pip git
-    git clone --depth 1 git://github.com/andreasvc/disco-dop.git
+    git clone --recursive git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip3 install --user -r requirements.txt
     make install
@@ -89,13 +86,14 @@ Install Python 3 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;
 installation steps are similar to the ones below::
 
-    wget http://www.python.org/ftp/python/3.5.1/Python-3.5.1.tgz
+    wget http://www.python.org/ftp/python/3.6.1/Python-3.6.1.tgz
     tar -xzf Python-*.tgz
     cd Python-*
     ./configure --prefix=$HOME/.local --enable-shared
     make install && cd ..
+    ldconfig
 
-Check by running ``python3`` that version 3.5.1 was installed successfully and
+Check by running ``python3`` that version 3.6.1 was installed successfully and
 is the default.
 
 Install the latest development version of discodop::
@@ -103,7 +101,7 @@ Install the latest development version of discodop::
     wget https://github.com/andreasvc/disco-dop/archive/master.zip
     unzip disco-dop-master.zip
     cd disco-dop-master
-    pip install --user -r requirements.txt
+    pip3 install --user -r requirements.txt
     make install
 
 Mac OS X
@@ -112,11 +110,10 @@ Mac OS X
 - Install dependencies using Homebrew::
 
     brew install gcc python3 git
-    git clone --depth 1 git://github.com/andreasvc/disco-dop.git
+    git clone --recursive git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     sudo pip3 install -r requirements.txt
-    env CC=gcc sudo python setup.py install
-    sudo make
+    env CC=gcc sudo python3 setup.py install
 
 Other systems
 -------------

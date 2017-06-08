@@ -15,12 +15,13 @@ def trainfunctionclassifier(trees, sents, numproc):
 	"""Train a classifier to predict functions tags in trees."""
 	from sklearn import linear_model, multiclass, pipeline
 	from sklearn import preprocessing, feature_extraction
-	from sklearn.grid_search import GridSearchCV
+	from sklearn.model_selection import GridSearchCV
 	from sklearn.metrics import make_scorer, jaccard_similarity_score
 	vectorizer = pipeline.Pipeline([
-			feature_extraction.DictVectorizer(sparse=True),
-			preprocessing.StandardScaler(copy=False)])
-	# PTB has no function tags on pretermintals, Negra etc. do.
+			('vectorizer', feature_extraction.DictVectorizer(sparse=True)),
+			('scaler', preprocessing.StandardScaler(
+				copy=False, with_mean=False))])
+	# PTB has no function tags on pretermintals, Negra/Tiger/Lassy do.
 	posfunc = any(functions(node) for tree in trees
 			for node in tree.subtrees()
 			if node and isinstance(node[0], int))
@@ -29,7 +30,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 			if tree is not node and node
 				and (posfunc or isinstance(node[0], Tree))]
 	# PTB may have multiple tags (or 0) per node.
-	# Negra etc. have exactly 1 tag for every node.
+	# Negra/Tiger/Lassy have exactly 1 tag for every node.
 	multi = any(len(a) > 1 for a in target)
 	if multi:
 		encoder = preprocessing.MultiLabelBinarizer()

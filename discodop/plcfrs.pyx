@@ -6,252 +6,266 @@ import re
 import logging
 import numpy as np
 cimport cython
+from cython.operator cimport postincrement, dereference
+from libc.math cimport HUGE_VAL as INFINITY
 include "constants.pxi"
-include "agenda.pxi"
 
-cdef SmallChartItem COMPONENT = new_SmallChartItem(0, 0)
-cdef SmallChartItem NONE = new_SmallChartItem(0, 0)
-cdef FatChartItem FATNONE = new_FatChartItem(0)
-cdef FatChartItem FATCOMPONENT = new_FatChartItem(0)
-cdef double INFINITY = float('infinity')
-
-cdef inline bint equalitems(LCFRSItem_fused op1, LCFRSItem_fused op2):
-	if LCFRSItem_fused is SmallChartItem:
-		return op1.label == op2.label and op1.vec == op2.vec
-	return op1.label == op2.label and (
-		memcmp(<uint8_t *>op1.vec, <uint8_t *>op2.vec, sizeof(op1.vec)) == 0)
-
+cdef SmallChartItem COMPONENT = SmallChartItem(0, 0)
+cdef SmallChartItem NONE = SmallChartItem(0, 0)
+cdef FatChartItem FATNONE = FatChartItem(0)
+cdef FatChartItem FATCOMPONENT = FatChartItem(0)
 
 cdef class LCFRSChart(Chart):
 	"""A chart for LCFRS grammars. An item is a ChartItem object."""
 	def __init__(self, Grammar grammar, list sent,
-			start=None, logprob=True, viterbi=True):
+			start=None, logprob=True, viterbi=True,
+			itemsestimate=None):
 		self.grammar = grammar
 		self.sent = sent
 		self.lensent = len(sent)
 		self.start = grammar.toid[grammar.start if start is None else start]
 		self.logprob = logprob
 		self.viterbi = viterbi
-		self.probs = grammar.nonterminals * [None]
-		self.parseforest = {}
-		self.itemsinorder = []
 
-	cdef void addlexedge(self, item, short wordidx):
+	cdef void addlexedge(self, ItemNo itemidx, short wordidx):
 		"""Add lexical edge."""
-		cdef Edge *edge
-		cdef Edges edges
-		cdef MoreEdges *edgelist
-		# NB: lexical edges should always be unique, but just in case ...
-		if item in self.parseforest:
-			edges = self.parseforest[item]
-			edgelist = edges.head
-			if edges.len == EDGES_SIZE:
-				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-				if edgelist is NULL:
-					abort()
-				edgelist.prev = edges.head
-				edges.head = edgelist
-				edges.len = 0
-		else:
-			edges = Edges()
-			self.parseforest[item] = edges
-			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-			if edgelist is NULL:
-				abort()
-			edges.head = edgelist
-			self.itemsinorder.append(item)
-		edge = &(edgelist.data[edges.len])
+		cdef Edge edge
 		edge.rule = NULL
 		edge.pos.mid = wordidx + 1
-		edges.len += 1
+		self.parseforest[itemidx].push_back(edge)
 
-	cdef void updateprob(self, ChartItem item, double prob):
-		cdef dict probs = <dict>self.probs[item.label]
-		if probs is None:
-			self.probs[item.label] = {item: item}
-		elif item in probs:
-			item = <ChartItem>probs[item]
-			if prob < item.prob:
-				item.prob = prob
-		else:
-			probs[item] = item
+	cdef void updateprob(self, ItemNo itemidx, Prob prob):
+		if prob < self.probs[itemidx]:
+			self.probs[itemidx] = prob
 
-	cdef void addprob(self, ChartItem item, double prob):
-		# cdef dict probs = <dict>self.probs[item.label]
-		# NB: item must be an instance in the chart, otherwise do:
-		# item = probs[item]
-		item.prob += prob
+	cdef void addprob(self, ItemNo itemidx, Prob prob):
+		self.probs[itemidx] += prob
 
-	cdef double _subtreeprob(self, ChartItem item):
-		return item.prob
+	cdef Prob _subtreeprob(self, ItemNo itemidx):
+		return self.probs[itemidx]
 
-	cdef double subtreeprob(self, item):
-		cdef dict probs = <dict>self.probs[(<ChartItem>item).label]
-		return self._subtreeprob(<ChartItem>probs[item])
+	cdef Prob subtreeprob(self, ItemNo itemidx):
+		return self.probs[itemidx]
 
-	cdef uint32_t label(self, item):
-		return (<ChartItem>item).label
-
-	def itemstr(self, item):
-		return '%s[%s]' % (self.grammar.tolabel[self.label(item)],
-				item.binrepr(self.lensent))
-
-	def getitems(self):
-		return self.parseforest
-
-	cpdef hasitem(self, ChartItem item):
-		return item in self.parseforest
+	cdef Label label(self, ItemNo itemidx):
+		raise NotImplementedError
 
 
 @cython.final
 cdef class SmallLCFRSChart(LCFRSChart):
 	"""For sentences that fit into a single machine word."""
 	def __init__(self, Grammar grammar, list sent,
-			start=None, logprob=True, viterbi=True):
+			start=None, logprob=True, viterbi=True,
+			itemsestimate=None):
+		cdef SmallChartItem tmp = SmallChartItem(0, 0)
 		super(SmallLCFRSChart, self).__init__(
 				grammar, sent, start, logprob, viterbi)
-		self.tmpitem = new_SmallChartItem(0, 0)
+		if itemsestimate is not None:
+			self.items.reserve(itemsestimate)
+			# NB: self.itemindex does not support reserve
+			self.parseforest.reserve(itemsestimate)
+			self.probs.reserve(itemsestimate)
+		# first item is a sentinel
+		self.items.push_back(tmp)
+		self.itemindex[tmp] = 0
+		self.probs.push_back(INFINITY)
 
-	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
-			ProbRule *rule):
+	cdef void addedge(self, ItemNo itemidx, ItemNo leftitemidx,
+			SmallChartItem& left, ProbRule *rule):
 		"""Add new edge."""
-		cdef Edge *edge
-		cdef Edges edges
-		cdef MoreEdges *edgelist
-		if item in self.parseforest:
-			edges = self.parseforest[item]
-			edgelist = edges.head
-			if edges.len == EDGES_SIZE:
-				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-				if edgelist is NULL:
-					abort()
-				edgelist.prev = edges.head
-				edges.head = edgelist
-				edges.len = 0
-		else:
-			edges = Edges()
-			self.parseforest[item] = edges
-			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-			if edgelist is NULL:
-				abort()
-			edges.head = edgelist
-			self.itemsinorder.append(item)
-		edge = &(edgelist.data[edges.len])
+		cdef Edge edge
 		edge.rule = rule
+		edge.pos.lvec = 0UL
 		edge.pos.lvec = left.vec
-		edges.len += 1
+		self.parseforest[itemidx].push_back(edge)
 
-	cdef _left(self, item, Edge *edge):
+	cdef ItemNo _left(self, ItemNo itemidx_unused, Edge edge):
+		cdef SmallChartItem tmp
 		if edge.rule is NULL:
 			return None
-		self.tmpitem.label = edge.rule.rhs1
-		self.tmpitem.vec = edge.pos.lvec
-		return self.probs[self.tmpitem.label][self.tmpitem]
+		tmp.label = edge.rule.rhs1
+		tmp.vec = edge.pos.lvec
+		return self.itemindex[tmp]
 
-	cdef _right(self, item, Edge *edge):
+	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
+		cdef SmallChartItem tmp
 		if edge.rule is NULL or edge.rule.rhs2 == 0:
 			return None
-		self.tmpitem.label = edge.rule.rhs2
-		self.tmpitem.vec = (<SmallChartItem>item).vec ^ edge.pos.lvec
-		return self.probs[self.tmpitem.label][self.tmpitem]
+		tmp.label = edge.rule.rhs2
+		tmp.vec = self.items[itemidx].vec ^ edge.pos.lvec
+		return self.itemindex[tmp]
 
-	def indices(self, SmallChartItem item):
-		cdef short n
-		return [n for n in range(len(self.sent)) if testbit(item.vec, n)]
-
-	cdef copy(self, item):
-		return (<SmallChartItem>item).copy()
+	cdef SmallChartItem _root(self):
+		return SmallChartItem(self.start, (1UL << self.lensent) - 1)
 
 	def root(self):
-		cdef SmallChartItem item = new_SmallChartItem(
-				self.start, (1UL << self.lensent) - 1)
-		if self.probs[item.label] is None:
-			return item
-		return self.probs[item.label].get(item, item)
+		if self.itemindex.find(self._root()) == self.itemindex.end():
+			return None
+		return self.itemindex[self._root()]
+
+	cdef Label label(self, ItemNo itemidx):
+		return self.items[itemidx].label
+
+	cdef Label _label(self, ItemNo itemidx):
+		return self.items[itemidx].label
+
+	cdef ItemNo getitemidx(self, uint64_t n):
+		"""Get itemidx of n'th item."""
+		return n
+
+	def indices(self, ItemNo itemidx):
+		cdef SmallChartItem item = self.items[itemidx]
+		return [n for n in range(len(self.sent)) if testbit(item.vec, n)]
+
+	def itemstr(self, ItemNo itemidx):
+		return '%s[%s]' % (
+				self.grammar.tolabel[self._label(itemidx)],
+				bin(self.items[itemidx].vec)[2:].zfill(self.lensent)[::-1])
+
+	def hasnode(self, node, Whitelist whitelist=None):
+		cdef SmallChartItem tmp
+		try:
+			label = self.grammar.toid[node.label]
+		except KeyError:
+			return False
+		vec = sum(1 << n for n in node.leaves())
+		tmp = SmallChartItem(label, vec)
+		if whitelist is not None:
+			tmp.label = whitelist.mapping[label]
+			return whitelist.small[tmp.label].count(tmp) != 0
+		return self.itemindex[tmp] != 0
+
+	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
+		return self.items[itemidx]
+
+	cdef FatChartItem asFatChartItem(self, ItemNo itemidx):
+		raise ValueError
+
+	cdef size_t asCFGspan(self, ItemNo itemidx):
+		cdef SmallChartItem sitem = self.items[itemidx]
+		cdef int start = nextset(sitem.vec, 0)
+		cdef int end = nextunset(sitem.vec, start)
+		assert nextset(sitem.vec, end) == -1
+		assert 0 <= start < end <= self.lensent
+		return compactcellidx(start, end, self.lensent, 1)
 
 
 @cython.final
 cdef class FatLCFRSChart(LCFRSChart):
 	"""LCFRS chart that supports longer sentences."""
 	def __init__(self, Grammar grammar, list sent,
-			start=None, logprob=True, viterbi=True):
+			start=None, logprob=True, viterbi=True,
+			itemsestimate=None):
 		super(FatLCFRSChart, self).__init__(
 				grammar, sent, start, logprob, viterbi)
-		self.tmpitem = new_FatChartItem(0)
+		cdef FatChartItem tmp = FatChartItem(0)
+		if itemsestimate is not None:
+			self.items.reserve(itemsestimate)
+			# NB: self.itemindex does not support reserve
+			self.parseforest.reserve(itemsestimate)
+			self.probs.reserve(itemsestimate)
+		self.items.push_back(tmp)  # sentinel
+		self.itemindex[tmp] = 0  # sentinel
+		self.probs.push_back(INFINITY)
 
-	cdef void addedge(self, FatChartItem item, FatChartItem left,
-			ProbRule *rule):
+	cdef void addedge(self, ItemNo itemidx, ItemNo leftitemidx,
+			FatChartItem& left, ProbRule *rule):
 		"""Add new edge and update viterbi probability."""
-		cdef Edge *edge
-		cdef Edges edges
-		cdef MoreEdges *edgelist
-		if item in self.parseforest:
-			edges = self.parseforest[item]
-			edgelist = edges.head
-			if edges.len == EDGES_SIZE:
-				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-				if edgelist is NULL:
-					abort()
-				edgelist.prev = edges.head
-				edges.head = edgelist
-				edges.len = 0
-		else:
-			edges = Edges()
-			self.parseforest[item] = edges
-			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
-			if edgelist is NULL:
-				abort()
-			edges.head = edgelist
-			self.itemsinorder.append(item)
-		edge = &(edgelist.data[edges.len])
+		cdef Edge edge
 		edge.rule = rule
-		# NB: store pointer; breaks when `left` is garbage collected!
-		edge.pos.lvec_fat = left.vec
-		edges.len += 1
+		edge.pos.lvec = 0UL
+		edge.pos.lidx = leftitemidx
+		self.parseforest[itemidx].push_back(edge)
 
-	cdef _left(self, item, Edge *edge):
-		cdef size_t n
+	cdef ItemNo _left(self, ItemNo itemidx_unused, Edge edge):
 		if edge.rule is NULL:
 			return None
-		self.tmpitem.label = edge.rule.rhs1
-		for n in range(SLOTS):
-			self.tmpitem.vec[n] = edge.pos.lvec_fat[n]
-		return self.probs[self.tmpitem.label][self.tmpitem]
+		return edge.pos.lidx
 
-	cdef _right(self, item, Edge *edge):
+	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
+		cdef FatChartItem tmp
 		cdef size_t n
-		if edge.rule is NULL:
+		if edge.rule is NULL or edge.rule.rhs2 == 0:
 			return None
-		self.tmpitem.label = edge.rule.rhs2
+		tmp = self.items[edge.pos.lidx]
+		tmp.label = edge.rule.rhs2
 		for n in range(SLOTS):
-			self.tmpitem.vec[n] = (
-					<FatChartItem>item).vec[n] ^ edge.pos.lvec_fat[n]
-		return self.probs[self.tmpitem.label][self.tmpitem]
+			tmp.vec[n] ^= self.items[itemidx].vec[n]
+		return self.itemindex[tmp]
 
-	def indices(self, FatChartItem item):
-		cdef short n
-		return [n for n in range(len(self.sent)) if TESTBIT(item.vec, n)]
-
-	cdef copy(self, item):
-		return (<FatChartItem>item).copy()
+	cdef FatChartItem _root(self):
+		return CFGtoFatChartItem(self.start, 0, self.lensent)
 
 	def root(self):
-		cdef FatChartItem item = CFGtoFatChartItem(
-				self.start, 0, self.lensent)
-		if self.probs[item.label] is None:
-			return item
-		return self.probs[item.label].get(item, item)
+		cdef FatChartItem tmp = self._root()
+		if self.itemindex.find(tmp) == self.itemindex.end():
+			return None
+		return self.itemindex[tmp]
+
+	cdef Label label(self, ItemNo itemidx):
+		return self._label(itemidx)  # somehow needed
+
+	cdef Label _label(self, ItemNo itemidx):
+		return self.items[itemidx].label
+
+	cdef ItemNo getitemidx(self, uint64_t n):
+		"""Get itemidx of n'th item."""
+		return n
+
+	def indices(self, ItemNo itemidx):
+		cdef FatChartItem item = self.items[itemidx]
+		return [n for n in range(len(self.sent)) if TESTBIT(item.vec, n)]
+
+	def itemstr(self, ItemNo itemidx):
+		cdef int n
+		cdef str result = ''
+		for n in range(SLOTS):
+			result += bin(self.items[itemidx].vec[n])[2:].zfill(BITSIZE)[::-1]
+		result = result[:self.lensent]
+		return '%s[%s]' % (self.grammar.tolabel[self._label(itemidx)],
+				result)
+
+	def hasnode(self, node, Whitelist whitelist=None):
+		cdef FatChartItem tmp
+		cdef uint64_t n
+		try:
+			label = self.grammar.toid[node.label]
+		except KeyError:
+			return False
+		tmp = FatChartItem(label)
+		for n in node.leaves():
+			if n >= SLOTS * sizeof(unsigned long) * 8:
+				return False
+			SETBIT(tmp.vec, n)
+		if whitelist is not None:
+			tmp.label = whitelist.mapping[label]
+			return whitelist.fat[tmp.label].count(tmp) != 0
+		return self.itemindex[tmp] != 0
+
+	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
+		raise ValueError
+
+	cdef FatChartItem asFatChartItem(self, ItemNo itemidx):
+		return self.items[itemidx]
+
+	cdef size_t asCFGspan(self, ItemNo itemidx):
+		cdef FatChartItem fitem = self.items[itemidx]
+		cdef int start = anextset(fitem.vec, 0, SLOTS)
+		cdef int end = anextunset(fitem.vec, start, SLOTS)
+		assert anextset(fitem.vec, end, SLOTS) == -1
+		assert 0 <= start < end <= self.lensent
+		return compactcellidx(start, end, self.lensent, 1)
 
 
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
-		start=None, list whitelist=None, bint splitprune=False,
-		bint markorigin=False, estimates=None, bint symbolic=False,
-		double beam_beta=0.0, int beam_delta=50):
+		start=None, Whitelist whitelist=None, bint splitprune=False,
+		bint markorigin=False, estimates=None,
+		Prob beam_beta=0.0, int beam_delta=50, itemsestimate=None):
 	"""Parse sentence and produce a chart.
 
 	:param sent: A sequence of tokens that will be parsed.
 	:param grammar: A ``Grammar`` object.
-	:returns: a ``Chart`` object.
+	:returns: a tuple (chart, msg); a ``Chart`` object and status message.
 	:param tags: Optionally, a sequence of POS tags to use instead of
 		attempting to apply all possible POS tags.
 	:param exhaustive: don't stop at viterbi parse, return a full chart
@@ -273,71 +287,77 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		4-dimensional numpy matrix. If estimates are not consistent, it is
 		no longer guaranteed that the optimal parse will be found.
 		experimental.
-	:param symbolic: If True, only compute parse forest, disregard
-		probabilities. The agenda is an O(1) queue instead of a O(log n)
-		priority queue.
 	:param beam_beta: keep track of the best score in each cell and only allow
 		items which are within a multiple of ``beam_beta`` of the best score.
 		Should be a negative log probability. Pass ``0.0`` to disable.
 	:param beam_delta: the maximum span length to which beam search is applied.
+	:param itemsestimate: the number of chart items to pre-allocate.
 	"""
-	if len(sent) < sizeof(COMPONENT.vec) * 8:
-		chart = SmallLCFRSChart(grammar, list(sent), start)
-		if symbolic:
-			return parse_symbolic(<SmallLCFRSChart>chart,
-					<SmallChartItem>chart.root(), sent, grammar, tags,
-					whitelist, splitprune, markorigin)
-		return parse_main(<SmallLCFRSChart>chart, <SmallChartItem>chart.root(),
-				sent, grammar, tags, exhaustive, whitelist, splitprune,
-				markorigin, estimates, beam_beta, beam_delta)
-	chart = FatLCFRSChart(grammar, list(sent), start)
-	if symbolic:
-		return parse_symbolic(<FatLCFRSChart>chart,
-				<FatChartItem>chart.root(), sent, grammar, tags,
-				whitelist, splitprune, markorigin)
-	return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
-			sent, grammar, tags, exhaustive, whitelist, splitprune,
-			markorigin, estimates, beam_beta, beam_delta)
+	if <unsigned>len(sent) < sizeof(COMPONENT.vec) * 8:
+		chart = SmallLCFRSChart(grammar, list(sent), start,
+			itemsestimate=itemsestimate)
+		return parse_main[SmallLCFRSChart, SmallChartItem](
+				<SmallLCFRSChart>chart,
+				<SmallChartItem>(<SmallLCFRSChart>chart)._root(),
+				sent, grammar, tags, exhaustive, whitelist,
+				splitprune, markorigin, estimates, beam_beta, beam_delta)
+	chart = FatLCFRSChart(grammar, list(sent), start,
+			itemsestimate=itemsestimate)
+	return parse_main[FatLCFRSChart, FatChartItem](
+			<FatLCFRSChart>chart, <FatChartItem>(<FatLCFRSChart>chart)._root(),
+			sent, grammar, tags, exhaustive, whitelist,
+			splitprune, markorigin, estimates, beam_beta, beam_delta)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
-		Grammar grammar, tags, bint exhaustive, list whitelist,
+		Grammar grammar, tags, bint exhaustive, Whitelist whitelist,
 		bint splitprune, bint markorigin, estimates,
-		double beam_beta, int beam_delta):
+		Prob beam_beta, int beam_delta):
 	cdef:
-		DoubleAgenda agenda = DoubleAgenda()  # the agenda
-		list probs = chart.probs  # viterbi probabilities for items
+		Agenda[ItemNo, pair[Prob, Prob]] agenda  # prioritized items to explore
+		pair[ItemNo, pair[Prob, Prob]] entry
+		vector[ItemNo] sibvec
 		ProbRule *rule
-		LCFRSItem_fused item, newitem
-		DoubleEntry entry
+		LCFRSItem_fused item, sib, newitem, tmpitem
 		double [:, :, :, :] outside = None  # outside estimates, if provided
-		double siblingprob, score
+		Prob siblingprob, score, prob, newprob
 		short lensent = len(sent), estimatetype = 0
 		int length = 1, left = 0, right = 0, gaps = 0
+		ItemNo itemidx, sibidx
 		size_t blocked = 0, maxA = 0, n
+	# avoid generating code for spurious fused type combinations
+	if ((LCFRSItem_fused is SmallChartItem
+			and LCFRSChart_fused is FatLCFRSChart)
+			or (LCFRSItem_fused is FatChartItem
+			and LCFRSChart_fused is SmallLCFRSChart)):
+		return
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
-	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
-		newitem = new_SmallChartItem(0, 0)
+		newitem = SmallChartItem(0, 0)
+		tmpitem = SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
-		newitem = new_FatChartItem(0)
+		newitem = FatChartItem(0)
+		tmpitem = FatChartItem(0)
 
 	# assign POS tags
 	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
 			grammar, agenda, chart, newitem,
-			sent, tags, whitelist, estimates, False)
+			sent, tags, whitelist, estimates)
 	if not covered:
 		return chart, msg
+	assert not agenda.empty()
 
-	while agenda.length:  # main parsing loop
-		entry = agenda.popentry()
-		item = <LCFRSItem_fused>entry.key
+	while not agenda.empty():  # main parsing loop
+		entry = agenda.pop()
+		itemidx = entry.first
+		prob = entry.second.second
+		item = chart.items[itemidx]
 		# store viterbi probability; cannot do this when this item is added to
 		# the agenda because that would give rise to duplicate edges.
-		chart.updateprob(item, item.prob)
-		if equalitems(item, goal):
+		chart.updateprob(itemidx, prob)
+		if item == goal:
 			if not exhaustive:
 				break
 		else:
@@ -364,7 +384,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					break
 				elif TESTBIT(grammar.mask, rule.no):
 					continue
-				score = newitem.prob = item.prob + rule.prob
+				score = newprob = prob + rule.prob
 				if estimatetype == SX:
 					score += outside[rule.lhs, left, right, 0]
 					if score > MAX_LOGPROB:
@@ -379,17 +399,14 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					# have a strictly lower score than items with length n + 1.
 					score += length * MAX_LOGPROB
 				newitem.label = rule.lhs
-				if process_edge(newitem, score, rule, item,
+				if process_edge[LCFRSItem_fused, LCFRSChart_fused](
+						newitem, newprob, score, rule, itemidx, item,
 						agenda, chart, estimatetype, whitelist,
 						splitprune and grammar.fanout[rule.lhs] != 1,
 						markorigin, 0.0):
 					if LCFRSItem_fused is SmallChartItem:
-						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-								SmallChartItem)
 						newitem.vec = item.vec
 					elif LCFRSItem_fused is FatChartItem:
-						newitem = <LCFRSItem_fused>FatChartItem.__new__(
-								FatChartItem)
 						memcpy(<void *>newitem.vec, <void *>item.vec,
 								SLOTS * sizeof(uint64_t))
 				else:
@@ -399,16 +416,29 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.rbinary[item.label][n])
 				if rule.rhs2 != item.label:
 					break
-				elif probs[rule.rhs1] is None:
-					continue
+				# elif chart.probs[rule.rhs1] is None:
+				# 	continue
 				elif TESTBIT(grammar.mask, rule.no):
 					continue
-				for sib in <dict>probs[rule.rhs1]:
-					newitem.label = rule.lhs
-					combine_item(newitem, <LCFRSItem_fused>sib, item)
-					if concat(rule, <LCFRSItem_fused>sib, item):
-						siblingprob = (<LCFRSItem_fused>sib).prob
-						score = newitem.prob = item.prob + siblingprob + rule.prob
+				tmpitem.label = rule.rhs1
+				itemidxit = chart.itemindex.lower_bound(tmpitem)
+				sibvec.clear()
+				while (itemidxit != chart.itemindex.end()
+						and dereference(itemidxit).first.label == rule.rhs1):
+					sib = dereference(itemidxit).first
+					sibidx = dereference(itemidxit).second
+					sibvec.push_back(sibidx)
+					postincrement(itemidxit)
+				for sibidx in sibvec:
+					sib = chart.items[sibidx]
+					postincrement(itemidxit)
+					if concat[LCFRSItem_fused](rule, &sib, &item):
+						newitem.label = rule.lhs
+						combine_item[LCFRSItem_fused](&newitem, &sib, &item)
+						siblingprob = chart.probs[sibidx]
+						if siblingprob == INFINITY:
+							continue
+						score = newprob = prob + siblingprob + rule.prob
 						if LCFRSItem_fused is SmallChartItem:
 							length = bitcount(newitem.vec)
 						elif LCFRSItem_fused is FatChartItem:
@@ -436,18 +466,13 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 								continue
 						else:
 							score += length * MAX_LOGPROB
-						if process_edge(newitem, score,
-								rule, <LCFRSItem_fused>sib, agenda, chart,
-								estimatetype, whitelist,
+						if process_edge[LCFRSItem_fused, LCFRSChart_fused](
+								newitem, newprob, score, rule, sibidx, sib,
+								agenda, chart, estimatetype, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin,
 								beam_beta if length <= beam_delta else 0.0):
-							if LCFRSItem_fused is SmallChartItem:
-								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-										SmallChartItem)
-							elif LCFRSItem_fused is FatChartItem:
-								newitem = <LCFRSItem_fused>FatChartItem.__new__(
-										FatChartItem)
+							pass
 						else:
 							blocked += 1
 			# binary production, item from agenda is on the left
@@ -455,16 +480,28 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.lbinary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
-				elif probs[rule.rhs2] is None:
-					continue
+				# elif chart.probs[rule.rhs2] is None:
+				# 	continue
 				elif TESTBIT(grammar.mask, rule.no):
 					continue
-				for sib in <dict>probs[rule.rhs2]:
-					newitem.label = rule.lhs
-					combine_item(newitem, item, <LCFRSItem_fused>sib)
-					if concat(rule, item, <LCFRSItem_fused>sib):
-						siblingprob = (<LCFRSItem_fused>sib).prob
-						score = newitem.prob = item.prob + siblingprob + rule.prob
+				tmpitem.label = rule.rhs2
+				itemidxit = chart.itemindex.lower_bound(tmpitem)
+				sibvec.clear()
+				while (itemidxit != chart.itemindex.end()
+						and dereference(itemidxit).first.label == rule.rhs2):
+					sib = dereference(itemidxit).first
+					sibidx = dereference(itemidxit).second
+					sibvec.push_back(sibidx)
+					postincrement(itemidxit)
+				for sibidx in sibvec:
+					sib = chart.items[sibidx]
+					if concat[LCFRSItem_fused](rule, &item, &sib):
+						newitem.label = rule.lhs
+						combine_item[LCFRSItem_fused](&newitem, &item, &sib)
+						siblingprob = chart.probs[sibidx]
+						if siblingprob == INFINITY:
+							continue
+						score = newprob = prob + siblingprob + rule.prob
 						if LCFRSItem_fused is SmallChartItem:
 							length = bitcount(newitem.vec)
 						elif LCFRSItem_fused is FatChartItem:
@@ -492,32 +529,99 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 								continue
 						else:
 							score += length * MAX_LOGPROB
-						if process_edge(newitem, score, rule, item,
+						if process_edge[LCFRSItem_fused, LCFRSChart_fused](
+								newitem, newprob, score, rule, itemidx, item,
 								agenda, chart, estimatetype, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin,
 								beam_beta if length <= beam_delta else 0.0):
-							if LCFRSItem_fused is SmallChartItem:
-								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-										SmallChartItem)
-							elif LCFRSItem_fused is FatChartItem:
-								newitem = <LCFRSItem_fused>FatChartItem.__new__(
-										FatChartItem)
+							pass
 						else:
 							blocked += 1
-
-		if agenda.length > maxA:
-			maxA = agenda.length
-	msg = ('agenda max %d, now %d, %s, blocked %d' % (
-			maxA, len(agenda), chart.stats(), blocked))
+		if agenda.size() > maxA:
+			maxA = agenda.size()
+	msg = ('%s, blocked %d, agenda max %d, now %d' % (
+			chart.stats(), blocked, maxA, agenda.size()))
 	if not chart:
-		return chart, 'no parse ' + msg
+		return chart, 'no parse; ' + msg
 	return chart, msg
 
 
-cdef populatepos(Grammar grammar, DoubleAgenda agenda,
-		LCFRSChart_fused chart, LCFRSItem_fused item, sent, tags, whitelist,
-		estimates, bint symbolic):
+cdef inline bint process_edge(LCFRSItem_fused newitem,
+		Prob prob, Prob score, ProbRule *rule,
+		ItemNo leftitemidx, LCFRSItem_fused& left,
+		Agenda[ItemNo, pair[Prob, Prob]]& agenda, LCFRSChart_fused chart,
+		int estimatetype, Whitelist whitelist, bint splitprune,
+		bint markorigin, Prob beam):
+	"""Decide what to do with a newly derived edge.
+
+	:returns: ``True`` when edge is accepted in the chart, ``False`` when
+		blocked. When ``False``, ``newitem`` may be reused."""
+	cdef Label label
+	cdef ItemNo itemidx
+	cdef bint inagenda, inchart
+	cdef pair[Prob, Prob] scoreprob
+	cdef Prob curprob
+	# avoid generating code for spurious fused type combinations
+	if ((LCFRSItem_fused is SmallChartItem
+			and LCFRSChart_fused is FatLCFRSChart)
+			or (LCFRSItem_fused is FatChartItem
+			and LCFRSChart_fused is SmallLCFRSChart)):
+		return False
+	itemidxit = chart.itemindex.find(newitem)
+	if itemidxit == chart.itemindex.end():
+		cuprob = INFINITY
+		inagenda = inchart = False
+		itemidx = curprob = 0
+	else:
+		itemidx = dereference(itemidxit).second
+		curprob = chart.subtreeprob(itemidx)
+		inagenda = agenda.member(itemidx)
+		inchart = chart.parseforest[itemidx].size() != 0
+	scoreprob.first = score
+	scoreprob.second = prob
+	if not inagenda and not inchart:
+		# check if we need to prune this item
+		if whitelist is not None and not checkwhitelist(
+				newitem, whitelist, splitprune, markorigin):
+			return False
+		elif beam:
+			label = newitem.label
+			newitem.label = 0
+			it = chart.beambuckets.find(newitem)
+			if (it == chart.beambuckets.end()
+					or prob + beam < dereference(it).second):
+				chart.beambuckets[newitem] = prob + beam
+			elif prob > dereference(it).second:
+				return False
+			newitem.label = label
+		# haven't seen this item before, won't prune, add to agenda
+		itemidx = chart.itemindex[newitem] = chart.items.size()
+		chart.items.push_back(newitem)
+		chart.parseforest.resize(chart.items.size())
+		chart.probs.push_back(INFINITY)
+		agenda.setitem(itemidx, scoreprob)
+	# in agenda (maybe in chart)
+	elif inagenda:
+		# lower score? => decrease-key in agenda
+		agenda.setifbetter(itemidx, scoreprob)
+	# not in agenda => must be in chart
+	elif not inagenda and prob < curprob:
+		# re-add to agenda because we found a better score.
+		agenda.setitem(itemidx, scoreprob)
+		if estimatetype != SXlrgaps:
+			# This should only happen because of an inconsistent or
+			# non-monotonic estimate.
+			logging.warning('WARN: re-adding item to agenda already in chart:'
+					' %s', chart.itemstr(itemidx))
+	# store this edge, regardless of whether the item was new (unary chains)
+	chart.addedge(itemidx, leftitemidx, left, rule)
+	return True
+
+
+cdef populatepos(Grammar grammar,
+		Agenda[ItemNo, pair[Prob, Prob]]& agenda, LCFRSChart_fused chart,
+		LCFRSItem_fused item, sent, tags, Whitelist whitelist, estimates):
 	"""Apply all possible lexical and unary rules on each lexical span.
 
 	:returns: a tuple ``(success, msg)`` where ``success`` is True if a POS tag
@@ -526,75 +630,77 @@ cdef populatepos(Grammar grammar, DoubleAgenda agenda,
 		LexicalRule lexrule
 		LCFRSItem_fused newitem
 		double [:, :, :, :] outside = None  # outside estimates, if provided
-		double score
+		Prob score
 		short wordidx, lensent = len(sent), estimatetype = 0
 		int length = 1, left = 0, right = 0, gaps = 0
-		uint32_t lhs
-		size_t blocked = 0
+		Label lhs
 		bint recognized
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
 	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
-		newitem = new_SmallChartItem(0, 0)
+		newitem = SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
-		newitem = new_FatChartItem(0)
+		newitem = FatChartItem(0)
 
 	for wordidx, word in enumerate(sent):  # add preterminals to chart
 		recognized = False
 		if LCFRSItem_fused is SmallChartItem:
-			item = new_SmallChartItem(0, wordidx)
+			item = SmallChartItem(0, wordidx)
 		elif LCFRSItem_fused is FatChartItem:
-			item = new_FatChartItem(0)
+			item = FatChartItem(0)
 			item.vec[0] = wordidx
 		tag = tags[wordidx] if tags else None
 		# if we are given gold tags, make sure we only allow matching
 		# tags - after removing addresses introduced by the DOP reduction
 		# and other state splits.
-		tagre = re.compile('%s($|@|\\^|/)' % re.escape(tag)) if tags else None
+		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tags else None
 		if estimates is not None:
 			left = wordidx
 			gaps = 0
 			right = lensent - 1 - wordidx
-		for lexrule in grammar.lexicalbyword.get(word, ()):
-			if not tags or tagre.match(grammar.tolabel[lexrule.lhs]):
-				score = -1 if symbolic else lexrule.prob
-				if estimatetype == SX:
-					score += outside[lexrule.lhs, left, right, 0]
-					if score > MAX_LOGPROB:
-						continue
-				elif estimatetype == SXlrgaps:
-					score += outside[
-							lexrule.lhs, length, left + right, gaps]
-					if score > MAX_LOGPROB:
-						continue
-				# NB: do NOT add length of span to score, so that the scores of
-				# POS tags are all strictly smaller than any unaries on them.
-				newitem.label = lexrule.lhs
-				newitem.prob = 0.0 if symbolic else lexrule.prob
-				if LCFRSItem_fused is SmallChartItem:
-					newitem.vec = 1UL << wordidx
-				elif LCFRSItem_fused is FatChartItem:
-					memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
-					SETBIT(newitem.vec, wordidx)
-				if process_lexedge(newitem, score, wordidx,
-						agenda, chart, whitelist):
+		# for n in grammar.lexicalbyword.get(word, ()):
+		it = grammar.lexicalbyword.find(word.encode('utf8'))
+		if it != grammar.lexicalbyword.end():
+			for n in dereference(it).second:
+				lexrule = grammar.lexical[n]
+				if not tags or tagre.match(grammar.tolabel[lexrule.lhs]):
+					score = lexrule.prob
+					if estimatetype == SX:
+						score += outside[lexrule.lhs, left, right, 0]
+						if score > MAX_LOGPROB:
+							continue
+					elif estimatetype == SXlrgaps:
+						score += outside[
+								lexrule.lhs, length, left + right, gaps]
+						if score > MAX_LOGPROB:
+							continue
+					# NB: do NOT add length of span to score, so that the
+					# scores of POS tags are all strictly smaller than any
+					# unaries on them.
+					newitem.label = lexrule.lhs
 					if LCFRSItem_fused is SmallChartItem:
-						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-								SmallChartItem)
+						newitem.vec = 1UL << wordidx
 					elif LCFRSItem_fused is FatChartItem:
-						newitem = <LCFRSItem_fused>FatChartItem.__new__(
-								FatChartItem)
-					recognized = True
-				else:
-					blocked += 1
+						memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
+						SETBIT(newitem.vec, wordidx)
+					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
+							newitem, lexrule.prob, score, wordidx, agenda, chart,
+							whitelist):
+						if LCFRSItem_fused is SmallChartItem:
+							newitem = SmallChartItem(0, 0)
+						elif LCFRSItem_fused is FatChartItem:
+							newitem = FatChartItem(0)
+						recognized = True
 		# NB: use gold tags if given, even if (word, tag) was not part of
 		# training data, modulo state splits etc.
 		if not recognized and tag is not None:
-			for lhs in grammar.lexicalbylhs:
+			# for lhs in grammar.lexicalbylhs:
+			for x in grammar.lexicalbylhs:
+				lhs = x.first
 				if tagre.match(grammar.tolabel[lhs]) is not None:
-					score = -1 if symbolic else 0.0
+					score = 0.0
 					if estimatetype == SX:
 						score += outside[lhs, left, right, 0]
 						if score > MAX_LOGPROB:
@@ -604,174 +710,155 @@ cdef populatepos(Grammar grammar, DoubleAgenda agenda,
 						if score > MAX_LOGPROB:
 							continue
 					newitem.label = lhs
-					newitem.prob = 0.0
 					if LCFRSItem_fused is SmallChartItem:
 						newitem.vec = 1UL << wordidx
 					elif LCFRSItem_fused is FatChartItem:
-						memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
+						memset(
+								<void *>newitem.vec, 0,
+								SLOTS * sizeof(uint64_t))
 						SETBIT(newitem.vec, wordidx)
-					# prevent pruning of provided tags => whitelist == None
-					if process_lexedge(newitem, score, wordidx,
-							agenda, chart, None):
+					# prevent pruning of provided tags in whitelist
+					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
+							newitem, 0.0, score, wordidx, agenda, chart, None):
 						if LCFRSItem_fused is SmallChartItem:
-							newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-									SmallChartItem)
+							newitem = SmallChartItem(0, 0)
 						elif LCFRSItem_fused is FatChartItem:
-							newitem = <LCFRSItem_fused>FatChartItem.__new__(
-									FatChartItem)
+							newitem = FatChartItem(0)
 						recognized = True
 					else:
 						raise ValueError('tag %r is blocked.' % tag)
 		if not recognized:
-			if tag is None and word not in grammar.lexicalbyword:
-				return False, 'no parse: %r not in lexicon' % word
+			if tag is None and it == grammar.lexicalbyword.end():
+				return False, ('no parse: no gold POS tag given '
+						'and word %r not in lexicon' % word)
 			elif tag is not None and tag not in grammar.toid:
-				return False, 'no parse: unknown tag %r' % tag
-			return False, 'no parse: all tags for %r blocked' % word
+				return False, ('no parse: gold POS tag given '
+						'but tag %r not in grammar' % tag)
+			return False, 'no parse: all tags for word %r blocked' % word
 	return True, ''
 
 
-cdef inline bint process_edge(LCFRSItem_fused newitem,
-		double score, ProbRule *rule, LCFRSItem_fused left,
-		DoubleAgenda agenda, LCFRSChart_fused chart, int estimatetype,
-		list whitelist, bint splitprune, bint markorigin, double beam_beta):
-	"""Decide what to do with a newly derived edge.
-
-	:returns: ``True`` when edge is accepted in the chart, ``False`` when
-		blocked. When ``False``, ``newitem`` may be reused."""
-	cdef uint32_t label
-	cdef bint inagenda = newitem in agenda.mapping
-	cdef bint inchart = newitem in chart.parseforest
-	if not inagenda and not inchart:
-		# check if we need to prune this item
-		if whitelist is not None and not checkwhitelist(
-				newitem, whitelist, splitprune, markorigin):
-			return False
-		elif beam_beta:
-			label = newitem.label
-			newitem.label = 0
-			if newitem not in chart.probs:
-				itemcopy = newitem.copy()
-				chart.updateprob(itemcopy, newitem.prob)
-			elif newitem.prob > chart.probs[newitem].prob + beam_beta:
-				return False
-			elif newitem.prob < chart.probs[newitem].prob:
-				itemcopy = newitem.copy()
-				chart.updateprob(itemcopy, newitem.prob)
-			newitem.label = label
-		# haven't seen this item before, won't prune, add to agenda
-		agenda.setitem(newitem, score)
-	# in agenda (maybe in chart)
-	elif inagenda:
-		# lower score? => decrease-key in agenda
-		agenda.setifbetter(newitem, score)
-	# not in agenda => must be in chart
-	elif not inagenda and newitem.prob < chart.subtreeprob(newitem):
-		# re-add to agenda because we found a better score.
-		agenda.setitem(newitem, score)
-		if estimatetype != SXlrgaps:
-			# This should only happen because of an inconsistent or
-			# non-monotonic estimate.
-			logging.warning('WARN: re-adding item to agenda already in chart:'
-					' %r', newitem)
-	# store this edge, regardless of whether the item was new (unary chains)
-	chart.addedge(newitem, left, rule)
-	return True
-
-
 cdef inline int process_lexedge(LCFRSItem_fused newitem,
-		double score, short wordidx, agenda,
-		LCFRSChart_fused chart, list whitelist) except -1:
+		Prob prob, Prob score, short wordidx,
+		Agenda[ItemNo, pair[Prob, Prob]]& agenda, LCFRSChart_fused chart,
+		Whitelist whitelist) except -1:
 	"""Decide whether to accept a lexical edge ``(POS, word)``.
 
-	:param score: if -1, agenda is non-probabilistic
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
-	cdef bint inagenda
-	cdef bint inchart = newitem in chart.parseforest
-	if score == -1:
-		inagenda = newitem in agenda[0]
+	cdef bint inagenda, inchart
+	cdef ItemNo itemidx
+	cdef pair[Prob, Prob] scoreprob
+	# avoid generating code for spurious fused type combinations
+	if LCFRSItem_fused is SmallChartItem and LCFRSChart_fused is FatLCFRSChart:
+		return -1
+	elif (LCFRSItem_fused is FatChartItem
+			and LCFRSChart_fused is SmallLCFRSChart):
+		return -1
+	if chart.itemindex.find(newitem) == chart.itemindex.end():
+		itemidx = chart.itemindex[newitem] = chart.itemindex.size()
+		chart.items.push_back(newitem)
+		chart.parseforest.resize(chart.itemindex.size())
+		# chart.probs.resize(chart.itemindex.size())
+		chart.probs.push_back(INFINITY)
+		inagenda = inchart = False
 	else:
-		inagenda = newitem in (<DoubleAgenda>agenda).mapping
+		itemidx = chart.itemindex[newitem]
+		inchart = chart.parseforest[itemidx].size() != 0
+		inagenda = agenda.member(itemidx)
 	if inagenda:
 		raise ValueError('lexical edge already in agenda: %s' %
-				chart.itemstr(newitem))
+				chart.itemstr(itemidx))
 	elif inchart:
 		raise ValueError('lexical edge already in chart: %s' %
-				chart.itemstr(newitem))
+				chart.itemstr(itemidx))
 	# check if we need to prune this item
 	elif whitelist is not None and not checkwhitelist(
 			newitem, whitelist, False, False):
 		return False
 	# haven't seen this item before, won't prune
-	if score == -1:
-		agenda[0].add(newitem)
-	else:
-		(<DoubleAgenda>agenda).setitem(newitem, score)
-	chart.addlexedge(newitem, wordidx)
+	scoreprob.first = score
+	scoreprob.second = prob
+	agenda.setitem(itemidx, scoreprob)
+	assert not agenda.empty(), agenda.size()
+	chart.addlexedge(itemidx, wordidx)
 	return True
 
 
-cdef inline bint checkwhitelist(LCFRSItem_fused newitem, list whitelist,
+cdef inline bint checkwhitelist(LCFRSItem_fused newitem, Whitelist whitelist,
 		bint splitprune, bint markorigin):
 	"""Return False if item is not on whitelist."""
-	cdef uint32_t n, cnt, label
+	cdef uint32_t n, cnt
+	cdef Label label
 	cdef int a, b
-	cdef list componentlist = None
-	cdef set componentset = None
-	if whitelist is not None and whitelist[newitem.label] is not None:
-		if splitprune:  # disc. item to be treated as several split items?
-			if markorigin:
-				componentlist = <list>(whitelist[newitem.label])
-			else:
-				componentset = <set>(whitelist[newitem.label])
-			b = cnt = 0
+	if whitelist is None:
+		return True
+	elif splitprune:  # disc. item to be treated as several split items?
+		b = cnt = 0
+		if markorigin:
+			if whitelist.splitmapping[newitem.label] is NULL:
+				return True
+		else:
+			if whitelist.mapping[newitem.label] != 0:
+				return True
 			if LCFRSItem_fused is SmallChartItem:
+				COMPONENT.label = whitelist.splitmapping[
+						newitem.label][cnt]
+			elif LCFRSItem_fused is FatChartItem:
+				FATCOMPONENT.label = whitelist.splitmapping[
+						newitem.label][cnt]
+		if LCFRSItem_fused is SmallChartItem:
+			a = nextset(newitem.vec, b)
+		elif LCFRSItem_fused is FatChartItem:
+			a = anextset(newitem.vec, b, SLOTS)
+		while a != -1:
+			if LCFRSItem_fused is SmallChartItem:
+				b = nextunset(newitem.vec, a)
+				# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+				COMPONENT.vec = (1UL << b) - (1UL << a)
+				if markorigin:
+					COMPONENT.label = whitelist.splitmapping[
+							newitem.label][cnt]
+				if whitelist.small[COMPONENT.label].count(COMPONENT) == 0:
+					return False
 				a = nextset(newitem.vec, b)
 			elif LCFRSItem_fused is FatChartItem:
-				a = anextset(newitem.vec, b, SLOTS)
-			while a != -1:
-				if LCFRSItem_fused is SmallChartItem:
-					b = nextunset(newitem.vec, a)
-					# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-					COMPONENT.vec = (1UL << b) - (1UL << a)
-				elif LCFRSItem_fused is FatChartItem:
-					b = anextunset(newitem.vec, a, SLOTS)
-					# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-					memset(<void *>FATCOMPONENT.vec, 0,
-							SLOTS * sizeof(uint64_t))
-					for n in range(a, b):
-						SETBIT(FATCOMPONENT.vec, n)
+				b = anextunset(newitem.vec, a, SLOTS)
+				# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+				memset(<void *>FATCOMPONENT.vec, 0, SLOTS * sizeof(uint64_t))
+				for n in range(a, b):
+					SETBIT(FATCOMPONENT.vec, n)
 				if markorigin:
-					componentset = <set>(componentlist[cnt])
-				if LCFRSItem_fused is SmallChartItem:
-					if PySet_Contains(componentset, COMPONENT) != 1:
-						return False
-					a = nextset(newitem.vec, b)
-				elif LCFRSItem_fused is FatChartItem:
-					if PySet_Contains(componentset, FATCOMPONENT) != 1:
-						return False
-					a = anextset(newitem.vec, b, SLOTS)
-				cnt += 1
-		else:
-			label = newitem.label
-			newitem.label = 0
-			if PySet_Contains(whitelist[label], newitem) != 1:
+					FATCOMPONENT.label = whitelist.splitmapping[
+							newitem.label][cnt]
+				if whitelist.fat[FATCOMPONENT.label].count(
+						FATCOMPONENT) == 0:
+					return False
+				a = anextset(newitem.vec, b, SLOTS)
+			cnt += 1
+	elif whitelist.mapping[newitem.label] != 0:
+		label = newitem.label
+		newitem.label = whitelist.mapping[label]
+		if LCFRSItem_fused is SmallChartItem:
+			if whitelist.small[newitem.label].count(newitem) == 0:
 				return False
-			newitem.label = label
+		elif LCFRSItem_fused is FatChartItem:
+			if whitelist.fat[newitem.label].count(newitem) == 0:
+				return False
+		newitem.label = label
 	return True
 
 
-cdef inline void combine_item(LCFRSItem_fused newitem,
-		LCFRSItem_fused left, LCFRSItem_fused right):
+cdef inline void combine_item(LCFRSItem_fused *newitem,
+		LCFRSItem_fused *left, LCFRSItem_fused *right):
 	if LCFRSItem_fused is SmallChartItem:
-		newitem.vec = left.vec ^ right.vec
+		newitem[0].vec = left[0].vec ^ right[0].vec
 	elif LCFRSItem_fused is FatChartItem:
-		setunion(newitem.vec, left.vec, right.vec, SLOTS)
+		setunion(newitem[0].vec, left[0].vec, right[0].vec, SLOTS)
 
 
 cdef inline bint concat(ProbRule *rule,
-		LCFRSItem_fused left, LCFRSItem_fused right):
+		LCFRSItem_fused *left, LCFRSItem_fused *right):
 	"""Test whether two bitvectors combine according to a given rule.
 
 	Ranges should be non-overlapping, continuous when they are concatenated,
@@ -799,8 +886,8 @@ cdef inline bint concat(ProbRule *rule,
 	cdef uint64_t *arvec
 	cdef int lpos, rpos, n
 	if LCFRSItem_fused is SmallChartItem:
-		lvec = left.vec
-		rvec = right.vec
+		lvec = left[0].vec
+		rvec = right[0].vec
 		if lvec & rvec:
 			return False
 		mask = rvec if testbit(rule.args, 0) else lvec
@@ -829,8 +916,8 @@ cdef inline bint concat(ProbRule *rule,
 		# success if we've reached the end of both left and right vector
 		return lvec == rvec == 0
 	elif LCFRSItem_fused is FatChartItem:
-		alvec = left.vec
-		arvec = right.vec
+		alvec = left[0].vec
+		arvec = right[0].vec
 		for n in range(SLOTS):
 			if alvec[n] & arvec[n]:
 				return False
@@ -873,221 +960,24 @@ cdef inline bint concat(ProbRule *rule,
 		return lpos == rpos == -1
 
 
-cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
-		sent, Grammar grammar, tags,
-		list whitelist, bint splitprune, bint markorigin):
-	cdef:
-		list agenda = [set() for _ in sent]  # an agenda for each span length
-		list items = chart.probs  # tracks items for each label
-		ProbRule *rule
-		LCFRSItem_fused item, sibling, newitem
-		size_t n, blocked = 0, maxA = 0
-	# newitem will be recycled until it is added to the chart
-	if LCFRSItem_fused is SmallChartItem:
-		newitem = new_SmallChartItem(0, 0)
-	elif LCFRSItem_fused is FatChartItem:
-		newitem = new_FatChartItem(0)
-
-	# assign POS tags
-	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
-			grammar, agenda, chart, newitem,
-			sent, tags, whitelist, None, True)
-	if not covered:
-		return chart, msg
-
-	item = None
-	curlen = 0
-	while any(agenda):
-		for a in agenda:
-			if a:
-				item = a.pop()
-				break
-		if items[item.label] is None:
-			items[item.label] = {item: item}
-		elif item not in items[item.label]:
-			items[item.label][item] = item
-		if not equalitems(item, goal):
-			for n in range(grammar.numunary):  # unary
-				rule = &(grammar.unary[item.label][n])
-				if rule.rhs1 != item.label:
-					break
-				newitem.label = rule.lhs
-				if LCFRSItem_fused is SmallChartItem:
-					newitem.vec = item.vec
-				elif LCFRSItem_fused is FatChartItem:
-					memcpy(<void *>newitem.vec, <void *>item.vec,
-							SLOTS * sizeof(uint64_t))
-				if process_edge_symbolic(newitem, rule, item, agenda,
-						chart, whitelist,
-						splitprune and grammar.fanout[rule.lhs] != 1,
-						markorigin):
-					if LCFRSItem_fused is SmallChartItem:
-						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-								SmallChartItem)
-					elif LCFRSItem_fused is FatChartItem:
-						newitem = <LCFRSItem_fused>FatChartItem.__new__(
-								FatChartItem)
-				else:
-					blocked += 1
-			for n in range(grammar.numbinary):  # binary, item on right
-				rule = &(grammar.rbinary[item.label][n])
-				if rule.rhs2 != item.label:
-					break
-				elif items[rule.rhs1] is None:
-					continue
-				for sib in <dict>items[rule.rhs1]:
-					sibling = <LCFRSItem_fused>sib
-					if concat(rule, sibling, item):
-						newitem.label = rule.lhs
-						combine_item(newitem, sibling, item)
-						if process_edge_symbolic(newitem, rule, sibling,
-								agenda, chart, whitelist,
-								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin):
-							if LCFRSItem_fused is SmallChartItem:
-								newitem = (<LCFRSItem_fused>
-										SmallChartItem.__new__(SmallChartItem))
-							elif LCFRSItem_fused is FatChartItem:
-								newitem = (<LCFRSItem_fused>
-										FatChartItem.__new__(FatChartItem))
-						else:
-							blocked += 1
-			for n in range(grammar.numbinary):  # binary, item on left
-				rule = &(grammar.lbinary[item.label][n])
-				if rule.rhs1 != item.label:
-					break
-				elif items[rule.rhs2] is None:
-					continue
-				for sib in <dict>items[rule.rhs2]:
-					sibling = <LCFRSItem_fused>sib
-					if concat(rule, item, sibling):
-						newitem.label = rule.lhs
-						combine_item(newitem, item, sibling)
-						if process_edge_symbolic(newitem, rule, item, agenda,
-								chart, whitelist,
-								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin):
-							if LCFRSItem_fused is SmallChartItem:
-								newitem = (<LCFRSItem_fused>
-										SmallChartItem.__new__(SmallChartItem))
-							elif LCFRSItem_fused is FatChartItem:
-								newitem = (<LCFRSItem_fused>
-										FatChartItem.__new__(FatChartItem))
-						else:
-							blocked += 1
-		curlen = sum([len(a) for a in agenda])
-		if curlen > maxA:
-			maxA = curlen
-	msg = ('agenda max %d, now %d, %s, blocked %d' % (
-			maxA, curlen, chart.stats(), blocked))
-	if not chart:
-		msg = 'no parse ' + msg
-	return chart, msg
-
-
-cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, ProbRule *rule,
-		LCFRSItem_fused left, list agenda, LCFRSChart_fused chart,
-		list whitelist, bint splitprune, bint markorigin):
-	"""Decide what to do with a newly derived edge.
-
-	:returns: ``True`` when edge is accepted in the chart, ``False`` when
-		blocked. When ``False``, ``newitem`` may be reused."""
-	cdef bint inagenda
-	cdef bint inchart = (chart.probs[newitem.label] is not None
-			and newitem in chart.probs[newitem.label])
-	cdef int length
-	if LCFRSItem_fused is SmallChartItem:
-		length = bitcount(newitem.vec)
-	elif LCFRSItem_fused is FatChartItem:
-		length = abitcount(newitem.vec, SLOTS)
-	inagenda = newitem in agenda[length - 1]
-	if not inagenda and not inchart:
-		if whitelist is not None and not checkwhitelist(
-				newitem, whitelist, splitprune, markorigin):
-			return False
-		newitem.prob = 0.0
-		# haven't seen this item before, won't prune, add to agenda
-		agenda[length - 1].add(newitem)
-	# store this edge, regardless of whether the item was new (unary chains)
-	chart.addedge(newitem, left, rule)
-	return True
-
-
-# def newparser(sent, Grammar grammar, tags=None, start=1,
-# 		bint exhaustive=True, list whitelist=None, bint splitprune=False,
-# 		bint markorigin=False, estimates=None):
-# 	# assign POS tags, unaries on POS tags
-# 	for length in range(2, len(sent) + 1):
-# 		for leftlength in range(1, length):
-# 			for left in chart[leftlength]
-# 				for right in chart[length - leftlength]:
-# 					# find rules with ... => left right
-# 					# can left + right concatenate?
-#
-# cdef inline set candidateitems(ProbRule rule, ChartItem item, dict chart,
-# 		bint left=True):
-# 	"""Find all compatible siblings for an item given a rule.
-#
-# 	Uses lookup tables with set of items for every start/end point of
-# 	components in items."""
-# 	cdef size_t n
-# 	cdef short pos = nextset(item.vec, 0), prevpos, x, y
-# 	cdef set candidates = None, temp
-# 	for n in range(bitlength(rule.lengths)):
-# 		if (testbit(rule.args, n) == 0) == left: # the given item
-# 			if pos == -1:
-# 				return False
-# 			prevpos = nextunset(item.vec, pos)
-# 			pos = nextset(item.vec, prevpos)
-# 		else: # the other item for which to find candidates
-# 			if n and testbit(rule.lengths, n - 1): # start gap?
-# 				temp = set()
-# 				if testbit(rule.lengths, n): # & end gap?
-# 					for x in range(prevpos + 1, pos):
-# 						for y in range(x + 1, pos):
-# 							temp.update(chart.bystart[x] & chart.byend[y])
-# 				else:
-# 					for x in range(prevpos + 1, pos):
-# 						temp.update(chart.bystart[x] & chart.byend[pos])
-# 				if candidates is None:
-# 					candidates = set(temp)
-# 				else:
-# 					candidates &= temp
-# 			elif testbit(rule.lengths, n): # end gap?
-# 				temp = set()
-# 				for x in range(prevpos + 1, pos):
-# 					temp.update(chart.bystart[prevpos] & chart.byend[x])
-# 				if candidates is None:
-# 					candidates = set(temp)
-# 				else:
-# 					candidates &= temp
-# 			else: # no gaps
-# 				if candidates is None:
-# 					candidates = chart.bystart[prevpos] & chart.byend[pos]
-# 				else:
-# 					candidates &= chart.bystart[prevpos]
-# 					candidates &= chart.byend[pos]
-# 		if not candidates:
-# 			break
-# 	return candidates if pos == -1 else set()
-
-
-def do(sent, grammar):
+def testsent(sent, grammar):
 	"""Parse sentence with grammar and print 10 best derivations."""
 	from math import exp
 	from .kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)
 	sent = sent.split()
-	chart, _ = parse(sent, grammar)
+	chart, msg = parse(sent, grammar)
 	if len(sent) < 10:
 		print(chart)
 	if chart:
-		print('10 best parse trees:')
-		for a, p in lazykbest(chart, 10)[0]:
+		print('10 best parse trees (1 expected):')
+		derivations = lazykbest(chart, 10)
+		for a, p in derivations:
 			print(exp(-p), a)
 		print()
+		assert len(derivations) == 1
 		return True
-	print('no parse')
+	print(msg)
 	return False
 
 
@@ -1096,17 +986,18 @@ def test():
 		((('S', 'VP_2', 'VMFIN'), ((0, 1, 0), )), 1),
 		((('VP_2', 'VP_2', 'VAINF'), ((0, ), (0, 1))), 0.5),
 		((('VP_2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 0.5),
-		((('PROAV', 'Epsilon'), ('Daruber', )), 1),
+		((('PROAV', 'Epsilon'), ('Darueber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
 		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], start='S')
 	print(grammar)
-	assert do('Daruber muss nachgedacht werden', grammar)
-	assert do('Daruber muss nachgedacht werden werden werden', grammar)
+	assert testsent('Darueber muss nachgedacht werden', grammar)
+	assert testsent('Darueber muss nachgedacht werden werden werden', grammar)
 	print('ungrammatical sentence (\'no parse\' expected):')
-	assert not do('muss Daruber nachgedacht werden', grammar)
-	assert do('Daruber muss nachgedacht ' + ' '.join(32 * ['werden']), grammar)
-	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)
+	assert not testsent('muss Darueber nachgedacht werden', grammar)
+	assert testsent('Darueber muss nachgedacht ' + ' '.join(32 * ['werden']),
+			grammar)
+	assert testsent('Darueber muss nachgedacht ' + ' '.join(64 * ['werden']),
+			grammar)
 
-__all__ = ['Agenda', 'DoubleAgenda', 'LCFRSChart', 'SmallLCFRSChart',
-		'FatLCFRSChart', 'getparent', 'merge', 'parse']
+__all__ = ['LCFRSChart', 'SmallLCFRSChart', 'FatLCFRSChart', 'parse']

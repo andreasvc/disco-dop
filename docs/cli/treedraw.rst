@@ -5,7 +5,7 @@ Visualize parse trees with ASCII art or LaTeX/SVG.
 
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
---fmt=<export|bracket|discbracket|tiger|alpino|dact>
+--fmt=<export|bracket|discbracket|tiger|alpino>
                   Specify input format [default: export].
 
 --encoding=enc    Specify input encoding [default: utf-8].

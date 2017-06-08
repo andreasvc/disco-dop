@@ -16,28 +16,13 @@ import array
 import concurrent.futures
 import multiprocessing
 import subprocess
-from collections import Counter, namedtuple
-try:
-	from cyordereddict import OrderedDict
-except ImportError:
-	from collections import OrderedDict
-import collections
+from collections import Counter, OrderedDict, namedtuple
 from itertools import islice
-PY2 = sys.version_info[0] == 2
-if PY2:
-	import xml.etree.cElementTree as ElementTree
-else:
-	import xml.etree.ElementTree as ElementTree
 try:
 	import re2
 	RE2LIB = True
 except ImportError:
 	RE2LIB = False
-try:
-	import alpinocorpus
-	ALPINOCORPUSLIB = True
-except ImportError:
-	ALPINOCORPUSLIB = False
 from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from . import treebank, _fragments
 from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
@@ -46,7 +31,7 @@ from .util import which, workerfunc, openread, ANSICOLOR
 from .containers import Vocabulary, FixedVocabulary, Ctrees
 
 SHORTUSAGE = '''Search through treebanks with queries.
-Usage: discodop treesearch [-e (tgrep2|xpath|frag|regex)] [-t|-s|-c] \
+Usage: discodop treesearch [-e (tgrep2|frag|regex)] [-t|-s|-c] \
 <query> <treebank1>...'''
 CACHESIZE = 32767
 GETLEAVES = re.compile(r' (?:[0-9]+=)?([^ ()]+)(?=[ )])')
@@ -463,169 +448,6 @@ class TgrepSearcher(CorpusSearcher):
 		if proc.returncode != 0:
 			raise ValueError(err)
 		return results
-
-
-class DactSearcher(CorpusSearcher):
-	"""Search a dact corpus with xpath."""
-
-	def __init__(self, files, macros=None, numproc=None):
-		super(DactSearcher, self).__init__(files, macros, numproc)
-		if not ALPINOCORPUSLIB:
-			raise ImportError('Could not import `alpinocorpus` module.')
-		for filename in self.files:
-			self.files[filename] = alpinocorpus.CorpusReader(filename)
-		if macros is not None:
-			try:
-				self.macros = alpinocorpus.Macros(macros)
-			except NameError:
-				raise ValueError('macros not supported')
-
-	def counts(self, query, subset=None, start=None, end=None, indices=False,
-			breakdown=False):
-		if breakdown and indices:
-			raise NotImplementedError
-		subset = subset or self.files
-		result = OrderedDict()
-		jobs = {}
-		for filename in subset:
-			try:
-				result[filename] = self.cache[
-						'counts', query, filename, start, end, indices]
-			except KeyError:
-				if indices:
-					jobs[self._submit(lambda x: [n for n, _
-							in self._query(query, x, start, end, None)],
-							filename)] = filename
-				elif breakdown:
-					jobs[self._submit(lambda x: Counter(
-						match.contents().decode('utf8')
-						for _, match in self._query(
-							query, x, start, end, None)), filename)] = filename
-				else:
-					jobs[self._submit(lambda x: sum(1 for _
-						in self._query(query, x, start, end, None)),
-						filename)] = filename
-		for future in self._as_completed(jobs):
-			filename = jobs[future]
-			self.cache['counts', query, filename, start, end, indices
-					] = result[filename] = future.result()
-		return result
-
-	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
-			nofunc=False, nomorph=False):
-		subset = subset or self.files
-		result = []
-		jobs = {}
-		for filename in subset:
-			try:
-				x, maxresults2 = self.cache['trees', query, filename,
-						start, end, nofunc, nomorph]
-			except KeyError:
-				maxresults2 = 0
-			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						query, x, start, end, maxresults)),
-						filename)] = filename
-			else:
-				result.extend(x[:maxresults])
-		for future in self._as_completed(jobs):
-			filename = jobs[future]
-			x = []
-			for sentno, match in future.result():
-				treestr = self.files[filename].read(match.name())
-				match = match.contents().decode('utf8')
-				item = treebank.alpinotree(
-						ElementTree.fromstring(treestr),
-						functions=None if nofunc else 'add',
-						morphology=None if nomorph else 'replace')
-				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
-						match)
-				high = set(re.findall(r'\bid="(.+?)"', match))
-				high = [node for node in item.tree.subtrees()
-						if node.source[treebank.PARENT] in high
-						or node.source[treebank.WORD].lstrip('#') in high]
-				high += [int(a) for a in highwords]
-				x.append((filename, sentno, item.tree, item.sent, high))
-			self.cache['trees', query, filename, start, end,
-					nofunc, nomorph] = x, maxresults
-			result.extend(x)
-		return result
-
-	def sents(self, query, subset=None, start=None, end=None,
-			maxresults=100, brackets=False):
-		subset = subset or self.files
-		result = []
-		jobs = {}
-		for filename in subset:
-			try:
-				x, maxresults2 = self.cache['sents', query, filename,
-						start, end, brackets]
-			except KeyError:
-				maxresults2 = 0
-			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						query, x, start, end, maxresults)),
-						filename)] = filename
-			else:
-				result.extend(x[:maxresults])
-		for future in self._as_completed(jobs):
-			filename = jobs[future]
-			x = []
-			for sentno, match in future.result():
-				treestr = self.files[filename].read(match.name()).decode('utf8')
-				match = match.contents().decode('utf8')
-				if not brackets:
-					treestr = ALPINOLEAVES.search(treestr).group(1)
-					# extract starting index of highlighted words
-					match = {int(a) for a in re.findall(
-							'<node[^>]*begin="([0-9]+)"[^>]*/>', match)}
-					match = charindices(treestr.split(), match)
-				x.append((filename, sentno, treestr, match, set()))
-			self.cache['sents', query, filename,
-					start, end, brackets] = x, maxresults
-			result.extend(x)
-		return result
-
-	def extract(self, filename, indices,
-			nofunc=False, nomorph=False, sents=False):
-		results = [self.files[filename].read('%8d' % n)
-					for n in indices if n > 0]
-		if sents:
-			return [ElementTree.fromstring(result).find('sentence').text
-					for result in results]
-		else:
-			return [(item.tree, item.sent) for item
-					in (treebank.alpinotree(
-						ElementTree.fromstring(treestr),
-						functions=None if nofunc else 'add',
-						morphology=None if nomorph else 'replace')
-					for treestr in results)]
-
-	def getinfo(self, filename):
-		# use a temporary instance because going over the whole
-		# file leaks memory.
-		tmp = alpinocorpus.CorpusReader(filename)
-		const = words = 0
-		for entry in tmp.entries():
-			const += entry.contents().count('<node ')
-			words += entry.contents().count('word=')
-		sents = tmp.size()
-		del tmp
-		return CorpusInfo(len=sents, numwords=words,
-				numnodes=const, maxnodes=None)
-
-	@workerfunc
-	def _query(self, query, filename, start=None, end=None,
-			maxresults=None):
-		"""Run a query on a single file."""
-		if self.macros is not None:
-			query = self.macros.expand(query)
-		results = ((n, entry) for n, entry
-				in ((entry.name(), entry)
-					for entry in self.files[filename].xpath(query))
-				if (start is None or start <= n)
-				and (end is None or n <= end))
-		return islice(results, maxresults)
 
 
 class FragmentSearcher(CorpusSearcher):
@@ -1076,7 +898,7 @@ class RegexSearcher(CorpusSearcher):
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		for filename in subset or self.files:
-			result = array.array(b'I' if PY2 else 'I')
+			result = array.array('I')
 			for tmp in self._map(_regex_run_batch, chunkedpatterns,
 					filename=filename, fileno=self.fileno[filename],
 					lienidxpath=self.lineidxpath, start=start, end=end):
@@ -1184,7 +1006,7 @@ def _regex_run_query(pattern, filename, fileno, lineidxpath,
 	if indices and sents:
 		result = []
 	elif indices:
-		result = array.array(b'I' if PY2 else 'I')
+		result = array.array('I')
 	elif breakdown:
 		result = Counter()
 	else:
@@ -1251,7 +1073,7 @@ def _regex_run_batch(patterns, filename, fileno, lineidxpath,
 	if sents:
 		result = []
 	else:
-		result = array.array(b'I' if PY2 else 'I')
+		result = array.array('I')
 	if start and start >= len(lineindex):
 		return result
 	with open(filename, 'rb') as tmp:
@@ -1327,7 +1149,7 @@ class NoFuture(object):
 		return self._result
 
 
-class FIFOOrederedDict(collections.OrderedDict):
+class FIFOOrederedDict(OrderedDict):
 	"""FIFO cache with maximum number of elements based on OrderedDict."""
 
 	def __init__(self, limit):
@@ -1488,8 +1310,6 @@ def main():
 		raise ValueError('--ignore-case is only supported with --engine=regex')
 	if engine == 'tgrep2':
 		searcher = TgrepSearcher(corpora, macros=macros, numproc=numproc)
-	elif engine == 'xpath':
-		searcher = DactSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'regex':
 		searcher = RegexSearcher(corpora, macros=macros, numproc=numproc,
 				ignorecase=ignorecase)
@@ -1588,6 +1408,6 @@ def main():
 				print('%5d %s' % (cnt, match))
 
 
-__all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
+__all__ = ['CorpusSearcher', 'TgrepSearcher', 'RegexSearcher',
 		'FragmentSearcher', 'NoFuture', 'FIFOOrederedDict', 'filterlabels',
 		'cpu_count', 'charindices', 'applyhighlight']

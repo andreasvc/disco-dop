@@ -1374,7 +1374,7 @@ def getmaxid(tree):
 	"""Return highest export non-terminal ID in tree."""
 	return max((int(node.source[WORD].lstrip('#'))
 			for n, node in enumerate(
-				tree.subtrees(lambda n: n.source
+				tree.subtrees(lambda n: n.source and n.source[WORD]
 					and EXPORTNONTERMINAL.match(n.source[WORD])),
 				500)),
 			default=500)

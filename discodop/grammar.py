@@ -6,15 +6,13 @@ import re
 import gzip
 import codecs
 from operator import mul, itemgetter
-from collections import defaultdict, Counter
 from itertools import count, islice, repeat
-try:
-	from cyordereddict import OrderedDict
-except ImportError:
-	from collections import OrderedDict
-from .tree import Tree, ImmutableTree, DiscTree, escape, unescape
+from collections import defaultdict, Counter, OrderedDict
+import numpy as np
+from .tree import Tree, ParentedTree, ImmutableTree, DiscTree, \
+		escape, unescape, brackettree, writediscbrackettree
 from .treebank import LEAVESRE
-from .util import openread
+from .util import openread, merge as utilmerge
 from functools import reduce  # pylint: disable=redefined-builtin
 
 RULERE = re.compile(
@@ -22,6 +20,7 @@ RULERE = re.compile(
 		r'(?P<WEIGHT1>(?P<FREQ1>[-.e0-9]+)(?:\/[0-9]+)?)$'
 		r'|(?P<FREQ2>[-.e0-9]+)\t(?P<RULE2>(?P<LHS2>[^ \t]+).*)$')
 FRONTIERORTERM = re.compile(r"\(([^ ]+) (([0-9]+)=([^ ()]*)(?: [0-9]+=)*)\)")
+REMOVEDEC = re.compile('[@[][^ ()]+')
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
@@ -120,32 +119,32 @@ def treebankgrammar(trees, sents, extrarules=None):
 			for rule, freq in grammar.items())
 
 
-def dopreduction(trees, sents, packedgraph=False, decorater=None,
+def dopreduction(trees, sents, packedgraph=False, decorator=None,
 		extrarules=None):
 	"""Induce a reduction of DOP to an LCFRS.
 
-	Similar to how Goodman (1996, 2003) reduces DOP to a PCFG.
+	Based on how Goodman (1996, 2003) reduces DOP to a PCFG.
 	http://aclweb.org/anthology/W96-0214
 
 	:param packedgraph: packed graph encoding (Bansal & Klein 2010, sec 4.2).
 		http://aclweb.org/anthology/P10-1112
 	:param decorator: a TreeDecorator instance (packedgraph is ignored if this
-		is passed) .
+		is passed).
 	:returns: a set of rules with the relative frequency estimate as
-		probilities, and a dictionary with alternate weights."""
+		probabilities, and a dictionary with alternate weights."""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@1-2),
 	# 	counts of NP@... should sum to count of NP
 	# ntfd: frequency of a node in treebank
 	fd = defaultdict(int)
 	ntfd = defaultdict(int)
 	rules = defaultdict(int)
-	if decorater is None:
-		decorater = TreeDecorator(memoize=packedgraph)
+	if decorator is None:
+		decorator = TreeDecorator(memoize=packedgraph)
 
 	# collect rules
 	for tree, sent in zip(trees, sents):
 		prods = lcfrsproductions(tree, sent)
-		dectree = decorater.decorate(tree, sent)
+		dectree = decorator.decorate(tree, sent)
 		uprods = lcfrsproductions(dectree, sent)
 		nodefreq(tree, dectree, fd, ntfd)
 		for (a, avar), (b, bvar) in zip(prods, uprods):
@@ -183,26 +182,23 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 	rules = sortgrammar(rules.items())
 	rules, ewe, shortest, bon = zip(*(weights(r) for r in rules))
 	return list(rules), dict(
-			ewe=list(ewe), shortest=list(shortest), bon=list(bon))
+			ewe=np.array(ewe, dtype=np.double),
+			shortest=np.array(shortest, dtype=np.double),
+			bon=np.array(bon, dtype=np.double))
 
 
-def doubledop(trees, sents, debug=False, binarized=True, maxdepth=1,
-		maxfrontier=999, complement=False, iterate=False, numproc=None,
-		extrarules=None):
+def doubledop(trees, sents, debug=False, maxdepth=1,
+		maxfrontier=999, numproc=None, extrarules=None):
 	"""Extract a Double-DOP grammar from a treebank.
 
 	That is, a fragment grammar containing fragments that occur at least twice,
 	plus all individual productions needed to obtain full coverage.
 	Input trees need to be binarized.
 
-	:param binarized: Whether the resulting grammar should be binarized;
-		this may be False when bitpar is used which applies its own
-		binarization.
 	:param maxdepth: add non-maximal/non-recurring fragments with depth
 		`1 < depth < maxdepth`.
 	:param maxfrontier: limit number of frontier non-terminals; not yet
 		implemented.
-	:param iterate, complement, numproc: cf. fragments.recurringfragments()
 	:returns: a tuple (grammar, altweights, backtransform, fragments)
 		:grammar: a sequence of productions.
 		:altweights: a dictionary containing alternate weights.
@@ -211,14 +207,11 @@ def doubledop(trees, sents, debug=False, binarized=True, maxdepth=1,
 		in the same order as they appear in ``grammar``."""
 	from .fragments import recurringfragments
 	fragments = recurringfragments(trees, sents, numproc, disc=True,
-			indices=True, maxdepth=maxdepth, maxfrontier=maxfrontier,
-			iterate=iterate, complement=complement)
-	return dopgrammar(trees, fragments, debug=debug, binarized=binarized,
-			extrarules=extrarules)
+			indices=True, maxdepth=maxdepth, maxfrontier=maxfrontier)
+	return dopgrammar(trees, fragments, debug=debug, extrarules=extrarules)
 
 
-def dop1(trees, sents, maxdepth=4, maxfrontier=999, binarized=True,
-		extrarules=None):
+def dop1(trees, sents, maxdepth=4, maxfrontier=999, extrarules=None):
 	"""Return an all-fragments DOP1 model with relative frequencies.
 
 	:param maxdepth: restrict fragments to `1 < depth < maxdepth`.
@@ -232,11 +225,10 @@ def dop1(trees, sents, maxdepth=4, maxfrontier=999, binarized=True,
 		in the same order as they appear in ``grammar``."""
 	from .fragments import allfragments
 	fragments = allfragments(trees, sents, maxdepth, maxfrontier)
-	return dopgrammar(trees, fragments, binarized=binarized,
-			extrarules=extrarules)
+	return dopgrammar(trees, fragments, extrarules=extrarules)
 
 
-def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
+def dopgrammar(trees, fragments, extrarules=None, debug=False):
 	"""Create a DOP grammar from a set of fragments and occurrences.
 
 	A second level of binarization (a normal form) is needed when fragments are
@@ -248,9 +240,6 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 
 	:param fragments: a dictionary of fragments from binarized trees, with
 		occurrences as values (a mapping of sentence numbers to counts).
-	:param binarized: Whether the resulting grammar should be binarized;
-		this may be False when bitpar is used which applies its own
-		binarization.
 	:param extrarules: Additional rules to add to the grammar.
 	:returns: a tuple (grammar, altweights, backtransform, fragments)
 		altweights is a dictionary containing alternate weights."""
@@ -284,7 +273,7 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 	# use artificial markers of binarization as disambiguation,
 	# construct a mapping of productions to fragments
 	for frag in fragments:
-		prods, newfrag = flatten(frag, ids, backtransform, binarized)
+		prods, newfrag = flatten(frag, ids, backtransform)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
 			grammar[prod] = getweight(frag)
@@ -297,7 +286,7 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 		backtransform[prod] = frag, newfrag
 	if debug:
 		ids = UniqueIDs()
-		flatfrags = [flatten(frag, ids, {}, binarized)
+		flatfrags = [flatten(frag, ids, {})
 				for frag in fragments]
 		print("recurring fragments:")
 		for a, b in zip(flatfrags, fragments):
@@ -329,31 +318,32 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 	for rule, (freq, ewe, _, _) in grammar:
 		ntsums[rule[0][0]] += freq
 		ntsumsewe[rule[0][0]] += ewe
-	eweweights = [float(ewe) / ntsumsewe[rule[0][0]]
-			for rule, (_, ewe, _, _) in grammar]
-	bonweights = [bon for rule, (_, _, bon, _) in grammar]
-	shortest = [s for rule, (_, _, _, s) in grammar]
+	eweweights = np.array([float(ewe) / ntsumsewe[rule[0][0]]
+			for rule, (_, ewe, _, _) in grammar], dtype=np.double)
+	bonweights = np.array([bon for _rule, (_, _, bon, _) in grammar],
+			dtype=np.double)
+	shortest = np.array([s for _rule, (_, _, _, s) in grammar],
+			dtype=np.double)
 	grammar = [(rule, (freq, ntsums[rule[0][0]]))
 			for rule, (freq, _, _, _) in grammar]
 	return grammar, backtransform, dict(
 			ewe=eweweights, bon=bonweights, shortest=shortest), fragments
 
 
-def compiletsg(fragments, binarized=True):
+def compiletsg(fragments):
 	"""Compile a set of weighted fragments (i.e., a TSG) into a grammar.
 
 	Similar to dopgrammar(), only the values are weights instead of counts.
 
 	:param fragments: a dictionary of fragments mapped to weights. The
 		fragments must consist of strings in discbracket format.
-	:param binarized: Whether the resulting grammar should be binarized.
 	:returns: a ``(grammar, backtransform, altweights)`` tuple similar to what
 		``doubledop()`` returns; altweights will be empty."""
 	grammar = {}
 	backtransform = {}
 	ids = UniqueIDs()
 	for frag, weight in fragments.items():
-		prods, newfrag = flatten(frag, ids, backtransform, binarized)
+		prods, newfrag = flatten(frag, ids, backtransform)
 		if prods[0][0][1] == 'Epsilon':  # lexical production
 			grammar[prods[0]] = weight
 			continue
@@ -364,6 +354,329 @@ def compiletsg(fragments, binarized=True):
 	backtransform = [backtransform[rule] for rule, _ in grammar
 			if rule in backtransform]
 	return grammar, backtransform, {}
+
+
+def doubleostagfromtsg(trees, sents, numproc=None,
+		packedgraph=False, extrarules=None, maxnodes=10):
+	"""Extract recurring fragments from a treebank, restrict fragments,
+	and extract an osTAG grammar.
+
+	:param trees, sents: a continuous treebank.
+	:param maxnodes: restrict recurring fragments to up to ``maxnodes``
+		non-terminals.
+	:returns: a tuple (rules, lexicon, inittrees, auxtrees)
+		:rules, lexicon: a grammar in format returned by ``writegrammar()``.
+		:inittrees: the initial trees of the TAG.
+		:auxtrees: the auxiliary trees of the TAG.
+	"""
+	import logging
+	from .fragments import recurringfragments, allfragments
+	fragments = recurringfragments(trees, sents, numproc, disc=True,
+			indices=False, maxdepth=0)
+	lexicalized = re.compile(r' [0-9]+=\w+\)')
+	restricted = [(frag, weight) for frag, weight in fragments.items()
+			if frag.count('(') <= maxnodes
+			and (frag.count('(') <= 3 or lexicalized.search(frag) is not None)]
+	logging.info('%d elementary trees in TSG after restricting to %d nodes',
+			len(restricted), maxnodes)
+	inittrees, auxtrees = inducetagfromtsg(restricted)
+	inittrees = {frag: weight for frag, weight in inittrees.items()
+			if lexicalized.search(frag) is not None}
+	auxtrees = {frag: weight for frag, weight in auxtrees.items()
+			if lexicalized.search(frag) is not None}
+	cfg = allfragments(trees, sents, maxdepth=1, maxfrontier=999)
+	inittrees.update((a, sum(b.values())) for a, b in cfg.items())
+	logging.info('added %d initial trees corresponding to CFG productions',
+			len(cfg))
+	rules, lexicon = ostagreduction(
+			inittrees, auxtrees, packedgraph, extrarules)
+	return rules, lexicon, inittrees, auxtrees
+
+
+def inducetagfromtsg(elemtrees):
+	"""Given elementary trees from a TSG, heuristically extract a TAG.
+
+	:param elemtrees: a sequence of tuples ``(tree, weight)``.
+	:returns: a tuple ``(init, aux)``, where ``init`` and ``aux`` are
+		a sequence of strings ``tree<TAB>weight`` where ``tree`` is a string in
+		discbracket format and ``weight`` is the weight of the TSG
+		elementary tree of which this TAG elementary tree was extracted from.
+
+	>>> inducetagfromtsg([('(S (NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) \
+(NP (DT 3=a) (NN 4=plan)))))', 3)])
+	... # doctest: +NORMALIZE_WHITESPACE
+	(OrderedDict([('(S (NP (DT 0=a) (NN 1=man)))', 3),
+		('(S (NP (DT 0=a) (NN 1=plan)))', 3)]),
+	OrderedDict([('(NP (NP 0=*) (PP (IN 1=with) (NP (DT 2=a) (NN 3=plan))))',
+		3), ('(NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) (NP 3=*)))', 3)]))
+	"""
+	import logging
+	from discodop._fragments import pygetsent
+	inittrees = OrderedDict()
+	newinittrees = OrderedDict()
+	auxtrees = OrderedDict()
+	for tree, weight in elemtrees:
+		tree, sent = brackettree(tree)
+		extractedadjunction = False
+		if not all(token is None for token in sent):
+			for footcand in tree.subtrees(lambda n: isinstance(n[0], Tree)):
+				if footcand is tree:
+					continue
+				rootcand = footcand
+				while rootcand is not tree:
+					rootcand = rootcand.parent
+					if (rootcand is not tree
+							and rootcand.label == footcand.label):
+						aux = writediscbrackettree(extractaux(
+								rootcand, footcand), sent)[:-1]
+						init = writediscbrackettree(*renumber(
+								extractinit(tree, rootcand, footcand),
+								rootcand, footcand, sent))[:-1]
+						newinittrees[pygetsent(re.sub(
+								r'(\d+)=\)', r'\1:\1)', init))] = weight
+						auxtrees[pygetsent(re.sub(
+								r'(\d+)=\)', r'\1:\1)', aux))] = weight
+						extractedadjunction = True
+						break
+		if not extractedadjunction:
+			# Only keep original elementary tree if we did not factor it into
+			# an initial and auxiliary tree.
+			inittrees[writediscbrackettree(tree, sent).rstrip()] = weight
+
+	logging.info('extracted %d and %d auxiliary and initial trees',
+			len(auxtrees), len(newinittrees))
+	# Put a selection of the original TSG trees after the new initial trees,
+	# so that there is some alignment between the extracted
+	# auxiliary trees and the corresponding initial trees.
+	larger = [(a, b) for a, b in inittrees.items()
+			if a.count('(') > 3]
+	logging.info('added %d larger initial trees', len(larger))
+	newinittrees.update(larger)
+	# Remove init trees that are also auxiliary trees,
+	# to avoid double counting them in derivations:
+	for a in auxtrees:
+		if a.replace('*', '') in newinittrees:
+			del newinittrees[a.replace('*', '')]
+	logging.info('totals: %d init trees; %d aux trees',
+			len(newinittrees), len(auxtrees))
+	return newinittrees, auxtrees
+
+
+def ostagreduction(inittrees, auxtrees, packedgraph=False, extrarules=None):
+	"""A reduction of a tree-adjoining grammar with the off-spine constraint.
+
+	Swanson et al. (ACL 2013). A context free TAG variant.
+	http://aclweb.org/anthology/P13-1030
+
+	:param inittrees: a dict of items (tree, weight) with initial trees in
+		discbracket format; weight is a float.
+	:param auxtrees: a dict of items (tree, weight) with auxiliary trees in
+		discbracket format. Exactly one terminal should be '*', with a parent
+		non-terminal with the same label as the root.
+	:returns grammar: a list of rules of the form ``((r, yf), p)``
+		where p is a normalized weight for the initial production of an
+		elementary tree, or 1 for all other productions.
+	"""
+	# TAG Terminology:
+	#
+	#  Initial tree:       Auxiliary tree:
+	#      A                  F
+	#  B---|-- C           G--|---H
+	#  |       |           |      |
+	#  D       E           F*     I
+	#
+	# Initial tree: an elementary tree that starts the derivation or is
+	# 		substituted.
+	# 	Substitution site: a leaf non-terminal that can be rewritten with
+	# 		substitution (D, E).
+	# Auxiliary tree: an elementary tree that is applied with adjunction.
+	# 	Foot node: a distinguished leaf non-terminal of an auxiliary tree with
+	# 		the same label as its root (F*).
+	# 	Substitution site: a leaf non-terminal (except foot node) that can be
+	# 		rewritten with substitution (I).
+	# 	Spine: the path of nodes from the root of an auxiliary tree to its foot
+	# 		node (F, G, F*); indicated with a trailing '$'.
+	# Substitution: the root of an initial tree may be substituted for any
+	# 	(initial or auxiliary) substitution site (D, E, I).
+	# Adjunction: adjunction is allowed on the following nodes:
+	# 	- Non-leaf nodes of initial tree (i.e., any node with at least one
+	# 	  terminal or non-terminal child: A, B, C)
+	# 	- Non-leaf, non-spine nodes of auxiliary tree (i.e., any node with
+	# 	  at least one child which is not part of the path from root to foot
+	# 	  node: H).
+	#
+	# Within the osTAG reduction to CFG, nodes are addressed with a
+	# unique label (@n or @n-m; sentence and node number), and the spine
+	# of an auxiliary tree has auxiliary tree node labels (A) and the original
+	# adjunction site (B) in an applicative notation: A[B]:
+	#  Initial tree                      Auxiliary tree applied to node Y:
+	#       A                               F[Y]$
+	#  B@2--|--C@3                      G[Y]$-|---H@1
+	#  |        |                        |         |
+	#  D        E                        Y$*       I
+
+	import logging
+	rules = Counter()  # rule => freq
+	lexicalrules = defaultdict(Counter)  # token => lhs => freq
+	decorator = SpinedTreeDecorator(memoize=packedgraph)
+	decinittrees = []
+	decauxtrees = []
+	# Given an unaddressed label, all addressed root labels
+	# of auxiliary trees that can be used in an adjunction on this label.
+	auxroots = defaultdict(set)  # NP => {NP@12, NP@17, ...}
+
+	# Given an unaddressed label, all addressed labels where an adjunction can
+	# be initiated.
+	adjsites = defaultdict(set)  # NP => {NP@12, NP@17, ...}
+
+	# Given addressed node N on the spine of an auxiliary tree, collect all
+	# nodes M s.t. the auxiliary tree of N can be adjoined at node M;
+	# i.e., nodepairs[A] = {B, ...} implies generating A[B]
+	nodepairs = defaultdict(set)  # NP@3 => {NP@5, NP@9, ... }
+
+	# assign addresses to all nodes, collect adjunction sites
+	for tree, weight in inittrees.items():
+		tree, sent = brackettree(tree)
+		dectree = decorator.decorate(tree, sent, False)
+		decinittrees.append((dectree, sent, weight))
+		for node in dectree.subtrees():
+			if not (substitutionsite(node, sent) or preterminal(node, sent)):
+				adjsites[REMOVEDEC.sub('', node.label)].add(node.label)
+	logging.info('decorated initial trees')
+	for tree, weight in auxtrees.items():
+		tree, sent = brackettree(tree)
+		dectree = decorator.decorate(tree, sent, True)
+		decauxtrees.append((dectree, sent, weight))
+		auxroots[REMOVEDEC.sub('', dectree.label)].add(dectree.label)
+		for node in dectree.subtrees():
+			if spinal(node):
+				# NB: this is a reference; labels added to adjoinable later on
+				# will be found through this key.
+				nodepairs[node.label] = adjsites[
+						REMOVEDEC.sub('', dectree.label)]
+			elif not substitutionsite(node, sent):
+				adjsites[REMOVEDEC.sub('', node.label)].add(node.label)
+	logging.info('decorated aux trees')
+
+	# extract rules
+	for tree, sent, weight in decinittrees:
+		for node in tree.subtrees(lambda n: not substitutionsite(n, sent)):
+			if isinstance(node[0], int):
+				lexicalrules[sent[node[0]]][node.label] += (
+						weight if node is tree else 1)
+			else:
+				yfstr = '01' if len(node) == 2 else '0'
+				rule = '%s\t%s\t%s' % (
+						node.label,
+						'\t'.join(child.label for child in node),
+						yfstr)
+				rules[rule] += weight if node is tree else 1
+	logging.info('extracted initial tree rules')
+	cnt = 0
+	for tree, sent, weight in decauxtrees:
+		for node in tree.subtrees(lambda n: not substitutionsite(n, sent)):
+			if isinstance(node[0], int):
+				if sent[node[0]] != '*':  # rule type 1; skip foot node
+					lexicalrules[sent[node[0]]][node.label] += 1
+			else:
+				yfstr = '01' if len(node) == 2 else '0'
+				# rule type 2
+				if spinal(node):  # and isinstance(node[0], Tree):
+					# replace lhs, spine node label with all possible NxM
+					for adjsite in nodepairs[node.label]:
+						newlhs = '%s[%s]' % (node.label, adjsite)
+						newrhs = '\t'.join(spinallabel(child, sent, adjsite)
+								for child in node)
+						newrule = '%s\t%s\t%s' % (newlhs, newrhs, yfstr)
+						rules[newrule] += 1
+				else:  # rule type 1
+					rule = '%s\t%s\t%s' % (
+							node.label,
+							'\t'.join(child.label for child in node),
+							yfstr)
+					rules[rule] += 1
+			# rule type 3 (type 4 eliminated):
+			# M => N(M) s.t. N is an aux root node
+			for m in adjsites[REMOVEDEC.sub('', tree.label)]:
+				rule = '%s\t%s\t0' % (m, '%s[%s]' % (tree.label, m))
+				rules[rule] += weight
+		cnt += 1
+		if cnt % 100 == 0:
+			logging.info('proccessed aux tree %d / %d', cnt, len(auxtrees))
+	logging.info('extracted auxiliary tree rules')
+
+	if extrarules is not None:
+		for ((lhs, _), (token, )), weight in extrarules.items():
+			lexicalrules[token][lhs] += weight
+	# NB: assumes normalization is taken care of in Grammar() constructor
+	rulesstr = ''.join('%s\t%d\n' % (rule, weight)
+			for rule, weight in rules.items())
+	lexicon = ''.join('%s\t%s\n' % (word,
+			'\t'.join('%s %g' % (lhs, weight)
+				for lhs, weight in lexicalrules[word].items()))
+			for word in lexicalrules)
+	return rulesstr, lexicon
+
+
+# start ostag helper functions
+def extractinit(tree, root, foot):
+	"""Return copy of tree where ``foot`` is substituted for ``foot``."""
+	return Tree(tree.label, [
+			a if isinstance(a, int)
+			else Tree.convert(foot) if a is root
+			else extractinit(a, root, foot)
+			for a in tree])
+
+
+def extractaux(node, foot):
+	"""Return copy of tree where ``foot`` is made a foot node."""
+	if node is foot:
+		return Tree(node.label, ['*'])
+	return Tree(node.label, [
+			a if isinstance(a, int) else
+			# FIXME: this works by accident...
+			Tree(foot.label, ['%d:%d*' % (min(a.leaves()), max(a.leaves()))])
+			if a is foot else extractaux(a, foot)
+			for a in node])
+
+
+def renumber(tree, root, foot, sent):
+	"""Renumber tree when removing indices dominated by foot."""
+	auxleaves = set(root.leaves()) - set(foot.leaves())
+	newleaves = [n for n in tree.leaves() if n not in auxleaves]
+	# FIXME: this is not correct for disc. trees;
+	# gaps in original should remain.
+	mapping = {a: n for n, a in enumerate(newleaves)}
+	for node in tree.subtrees(lambda n: isinstance(n[0], int)
+			and n[0] in mapping):
+		node[0] = mapping[node[0]]
+	sent = [sent[a] for a in newleaves]
+	return tree, sent
+
+
+def substitutionsite(node, sent):
+	return isinstance(node[0], int) and sent[node[0]] is None
+
+
+def footnode(node, sent):
+	return isinstance(node[0], int) and sent[node[0]] == '*'
+
+
+def preterminal(node, sent):
+	return isinstance(node[0], int) and sent[node[0]] not in (None, '*')
+
+
+def spinal(node):
+	return node.label.endswith('$')
+
+
+def spinallabel(node, sent, adjsite):
+	if footnode(node, sent):
+		return adjsite
+	elif spinal(node):
+		return '%s[%s]' % (node.label, adjsite)
+	return node.label
+# end ostag helper functions
 
 
 def sortgrammar(grammar, altweights=None):
@@ -383,13 +696,12 @@ def sortgrammar(grammar, altweights=None):
 		return sorted(grammar, key=sortkey)
 
 	idx = sorted(range(len(grammar)), key=lambda n: sortkey(grammar[n]))
-	altweights = {name: [weights[n] for n in idx]
-			for name, weights in altweights.items()}
+	altweights = {name: weights[idx] for name, weights in altweights.items()}
 	grammar = [grammar[n] for n in idx]
 	return grammar, altweights
 
 
-def flatten(frag, ids, backtransform, binarized):
+def flatten(frag, ids, backtransform):
 	r"""Auxiliary function for Double-DOP.
 
 	Remove internal nodes from a fragment and read off the (binarized)
@@ -405,19 +717,11 @@ def flatten(frag, ids, backtransform, binarized):
 
 	>>> ids = UniqueIDs()
 	>>> frag = "(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))"
-	>>> prods, template = flatten(frag, ids, {}, True)
+	>>> prods, template = flatten(frag, ids, {})
 	>>> print('\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
 	01	ROOT ROOT}<0> $.@.
 	010	ROOT}<0> S_2 $,@,
-	,	$,@, Epsilon
-	.	$.@. Epsilon
-	>>> print(template)
-	(ROOT {0} (ROOT|<$,>_2 {1} {2}))
-	>>> prods, template = flatten(frag, ids, {}, False)
-	>>> print('\n'.join(printrule(r, yf) for r, yf in prods))
-	... # doctest: +NORMALIZE_WHITESPACE
-	0102	ROOT S_2 $,@, $.@.
 	,	$,@, Epsilon
 	.	$.@. Epsilon
 	>>> print(template)
@@ -462,10 +766,8 @@ def flatten(frag, ids, backtransform, binarized):
 					key=lambda x: int(x.group(3)))))
 	prod_ = Tree.parse(prod, parse_leaf=substleaf)
 	sent = [sent.get(n, None) for n in range(max(sent) + 1)]
-	tmp = addbitsets(prod_)
-	if binarized:
-		tmp = factorconstituent(tmp, "}", factor='left', markfanout=True,
-				markyf=True, ids=ids, threshold=2)
+	tmp = factorconstituent(addbitsets(prod_), "}",
+			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2)
 	prods = lcfrsproductions(tmp, sent)
 	# remember original order of frontiers / terminals for template
 	order = {x.group(2): "{%d}" % n
@@ -586,6 +888,77 @@ class TreeDecorator(object):
 		self.ids += 1
 		return ImmutableTree(tree2.label,
 			[self._copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
+
+
+class SpinedTreeDecorator(TreeDecorator):
+	"""Like TreeDecorator, but optionally add '$' to spine nodes,
+	and address to root."""
+	def decorate(self, tree, sent, spine=False):
+		"""Return a copy of tree where non-root, non-substitution site node
+		labels are decorated with IDs.
+
+		:param spine: if True, add 's' postfix to labels on the spine (the path
+			from above the foot node marked with a '*' terminal up to the root
+			node). In this case the root node is decorated as well.
+
+		>>> d = SpinedTreeDecorator()
+		>>> tree = Tree('(S (NP (DT 0) (N 1)) (VP 2))')
+		>>> print(d.decorate(tree, ['the', 'dog', 'walks']))
+		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@1-4 2))
+		>>> print(d.decorate(tree, ['the', '*', 'walks'], spine=True))
+		(S@2-0$ (NP@2-1$ (DT@2-2 0) (N 1)) (VP@2-3 2))
+		>>> d = SpinedTreeDecorator(memoize=True)
+		>>> tree = Tree('(S (NP (DT 0) (N 1)) (VP 2))')
+		>>> print(d.decorate(tree, ['the', 'dog', 'walks']))
+		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@1-4 2))
+		>>> print(d.decorate(tree, ['the', 'cat', 'walks']))
+		(S (NP@2-1 (DT@1-2 0) (N@2-3 1)) (VP@1-4 2))
+		>>> print(d.decorate(tree, ['the', '*', 'walks'], spine=True))
+		(S@3-0$ (NP@3-1$ (DT@3-2 0) (N 1)) (VP@3-3 2))
+		"""
+		if spine:
+			dectree = ParentedTree.convert(tree.copy(True))
+			spinenodes = set()
+			for a in dectree.subtrees(lambda n: isinstance(n[0], int)):
+				if sent[a[0]] == '*':
+					while a is not None:
+						spinenodes.add(id(a))
+						a = a.parent
+					break
+			for m, a in enumerate(dectree.subtrees(
+					lambda n: isinstance(n[0], Tree)
+					or sent[n[0]] not in (None, '*'))):
+				a.label = '%s@%d-%d%s' % (a.label, self.n, m,
+						'$' if id(a) in spinenodes else '')
+		elif self.memoize:
+			self.ids = 0
+			# wrap tree to get equality wrt sent
+			tree = DiscTree(tree.freeze(), sent)
+			dectree = ImmutableTree(tree.label, map(self._recdecorate, tree))
+		else:
+			dectree = ParentedTree.convert(tree.copy(True))
+			for m, a in islice(enumerate(dectree.subtrees(
+					lambda n: isinstance(n[0], Tree)
+					or sent[n[0]] is not None)), 1, None):
+				a.label = '%s@%d-%d' % (a.label, self.n, m)
+		self.n += 1
+		return dectree
+
+	def _recdecorate(self, tree):
+		"""Traverse subtrees not yet seen."""
+		if isinstance(tree, int):
+			return tree
+		elif tree not in self.packedgraphs:
+			self.ids += 1
+			if isinstance(tree[0], Tree) or tree.sent[tree[0]] is not None:
+				result = ImmutableTree(("%s@%d-%d" % (
+						tree.label, self.n, self.ids)),
+						[self._recdecorate(child) for child in tree])
+			else:
+				result = ImmutableTree(tree.label, tree)
+			self.packedgraphs[tree] = result
+			return result
+		return self._copyexceptindices(tree, self.packedgraphs[tree])
 
 
 class UniqueIDs(object):
@@ -920,12 +1293,11 @@ def sumfrags(iterable, n):
 
 def merge(filenames, outfilename, sumfunc, key):
 	"""Interpolate weights of given files."""
-	from . import plcfrs
 	openfiles = [iter(openread(filename)) for filename in filenames]
 	with codecs.getwriter('utf8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'wb')) as out:
 		out.writelines(sumfunc(
-				plcfrs.merge(*openfiles, key=key), len(openfiles)))
+				utilmerge(*openfiles, key=key), len(openfiles)))
 
 
 def addindices(frag):

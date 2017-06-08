@@ -86,17 +86,11 @@ they would end up before and after the NP node.
 
 alpino
 ^^^^^^
-Alpino XML format. One file per sentence. The hierarchical tree structure is
-mirrored in the XML structure, which makes it possible to query trees in this
-format with XPath (as opposed to TigerXML which maintains the tabular structure
-of the Negra export format).
+Alpino XML format. One file per sentence. These two properties make it slow
+to process, so the recommended approach is to convert to another format.
 
 Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
 
-dact
-^^^^
-Alpino XML trees in an XML database as used by Dact.
-Cf. http://rug-compling.github.io/dact/
 
 Read-only formats
 ^^^^^^^^^^^^^^^^^

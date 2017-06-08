@@ -115,11 +115,10 @@ example:
         dict(name='pcfg', mode='pcfg',
             split=True, markorigin=True),
         dict(name='plcfrs', mode='plcfrs',
-            prune='pcfg', splitprune=True, k=1000),
+            prune='pcfg', k=1000),
         dict(name='dop', mode='plcfrs',
             prune='plcfrs', k=50, m=1000,
-            dop='doubledop',
-            estimator='rfe', objective = 'mpp')
+            dop='doubledop', estimator='rfe', objective = 'mpp')
     ],
     traincorpus=dict(
         path='alpinosample.export', encoding='utf-8',

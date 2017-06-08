@@ -2,7 +2,7 @@
 <title>Browsing sentences of {{ text }}</title>
 <link type="text/css" rel="stylesheet" href="static/style.css">
 <body>
-<form name=frm><tt>
+<form name=frm><span class=mono>
 	<input type=hidden name=text value={{ textno }}>
 	<input type=hidden name=query value="{{ query }}">
 	<input type=hidden name=engine value="{{ engine }}">
@@ -11,7 +11,7 @@
 	| {{ nextlink|safe }}
 	| {{ text }} 
 	| <a href="browsesents">list</a>
-</tt></form>
+</span></form>
 
 <div id=sents style="margin: 1em">
 {{ legend|safe }}

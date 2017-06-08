@@ -1,19 +1,32 @@
-from math import isinf, exp, log, fsum
+from math import isinf, exp, fsum, log
 from libc.stdlib cimport malloc, calloc, realloc, free, abort, \
 		qsort, atol, strtod
+from libc.math cimport fabs, log, exp
 from libc.string cimport memcmp, memset, memcpy
-from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
+from libcpp.utility cimport pair
+from libcpp.vector cimport vector
+from libcpp.string cimport string
 from cpython.array cimport array
+from libc.stdio cimport FILE, fopen, fwrite, fclose
+from cpython.buffer cimport PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer, \
+		PyObject_GetBuffer, PyBuffer_Release
 cimport cython
+from cpython.array cimport array, clone
+from .bit cimport nextset, nextunset, anextset, anextunset
+from .bit cimport bit_popcount
+
 include "constants.pxi"
 
-# NB: For PCFG parsing sentences longer than 256 words, change this to uint16_t
-ctypedef uint8_t Idx
+ctypedef uint16_t Idx  # PCFG chart indices; max 16 bits.
 
-
-cdef extern from *:
-	cdef bint PY2
-
+cdef extern from "_containers.h":
+	ctypedef uint32_t ItemNo  # numeric ID for chart item
+	ctypedef uint32_t Label  # numeric ID for nonterminal label; max 32 bits.
+	ctypedef double Prob  # precision for regular or log probabilities.
+	# FIXME: considerations when setting to float precision: numpy arrays,
+	# cpython arrays and functions from math.h may need to be changed; Python
+	# float is double.
 
 cdef extern from "macros.h":
 	int BITSIZE
@@ -25,166 +38,571 @@ cdef extern from "macros.h":
 	uint64_t BITMASK(int b)
 
 
+# Instead of Python's dict, we want a C/C++ hash table that directly stores
+# values instead of boxed objects using pointers. This gives both a speed and
+# memory advantage. One option is to use klib, used by e.g., pandas. klib
+# offers a generic hash table using macros; a disadvantage is that in Cython
+# this requires instatiating a new hash table type in a C header for each
+# combination of <key_type, value_type>. There are also several C++ hash table
+# implementations following the unordered_map API: e.g., google sparse hash.
+# These can be instantiated from Cython code with a specified value type.
+# However, non-primitive key types requiring a custom hash and equality
+# function still need to be defined in a header, because Cython does not
+# support non-type parameters or overloading the std::hash function.
+
+cdef extern from "_containers.h" namespace "spp" nogil:
+	# Original, fully generic version.
+	# Only usable with types that already have a hash and equals function
+	# (e.g., numeric, string).
+	cdef cppclass sparse_hash_map[K, D]:
+		sparse_hash_map()
+		sparse_hash_map(uint64_t n)
+		void swap(sparse_hash_map&)
+		K& key_type
+		D& data_type
+		pair[K, D]& value_type
+		uint64_t size_type
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			pair[K, D]& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(K& k)
+		D& operator[](K&) nogil
+		pair[iterator, bint] insert(pair[K, D]) nogil
+		uint64_t erase(K& k)
+		uint64_t bucket(K& key)
+		uint64_t max_size()
+		uint64_t count(K& k)
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+
+	cdef cppclass sparse_hash_set[V]:
+		ctypedef V value_type
+		sparse_hash_set()
+		sparse_hash_set(uint64_t n)
+		void swap(sparse_hash_set&)
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			V& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(V& k)
+		V& operator[](V&) nogil
+		pair[iterator, bint] insert(V& v) nogil
+		uint64_t count(V& k)
+		uint64_t erase(V& k)
+		uint64_t bucket(V& key)
+		uint64_t max_size()
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+
+
+cdef extern from "../cpp-btree/btree_set.h" namespace "btree" nogil:
+	cdef cppclass btree_set[T]:
+		ctypedef T value_type
+		cppclass iterator:
+			T& operator*()
+			iterator operator++()
+			iterator operator--()
+			bint operator==(iterator)
+			bint operator!=(iterator)
+		btree_set() except +
+		btree_set(btree_set&) except +
+		btree_set(iterator, iterator) except +
+		bint operator==(btree_set&, btree_set&)
+		bint operator!=(btree_set&, btree_set&)
+		bint operator<(btree_set&, btree_set&)
+		bint operator>(btree_set&, btree_set&)
+		bint operator<=(btree_set&, btree_set&)
+		bint operator>=(btree_set&, btree_set&)
+		void swap(btree_set&)
+		void clear()
+		size_t size()
+		size_t count(const T&)
+		size_t max_size()
+		bint empty()
+		iterator begin()
+		iterator end()
+		iterator find(T&)
+		iterator lower_bound(T&)
+		iterator upper_bound(const T&)
+		pair[iterator, iterator] equal_range(const T&)
+		iterator insert(iterator, const T&) except +
+		pair[iterator, bint] insert(const T&) except +
+		void erase(iterator)
+		void erase(iterator, iterator)
+		size_t erase(T&)
+
+
+cdef extern from "_containers.h" nogil:
+	cdef cppclass ProbRule:
+		Prob prob
+		Label lhs
+		Label rhs1
+		Label rhs2
+		uint32_t args
+		uint32_t lengths
+		uint32_t no
+	# NB: variant of ProbRule without probability, rule number (no).
+	cdef cppclass Rule:
+		Label lhs
+		Label rhs1
+		Label rhs2
+		uint32_t args
+		uint32_t lengths
+	cdef cppclass LexicalRule:
+		Prob prob
+		Label lhs
+		string word
+	cdef union Position:
+		short mid
+		uint64_t lvec
+		size_t lidx
+	cdef cppclass Edge:
+		ProbRule *rule
+		Position pos
+	cdef cppclass SmallChartItem:
+		Label label
+		uint64_t vec
+		SmallChartItem()
+		SmallChartItem(Label _label, uint64_t _vec)
+		bint operator==(SmallChartItem&)
+		bint operator>(SmallChartItem&)
+		bint operator<(SmallChartItem&)
+	cdef cppclass FatChartItem:
+		Label label
+		uint64_t vec[SLOTS]
+		FatChartItem()
+		FatChartItem(Label _label)
+		bint operator==(FatChartItem&)
+		bint operator<(FatChartItem&)
+		bint operator>(FatChartItem&)
+	cdef cppclass RankedEdge:
+		Edge edge
+		ItemNo head
+		int left, right
+		RankedEdge()
+		RankedEdge(ItemNo _head, Edge _edge, int _left, int _right)
+		bint operator==(RankedEdge&)
+		bint operator<(RankedEdge&)
+		bint operator>(RankedEdge&)
+
+	# Wrappers for data structures with specific, user-defined key types
+	# because Cython does not support non-type parameters
+	# or overloading of std::hash.
+	cdef cppclass Agenda[K, V]:
+		ctypedef pair[K, V] item_type
+		ctypedef pair[item_type, uint32_t] entry_type
+		Agenda()
+		void reserve(size_t n)
+		void replace_entries(vector[item_type] entries)
+		void kbest_entries(vector[item_type] entries, size_t k)
+		size_t size()
+		bint empty()
+		bint member(K k)
+		void setitem(K k, V v)
+		void setifbetter(K k, V v)
+		item_type pop()
+	cdef cppclass SmallChartItemAgenda[V]:
+		ctypedef pair[SmallChartItem, V] item_type
+		ctypedef pair[item_type, uint32_t] entry_type
+		SmallChartItemAgenda()
+		void reserve(size_t n)
+		void replace_entries(vector[item_type] entries)
+		void kbest_entries(vector[item_type] entries, size_t k)
+		size_t size()
+		bint empty()
+		bint member(SmallChartItem k)
+		void setitem(SmallChartItem k, V v)
+		void setifbetter(SmallChartItem k, V v)
+		item_type pop()
+	cdef cppclass RankedEdgeAgenda[V]:
+		ctypedef pair[RankedEdge, V] item_type
+		ctypedef pair[item_type, uint32_t] entry_type
+		RankedEdgeAgenda()
+		void reserve(size_t n)
+		void replace_entries(vector[item_type] entries)
+		void kbest_entries(vector[item_type] entries, size_t k)
+		size_t size()
+		bint empty()
+		bint member(RankedEdge k)
+		void setitem(RankedEdge k, V v)
+		void setifbetter(RankedEdge, V v)
+		item_type pop()
+
+	cdef cppclass SmallChartItemSet:
+		ctypedef SmallChartItem value_type
+		SmallChartItemSet()
+		SmallChartItemSet(uint64_t n)
+		void swap(SmallChartItemSet&)
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			SmallChartItem& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(SmallChartItem& k)
+		SmallChartItem& operator[](SmallChartItem&) nogil
+		pair[iterator, bint] insert(SmallChartItem& v) nogil
+		uint64_t count(SmallChartItem& k)
+		uint64_t erase(SmallChartItem& k)
+		uint64_t bucket(SmallChartItem& key)
+		uint64_t max_size()
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+	cdef cppclass FatChartItemSet:
+		ctypedef FatChartItem value_type
+		FatChartItemSet()
+		FatChartItemSet(uint64_t n)
+		void swap(FatChartItemSet&)
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			FatChartItem& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(FatChartItem& k)
+		FatChartItem& operator[](FatChartItem&) nogil
+		pair[iterator, bint] insert(FatChartItem& v) nogil
+		uint64_t count(FatChartItem& k)
+		uint64_t erase(FatChartItem& k)
+		uint64_t bucket(FatChartItem& key)
+		uint64_t max_size()
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+	cdef cppclass RankedEdgeSet:
+		ctypedef RankedEdge value_type
+		RankedEdgeSet()
+		RankedEdgeSet(uint64_t n)
+		void swap(RankedEdgeSet&)
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			RankedEdge& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(RankedEdge& k)
+		RankedEdge& operator[](RankedEdge&) nogil
+		pair[iterator, bint] insert(RankedEdge& v) nogil
+		uint64_t count(RankedEdge& k)
+		uint64_t erase(RankedEdge& k)
+		uint64_t bucket(RankedEdge& key)
+		uint64_t max_size()
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+	cdef cppclass RuleHashMap[D]:
+		RuleHashMap()
+		RuleHashMap(uint64_t n)
+		void swap(RuleHashMap&)
+		Rule& key_type
+		D& data_type
+		pair[Rule, D]& value_type
+		uint64_t size_type
+		bint empty()
+		uint64_t size()
+		cppclass iterator:
+			pair[Rule, D]& operator*() nogil
+			iterator operator++() nogil
+			iterator operator--() nogil
+			bint operator==(iterator) nogil
+			bint operator!=(iterator) nogil
+		iterator begin()
+		iterator end()
+		iterator find(Rule& k)
+		D& operator[](Rule&) nogil
+		pair[iterator, bint] insert(pair[Rule, D]) nogil
+		uint64_t erase(Rule& k)
+		uint64_t bucket(Rule& key)
+		uint64_t max_size()
+		uint64_t count(Rule& k)
+		uint64_t bucket_count()
+		uint64_t bucket_size(uint64_t i)
+		void rehash(uint64_t n)
+		void resize(uint64_t n)
+		void reserve(size_t n)
+		void clear_deleted_key()
+		void erase(iterator pos)
+		void erase(iterator first, iterator last)
+		void clear()
+		void clear_no_resize()
+
+	cdef cppclass SmallChartItemBtreeMap[V]:
+		cppclass iterator:
+			pair[SmallChartItem, V]& operator*()
+			iterator operator++()
+			iterator operator--()
+			bint operator==(iterator)
+			bint operator!=(iterator)
+		cppclass const_iterator:
+			pair[const SmallChartItem, V]& operator*()
+			const_iterator operator++()
+			const_iterator operator--()
+			bint operator==(const_iterator)
+			bint operator!=(const_iterator)
+		cppclass reverse_iterator:
+			pair[SmallChartItem, V]& operator*()
+			iterator operator++()
+			iterator operator--()
+			bint operator==(reverse_iterator)
+			bint operator!=(reverse_iterator)
+		cppclass const_reverse_iterator(reverse_iterator):
+			pass
+		SmallChartItemBtreeMap() except +
+		SmallChartItemBtreeMap(SmallChartItemBtreeMap&) except +
+		V& operator[](SmallChartItem&)
+		bint operator==(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		bint operator!=(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		bint operator<(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		bint operator>(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		bint operator<=(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		bint operator>=(SmallChartItemBtreeMap&, SmallChartItemBtreeMap&)
+		V& at(const SmallChartItem&) except +
+		iterator begin()
+		const_iterator const_begin "begin" ()
+		void clear()
+		size_t count(const SmallChartItem&)
+		bint empty()
+		iterator end()
+		const_iterator const_end "end" ()
+		pair[iterator, iterator] equal_range(const SmallChartItem&)
+		void erase(iterator)
+		void erase(iterator, iterator)
+		size_t erase(const SmallChartItem&)
+		iterator find(const SmallChartItem&)
+		const_iterator const_find "find" (const SmallChartItem&)
+		pair[iterator, bint] insert(pair[SmallChartItem, V]) except +
+		iterator insert(iterator, pair[SmallChartItem, V]) except +
+		iterator lower_bound(const SmallChartItem&)
+		const_iterator const_lower_bound "lower_bound"(const SmallChartItem&)
+		size_t max_size()
+		reverse_iterator rbegin()
+		const_reverse_iterator const_rbegin "rbegin"()
+		reverse_iterator rend()
+		const_reverse_iterator const_rend "rend"()
+		size_t size()
+		void swap(SmallChartItemBtreeMap&)
+		iterator upper_bound(const SmallChartItem&)
+		const_iterator const_upper_bound "upper_bound"(const SmallChartItem&)
+	cdef cppclass FatChartItemBtreeMap[V]:
+		cppclass iterator:
+			pair[FatChartItem, V]& operator*()
+			iterator operator++()
+			iterator operator--()
+			bint operator==(iterator)
+			bint operator!=(iterator)
+		cppclass const_iterator:
+			pair[const FatChartItem, V]& operator*()
+			const_iterator operator++()
+			const_iterator operator--()
+			bint operator==(const_iterator)
+			bint operator!=(const_iterator)
+		cppclass reverse_iterator:
+			pair[FatChartItem, V]& operator*()
+			iterator operator++()
+			iterator operator--()
+			bint operator==(reverse_iterator)
+			bint operator!=(reverse_iterator)
+		cppclass const_reverse_iterator(reverse_iterator):
+			pass
+		FatChartItemBtreeMap() except +
+		FatChartItemBtreeMap(FatChartItemBtreeMap&) except +
+		V& operator[](FatChartItem&)
+		bint operator==(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		bint operator!=(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		bint operator<(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		bint operator>(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		bint operator<=(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		bint operator>=(FatChartItemBtreeMap&, FatChartItemBtreeMap&)
+		V& at(const FatChartItem&) except +
+		iterator begin()
+		const_iterator const_begin "begin" ()
+		void clear()
+		size_t count(const FatChartItem&)
+		bint empty()
+		iterator end()
+		const_iterator const_end "end" ()
+		pair[iterator, iterator] equal_range(const FatChartItem&)
+		void erase(iterator)
+		void erase(iterator, iterator)
+		size_t erase(const FatChartItem&)
+		iterator find(const FatChartItem&)
+		const_iterator const_find "find" (const FatChartItem&)
+		pair[iterator, bint] insert(pair[FatChartItem, V]) except +
+		iterator insert(iterator, pair[FatChartItem, V]) except +
+		iterator lower_bound(const FatChartItem&)
+		const_iterator const_lower_bound "lower_bound"(const FatChartItem&)
+		size_t max_size()
+		reverse_iterator rbegin()
+		const_reverse_iterator const_rbegin "rbegin"()
+		reverse_iterator rend()
+		const_reverse_iterator const_rend "rend"()
+		size_t size()
+		void swap(FatChartItemBtreeMap&)
+		iterator upper_bound(const FatChartItem&)
+		const_iterator const_upper_bound "upper_bound"(const FatChartItem&)
+
+
+@cython.final
+cdef class StringList(object):
+	cdef vector[string] ob
+
+
+@cython.final
+cdef class StringIntDict(object):
+	cdef sparse_hash_map[string, Label] ob
+
+
 @cython.final
 cdef class Grammar:
 	cdef ProbRule **bylhs
 	cdef ProbRule **unary
 	cdef ProbRule **lbinary
 	cdef ProbRule **rbinary
-	cdef uint32_t *mapping
-	cdef uint32_t *revmap
-	cdef uint32_t **splitmapping
-	cdef uint8_t *fanout
-	cdef uint64_t *chainvec
+	cdef vector[LexicalRule] lexical
+	cdef sparse_hash_map[string, vector[uint32_t]] lexicalbyword
+	cdef sparse_hash_map[Label, sparse_hash_map[string, uint32_t]] lexicalbylhs
+	cdef Label *mapping
+	cdef Label *selfmapping
+	cdef Label **splitmapping
+	cdef uint32_t *revrulemap
 	cdef uint64_t *mask
-	cdef readonly int currentmodel
+	cdef vector[vector[Label]] revmap
+	cdef vector[uint8_t] fanout
+	cdef vector[ProbRule] buf
+	cdef RuleHashMap[uint32_t] rulenos
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
-	cdef readonly bint logprob, bitpar, binarized
-	cdef readonly object models
-	cdef readonly str origrules, origlexicon, start
-	cdef readonly list tolabel, lexical, modelnames, rulemapping
-	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
-	cdef _convertrules(self, list rulelines, dict fanoutdict)
+	cdef readonly bint logprob, bitpar
+	cdef readonly str start
+	cdef readonly str rulesfile, lexiconfile, altweightsfile
+	cdef readonly object ruletuples
+	cdef StringList tolabel
+	cdef StringIntDict toid
+	cdef readonly list rulemapping, selfrulemapping
+	cdef readonly str currentmodel
+	cdef vector[Prob] defaultmodel
+	cdef readonly object models  # serialized numpy arrays
 	cdef _indexrules(self, ProbRule **dest, int idx, int filterlen)
 	cpdef rulestr(self, int n)
+	cpdef noderuleno(self, node)
+	cpdef getruleno(self, tuple r, tuple yf)
 	cdef yfstr(self, ProbRule rule)
 
 
-# chart improvements done:
-# [x] only store probs for viterbi chart; parse forest is symbolic
-# [x] common API for CFG / LCFRS: CFG: key=integer index; LCFRS: key=ChartItem
-# [x] LCFRS for sent > 64 words
-# [X] for CFG: index vit. probs by [cell + lhs]; need efficient way to look up
-# 		vit. prob for lhs in given cell.
-#     for LCFRS: index vit. probs by [lhs][item]; iterate over items for lhs.
-# [x] pruning: either (1) in probs; return nan for blocked, inf for missing,
-# 		or (2) prepopulate parse forest; advantage: non-probabilistic
-# 		parsing can be pruned, viterbi probabilities can be obtained in
-# 		separate stage.
-# 		=> (3) external whitelist (current)
-# [x] sampling; not well tested.
-# [x] unroll list of edges in parse forest: list w/blocks of 1000 edges
-#     in arrays
-
 # chart improvements todo:
-# [ ] better to use e.g., C++ vector or other existing dynamic array for edges
-# [ ] inside-outside parsing; current numpy arrays can be replaced with compact
-# 		indexed arrays, to save 50%, and be consistent with chart API
-# [ ] symbolic parsing; separate viterbi stage
-# [ ] can we exploit bottom-up order of parser or previous ctf stages
-# 		to pack the parse forest?
 # [ ] is it useful to have a recognition phase before making parse forest?
+# [ ] symbolic parsing; separate viterbi stage
+# [ ] can we exploit bottom-up order of parser or previous CTF stages
+# 		to pack the parse forest?
 cdef class Chart:
-	cdef readonly dict rankededges  # [item][n] => DoubleEntry(RankedEdge, prob)
-	cdef object itemsinorder  # array or list
-	cdef dict inside, outside
+	cdef vector[Prob] probs
+	cdef vector[Prob] inside
+	cdef vector[Prob] outside
+	cdef vector[vector[Edge]] parseforest
+	cdef vector[vector[pair[RankedEdge, Prob]]] rankededges
+	# cdef vector[string] derivations  # corresponds to rankededges[chart.root()]
+	# list of (str, float); corresponds to rankededges[chart.root()]:
+	cdef readonly list derivations
 	cdef Grammar grammar
 	cdef readonly list sent
 	cdef short lensent
-	cdef uint32_t start
+	cdef Label start
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
-	cdef double subtreeprob(self, item)
-	cdef int lexidx(self, Edge *edge)
-	cdef double lexprob(self, item, Edge *edge)
-	cdef edgestr(self, item, Edge *edge)
-	cdef _left(self, item, Edge *edge)
-	cdef _right(self, item, Edge *edge)
-	cdef left(self, RankedEdge edge)
-	cdef right(self, RankedEdge edge)
-	cdef copy(self, item)
-	cdef uint32_t label(self, item)
-	cdef ChartItem asChartItem(self, item)
-	cdef size_t asCFGspan(self, item, size_t nonterminals)
-	cdef Edges getedges(self, item)
-
-
-cdef struct ProbRule:  # total: 32 bytes.
-	double prob  # 8 bytes
-	uint32_t lhs  # 4 bytes
-	uint32_t rhs1  # 4 bytes
-	uint32_t rhs2  # 4 bytes
-	uint32_t args  # 4 bytes => 32 max vars per rule
-	uint32_t lengths  # 4 bytes => same
-	uint32_t no  # 4 bytes
+	cdef int lexidx(self, Edge edge) except -1
+	cdef Prob subtreeprob(self, ItemNo itemidx)
+	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1
+	cdef edgestr(self, ItemNo itemidx, Edge edge)
+	cdef ItemNo _left(self, ItemNo itemidx, Edge edge)
+	cdef ItemNo _right(self, ItemNo itemidx, Edge edge)
+	cdef ItemNo left(self, RankedEdge edge)
+	cdef ItemNo right(self, RankedEdge edge)
+	cdef Label label(self, ItemNo itemidx)
+	cdef ItemNo getitemidx(self, uint64_t idx)
+	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx)
+	cdef FatChartItem asFatChartItem(self, ItemNo itemidx)
+	cdef size_t asCFGspan(self, ItemNo itemidx)
 
 
 @cython.final
-cdef class LexicalRule:
-	cdef readonly double prob
-	cdef readonly uint32_t lhs
-	cdef readonly str word
+cdef class Whitelist:
+	cdef vector[sparse_hash_set[Label]] cfg  # span -> set of labels
+	# cdef vector[vector[Label]] cfg  # span -> sorted array of fine labels
+	# cdef vector[btree_set[Label]] cfg  # span -> set of fine labels
+	cdef vector[SmallChartItemSet] small  # label -> set of items
+	cdef vector[FatChartItemSet] fat   # label -> set of items
+	cdef Label *mapping  # maps of labels to ones in this whitelist
+	cdef Label **splitmapping
 
 
-@cython.freelist(1000)
-cdef class ChartItem:
-	cdef uint32_t label
-	cdef double prob
-
-
-@cython.final
-cdef class SmallChartItem(ChartItem):
-	cdef uint64_t vec
-	cdef copy(self)
-
-
-@cython.final
-cdef class FatChartItem(ChartItem):
-	cdef uint64_t vec[SLOTS]
-	cdef copy(self)
-
-
-cdef SmallChartItem CFGtoSmallChartItem(uint32_t label, Idx start, Idx end)
-cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end)
-
-
-cdef union Position:  # 8 bytes
-	short mid  # CFG, end index of left child
-	uint64_t lvec  # LCFRS, bit vector of left child
-	uint64_t *lvec_fat  # LCFRS > 64 words, pointer to bit vector of left child;
-	# 		NB: this assumes left child is not garbage collected!
-
-
-cdef struct Edge:  # 16 bytes
-	ProbRule *rule  # ruleno may take less space than pointer, but not convenient
-	Position pos
-
-
-@cython.final
-cdef class Edges:
-	cdef short len  # the number of edges in the head of the linked list
-	cdef MoreEdges *head  # head of linked list
-
-
-cdef struct EdgesStruct:
-	short len  # the number of edges in the head of the linked list
-	MoreEdges *head  # head of linked list
-
-
-cdef struct MoreEdges:  # An unrolled linked list
-	MoreEdges *prev
-	Edge data[EDGES_SIZE]
-	# this array is always full, unless this is the head of
-	# the linked list
-
-
-@cython.final
-cdef class RankedEdge:
-	# NB: 'head' is unnecessary because the head will also be the dictionary
-	# key for a ranked edge, but having it as part of the object is convenient.
-	cdef Edge *edge  # rule / spans of children
-	cdef object head  # span / label of this node
-	cdef int left, right  # rank of left / right child
+cdef SmallChartItem CFGtoSmallChartItem(Label label, Idx start, Idx end)
+cdef FatChartItem CFGtoFatChartItem(Label label, Idx start, Idx end)
 
 
 # start scratch
-#
-#
-# cdef struct CompactEdge:
-# 	uint32_t ruleno  # => idx to grammar.bylhs; define sentinel.
-# 	uint32_t posno  # => idx to an array of positions
-# 	# 8 bytes, but more indirection, less convenience
 #
 #
 # cdef class ParseForest:
@@ -200,10 +618,10 @@ cdef class RankedEdge:
 # 	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
 # 	# from firstanalysis[n] to firstanalysis[n+1] or end values.
 # 	cdef size_t *firstchild     # idx to child array below
-# 	cdef double *insideprobs	# no. of edge -> inside prob
+# 	cdef Prob *insideprobs	# no. of edge -> inside prob
 # 	cdef uint32_t *ruleno
 # 	# positive means index to lists above, negative means terminal index
-# 	cdef uint32_t *child
+# 	cdef int32_t *child
 #
 #
 # cdef class DiscNode:
@@ -243,10 +661,6 @@ cdef class Ctrees:
 	cdef addnodes(self, Node *source, int cnt, int root)
 
 
-cdef struct Rule:
-	uint32_t lhs, rhs1, rhs2, lengths, args
-
-
 cdef union ItemType:
 	void *ptr
 	char *aschar
@@ -263,11 +677,9 @@ cdef struct DArray:
 cdef class Vocabulary:
 	cdef readonly dict prods  # production str. => int
 	cdef readonly dict labels  # label/word str => int
-	#
 	cdef DArray prodbuf  # single string with all productions concatented
 	cdef DArray labelbuf  # single string with all labels/words concatented
 	cdef DArray labelidx  # label id => offset in labelbuf
-	#
 	cdef str idtolabel(self, uint32_t i)
 	cdef str getlabel(self, int prodno)
 	cdef str getword(self, int prodno)
@@ -289,33 +701,9 @@ cdef class FixedVocabulary(Vocabulary):
 # ---------------------------------------------------------------
 
 
-cdef inline FatChartItem new_FatChartItem(uint32_t label):
-	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
-	item.label = label
-	# NB: since item.vec is a static array, its elements are initialized to 0.
-	return item
-
-
-cdef inline SmallChartItem new_SmallChartItem(uint32_t label, uint64_t vec):
-	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
-	item.label = label
-	item.vec = vec
-	return item
-
-
-cdef inline RankedEdge new_RankedEdge(
-		object head, Edge *edge, int left, int right):
-	cdef RankedEdge rankededge = RankedEdge.__new__(RankedEdge)
-	rankededge.head = head
-	rankededge.edge = edge
-	rankededge.left = left
-	rankededge.right = right
-	return rankededge
-
-
 # defined here because circular import.
 cdef inline size_t cellidx(short start, short end, short lensent,
-		uint32_t nonterminals):
+		Label nonterminals):
 	"""Return an index for a regular three dimensional array.
 
 	``chart[start][end][0] => chart[idx]`` """
@@ -323,7 +711,7 @@ cdef inline size_t cellidx(short start, short end, short lensent,
 
 
 cdef inline size_t compactcellidx(short start, short end, short lensent,
-		uint32_t nonterminals):
+		Label nonterminals):
 	"""Return an index to a triangular array, given start < end.
 	The result of this function is the index to chart[start][end][0]."""
 	return nonterminals * (lensent * start
@@ -360,22 +748,34 @@ cdef inline logprobadd(x, y):
 	return x + log(1.0 + exp(diff))
 
 
-cdef inline double logprobsum(list logprobs):
-	"""Sum a list of log probabilities producing a normal probability.
+cdef inline double logprobsum(vector[Prob]& logprobs):
+	"""Sum a list of log probabilities producing a regular probability.
 
 	>>> a = b = c = 0.25
 	>>> logprobsum([log(a), log(b), log(c)]) == sum([a, b, c]) == 0.75
 	True
 
-	:param logprobs: a list of Python floats with negative log probilities,
-		s.t. 0 <= p <= inf for each p in ``logprobs``.
+	:param logprobs: log probilities, s.t. -inf < p <= 0 for each p in
+		``logprobs``.
 	:returns: a probability p with 0 < p <= 1.0
-	:source: http://blog.smola.org/post/987977550/
 
+	source: http://blog.smola.org/post/987977550/ and
+	http://www.nowozin.net/sebastian/blog/streaming-log-sum-exp-computation.html
+	(streaming version)
 	Comparison of different methods: https://gist.github.com/andreasvc/6204982
 	"""
-	maxprob = max(logprobs)
-	return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
+	# maxprob = max(logprobs)
+	# return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
+	cdef double maxprob = -800
+	cdef double result = 0
+	for prob in logprobs:
+		if prob <= maxprob:
+			result += exp(prob - maxprob)
+		else:
+			result *= exp(maxprob - prob)
+			result += 1.0
+			maxprob = prob
+	return exp(maxprob) * result
 
 
 cdef inline str yieldranges(list leaves):

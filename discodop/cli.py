@@ -166,28 +166,33 @@ overwritten."""
 	from .runexp import startexp, parsetepacoc
 	if args is None:
 		args = argv[2:]
-	if len(args) == 0:
-		print('error: incorrect number of arguments', file=stderr)
+	if '--tepacoc' in args:
+		args.remove('--tepacoc')
+		if args:
+			print('error: incorrect arguments', file=stderr)
+			print(runexp.__doc__)
+			sysexit(2)
+		parsetepacoc()
+		return
+	rerun = '--rerun' in args
+	if rerun:
+		args.remove('--rerun')
+	if len(args) != 1:
+		print('error: incorrect arguments %r' % args, file=stderr)
 		print(runexp.__doc__)
 		sysexit(2)
-	elif '--tepacoc' in args:
-		parsetepacoc()
-	else:
-		rerun = '--rerun' in args
-		if rerun:
-			args.remove('--rerun')
-		params = readparam(args[0])
-		resultdir = args[0].rsplit('.', 1)[0]
-		top = startexp(
-				params, resultdir=resultdir, rerun=rerun)
-		if not rerun:  # copy parameter file to result dir
-			paramlines = io.open(args[0], encoding='utf8').readlines()
-			if paramlines[0].startswith("top='"):
-				paramlines = paramlines[1:]
-			outfile = os.path.join(resultdir, 'params.prm')
-			with io.open(outfile, 'w', encoding='utf8') as out:
-				out.write("top='%s',\n" % top)
-				out.writelines(paramlines)
+	params = readparam(args[0])
+	resultdir = args[0].rsplit('.', 1)[0]
+	top = startexp(params, resultdir=resultdir, rerun=rerun)
+	if not rerun:  # copy parameter file to result dir
+		with io.open(args[0], encoding='utf8') as inp:
+			paramlines = inp.readlines()
+		if paramlines[0].startswith("top='"):
+			paramlines = paramlines[1:]
+		outfile = os.path.join(resultdir, 'params.prm')
+		with io.open(outfile, 'w', encoding='utf8') as out:
+			out.write("top='%s',\n" % top)
+			out.writelines(paramlines)
 
 
 def treetransforms():
@@ -205,11 +210,11 @@ where input and output are treebanks; standard in/output is used if not given.
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
 			'introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
-			'tailmarker direction').split()
+			'tailmarker direction dot').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
 			'markorigin= maxlen= enc= transforms= markovthreshold= labelfun= '
-			'transforms= reversetransforms= ').split()
+			'transforms= reversetransforms= filterlabels= ').split()
 	try:
 		origopts, args = gnu_getopt(argv[2:], 'h:v:H:', flags + options)
 		if len(args) > 2:
@@ -279,6 +284,9 @@ where input and output are treebanks; standard in/output is used if not given.
 							direction='--direction' in opts,
 							headoutward='--headrules' in opts,
 							markhead='--markhead' in opts,
+							dot='--dot' in opts,
+							filterlabels=tuple(opts.get(
+								'--filterlabels', '').split()),
 							labelfun=eval(  # pylint: disable=eval-used
 								opts['--labelfun'])
 								if '--labelfun' in opts else None),
@@ -327,45 +335,27 @@ where input and output are treebanks; standard in/output is used if not given.
 		if not opts.get('--headrules'):
 			raise ValueError('need head rules for dependency conversion')
 	cnt = 0
-	if opts.get('--outputfmt') == 'dact':
-		import alpinocorpus
-		outfile = alpinocorpus.CorpusWriter(outfilename)
-		if (not actions and opts.get('--inputfmt') in ('alpino', 'dact')
-				and set(opts) <= {'--slice', '--inputfmt', '--outputfmt',
-				'--renumber'}):
-			for n, (key, block) in islice(enumerate(
-					corpus.blocks().items(), 1), start, end):
-				outfile.write((('%8d' % n) if '--renumber' in opts
-						else key).encode('utf8'), block)
+	encoding = opts.get('outputenc', 'utf8')
+	with io.open(outfilename, 'w', encoding=encoding) as outfile:
+		# copy trees verbatim when only taking slice or converting encoding
+		if (not actions and opts.get('--inputfmt') == opts.get(
+				'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
+				'--outputenc', '--inputfmt', '--outputfmt'}):
+			for block in islice(corpus.blocks().values(), start, end):
+				outfile.write(block)
 				cnt += 1
 		else:
+			if opts.get('--outputfmt', 'export') == 'bracket':
+				trees = ((key, canonicalize(item.tree) and item)
+						for key, item in trees)
+			if opts.get('--outputfmt', 'export') == 'export':
+				outfile.write(treebank.EXPORTHEADER)
+			fmt = opts.get('--outputfmt', 'export')
+			sentid = '--sentid' in opts
 			for key, item in trees:
-				outfile.write(key.encode('utf8'), treebank.writetree(
-						item.tree, item.sent, key, 'alpino',
-						comment=item.comment).encode('utf8'))
+				outfile.write(treebank.writetree(item.tree, item.sent, key,
+						fmt, comment=item.comment, sentid=sentid))
 				cnt += 1
-	else:
-		encoding = opts.get('outputenc', 'utf8')
-		with io.open(outfilename, 'w', encoding=encoding) as outfile:
-			# copy trees verbatim when only taking slice or converting encoding
-			if (not actions and opts.get('--inputfmt') == opts.get(
-					'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
-					'--outputenc', '--inputfmt', '--outputfmt'}):
-				for block in islice(corpus.blocks().values(), start, end):
-					outfile.write(block)
-					cnt += 1
-			else:
-				if opts.get('--outputfmt', 'export') == 'bracket':
-					trees = ((key, canonicalize(item.tree) and item)
-							for key, item in trees)
-				if opts.get('--outputfmt', 'export') == 'export':
-					outfile.write(treebank.EXPORTHEADER)
-				fmt = opts.get('--outputfmt', 'export')
-				sentid = '--sentid' in opts
-				for key, item in trees:
-					outfile.write(treebank.writetree(item.tree, item.sent, key,
-							fmt, comment=item.comment, sentid=sentid))
-					cnt += 1
 	print('%s: transformed %d trees' % (args[0] if args else 'stdin', cnt),
 			file=stderr)
 
@@ -396,14 +386,16 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 			getgrammars
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 'hs:'
-	options = ('help', 'gzip', 'packed', 'bitpar', 'inputfmt=', 'inputenc=',
+	options = ('help', 'gzip', 'packed', 'inputfmt=', 'inputenc=',
 			'dopestimator=', 'maxdepth=', 'maxfrontier=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(argv[2:], shortoptions, options)
 		model = args[0]
 		if model not in ('info', 'merge'):
-			treebankfile, grammarfile = args[1:
-					]  # pylint: disable=unbalanced-tuple-unpacking
+			if len(args) != 3:
+				raise ValueError('expected 2 arguments: treebank grammar')
+			treebankfile = args[1]
+			grammarfile = args[2]
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=stderr)
 		print(grammar.__doc__)
@@ -471,16 +463,13 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 				packedgraph='--packed' in opts)
 	elif model == 'doubledop':
 		xgrammar, backtransform, altweights, _ = doubledop(trees, sents,
-				numproc=int(opts.get('--numproc', 1)),
-				binarized='--bitpar' not in opts)
+				numproc=int(opts.get('--numproc', 1)))
 	elif model == 'dop1':
 		xgrammar, backtransform, altweights, _ = dop1(trees, sents,
 				maxdepth=int(opts.get('--maxdepth', 3)),
-				maxfrontier=int(opts.get('--maxfrontier', 999)),
-				binarized='--bitpar' not in opts)
+				maxfrontier=int(opts.get('--maxfrontier', 999)))
 	elif model == 'ptsg':
-		xgrammar, backtransform, altweights = compiletsg(xfragments,
-				binarized='--bitpar' not in opts)
+		xgrammar, backtransform, altweights = compiletsg(xfragments)
 	elif model == 'param':
 		getgrammars(dobinarization(trees, sents, prm.binarization,
 				prm.relationalrealizational),
@@ -505,9 +494,6 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	if model == 'ptsg':
 		bitpar = STRTERMRE.search(next(iter(xfragments))) is not None
-	if '--bitpar' in opts and not bitpar:
-		raise ValueError('parsing with an unbinarized grammar requires '
-				'a grammar in bitpar format.')
 
 	rules, lexicon = writegrammar(xgrammar, bitpar=bitpar)
 	# write output
@@ -530,8 +516,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		print(grammarinfo(xgrammar))
 	try:
 		from .containers import Grammar
-		print(Grammar(rules, lexicon, binarized='--bitpar' not in opts,
-				start=start).testgrammar()[1])
+		print(Grammar(rules, lexicon, start=start).testgrammar()[1])
 	except (ImportError, AssertionError) as err:
 		print(err)
 

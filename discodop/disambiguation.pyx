@@ -2,8 +2,8 @@
 
 Use as follows:
 
->>> derivs, entries = getderivations(chart, 1000)  # doctest: +SKIP
->>> parses, msg = marginalize('mpp', derivs, entries, chart)  # doctest: +SKIP
+>>> getderivations(chart, 1000)  # doctest: +SKIP
+>>> parses, msg = marginalize('mpp', chart)  # doctest: +SKIP
 """
 
 from __future__ import print_function
@@ -17,21 +17,28 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import Tree, writediscbrackettree
-from .kbest import lazykbest, getderiv
-from .grammar import lcfrsproductions
+from .tree import Tree, ParentedTree, writediscbrackettree, brackettree
+from .kbest import lazykbest
+from .kbest cimport getderiv
+from .grammar import lcfrsproductions, spinal, REMOVEDEC
 from .treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from .bit import pyintnextset, pyintbitcount
-from libc.stdint cimport uint8_t, uint32_t, uint64_t, intptr_t
-from .bit cimport abitcount
-from .plcfrs cimport DoubleEntry, new_DoubleEntry
-from .containers cimport Grammar, ProbRule, LexicalRule, Chart, Edges, \
-		MoreEdges, SmallChartItem, FatChartItem, Edge, RankedEdge, \
-		new_RankedEdge, logprobadd, logprobsum, yieldranges
-cimport cython
 
+cimport cython
+from cython.operator cimport dereference
 from libc.string cimport memset
+from libc.stdint cimport uint64_t
+from libc.math cimport HUGE_VAL as INFINITY
+from libcpp.string cimport string
+from libcpp.vector cimport vector
+from libcpp.utility cimport pair
+from .bit cimport abitcount
+from .containers cimport Prob, Grammar, ProbRule, LexicalRule, Chart, \
+		SmallChartItem, FatChartItem, Edge, RankedEdge, Whitelist, \
+		sparse_hash_map, logprobadd, logprobsum, yieldranges
+
+
 cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b)
 	void SETBIT(uint64_t a[], int b)
@@ -45,43 +52,28 @@ REMOVEWORDTAGS = re.compile('@[^ )]+')
 cdef str NONCONSTLABEL = ''
 cdef str NEGATIVECONSTLABEL = '-#-'
 
-cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
-		derivstrings=True):
-	"""Get *k*-best and/or sampled derivations from chart.
+cpdef getderivations(Chart chart, int k, derivstrings=True):
+	"""Get *k*-best derivations from chart.
 
 	:param k: number of derivations to extract from chart
-	:param sample: whether to *k* derivations sample from chart
-	:param kbest: whether to extract *k*-best derivations from chart
 	:param derivstrings: whether to create derivations as strings
-	:returns: tuple ``(derivations, entries)``; two lists of equal length:
+	:returns: ``None``. Modifies ``chart.derivations`` and
+		``chart.rankededges`` in-place.
 
-		:derivations: list of tuples ``(deriv, logprob)`` where deriv is a
-			string; or list of None if ``derivstrings==False``
-		:entries: list of RankedEdge objects.
+		:chart.derivations: list of tuples ``(deriv, logprob)`` where ``deriv``
+			is a string; or list of ``None`` if ``derivstrings==False``
+		:chart.rankededges[chart.root()]: corresponding list of RankedEdge
+			objects for the derivations in ``chart.derivations``.
 	"""
-	cdef list derivations = [], entries = []
-	if not (kbest or sample):
-		raise ValueError('at least one of kbest or sample needs to be True.')
-	chart.rankededges = {}
-	if kbest:
-		derivations, unused_explored = lazykbest(chart, k, derivs=derivstrings)
-		entries = chart.rankededges[chart.root()]
-	if sample:
-		derivations.extend(
-				getsamples(chart, k, None))
-		# filter out duplicate derivations
-		entries = chart.rankededges[chart.root()]
-		filteredderivations = dict(zip(derivations, entries))
-		entries[:] = filteredderivations.values()
-		derivations[:] = filteredderivations.keys()
-	return derivations, entries
+	chart.rankededges.clear()
+	chart.derivations = lazykbest(chart, k, derivs=derivstrings)
 
 
-cpdef marginalize(method, list derivations, list entries, Chart chart,
+cpdef marginalize(method, Chart chart,
 		list backtransform=None, list sent=None, list tags=None,
-		int k=1000, int sldop_n=7, double mcc_labda=1.0, set mcc_labels=None,
-		bint bitpar=False):
-	"""Take a list of derivations and optimize a given objective function.
+		int k=1000, int sldop_n=7, double mcplambda=1.0, set mcplabels=None,
+		bint ostag=False):
+	"""Take a list of derivations and optimizes a given objective function.
 
 	1. Rewrites derivations into the intended parse trees.
 	2. Marginalizes (sum / combine) weights of derivations for same parse tree.
@@ -108,7 +100,6 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 			substituting fragments in this list for flattened rules in
 			derivations.
 	:param k: when ``method='sl-dop``, number of derivations to consider.
-	:param bitpar: whether bitpar was used in nbest mode.
 	:returns:
 		``(parses, msg)``.
 
@@ -122,165 +113,196 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'
 	cdef bint dopreduction = backtransform is None
-	cdef DoubleEntry entry
-	cdef LexicalRule lexrule
-	cdef dict parsetrees = {}, derivs = {}
+	cdef pair[RankedEdge, Prob] entry
+	cdef vector[pair[RankedEdge, Prob]] entries
+	cdef sparse_hash_map[string, vector[Prob]] mpptrees
+	cdef dict mpdtrees = {}
+	cdef dict derivlen = {}  # parsetree => (derivlen, derivprob)
+	cdef dict derivs = {}
 	cdef str treestr, deriv
-	cdef double prob, maxprob
-	cdef int m
+	cdef Prob prob, maxprob
+	cdef size_t n
 
 	if method == 'sl-dop':
-		return sldop(dict(derivations), chart, sent, tags, k, sldop_n,
-				backtransform, entries, bitpar)
+		return sldop(chart, sent, tags, k, sldop_n, backtransform)
 	elif method == 'sl-dop-simple':
-		return sldop_simple(dict(derivations), entries, sldop_n, chart,
-				backtransform, bitpar)
+		return sldop_simple(sldop_n, chart, backtransform)
+	elif method == 'mcp':
+		return maxconstituentsparse(
+				chart, backtransform, mcplambda, mcplabels)
 	elif method == 'shortest':
 		# filter out all derivations which are not shortest
-		if not dopreduction and not bitpar:
-			maxprob = min([entry.value for entry in entries])
-			entries = [entry for entry in entries if entry.value == maxprob]
-		elif derivations:
-			_, maxprob = min(derivations, key=itemgetter(1))
-			derivations = [(deriv, prob) for deriv, prob in derivations
+		if not dopreduction:
+			maxprob = INFINITY
+			for entry in chart.rankededges[chart.root()]:
+				if entry.second < maxprob:
+					maxprob = entry.second
+			for entry in chart.rankededges[chart.root()]:
+				if entry.second == maxprob:
+					entries.push_back(entry)
+			chart.rankededges[chart.root()] = entries
+		elif chart.derivations:
+			_, maxprob = min(chart.derivations, key=itemgetter(1))
+			chart.derivations = [(deriv, prob)
+					for deriv, prob in chart.derivations
 					if prob == maxprob]
-	elif method == 'mcc':
-		return maxconstituentscorrect(derivations, chart,
-				backtransform, mcc_labda, mcc_labels)
 
-	if not dopreduction and not bitpar:  # Double-DOP
-		for entry in entries:
-			prob = entry.value
+	if not dopreduction:  # Double-DOP
+		for n in range(chart.rankededges[chart.root()].size()):
+			entry = chart.rankededges[chart.root()][n]
+			prob = entry.second
 			try:
-				treestr = recoverfragments(entry.key, chart, backtransform)
+				treestr = recoverfragments_re(
+						entry.first, chart, backtransform)
 			except:
 				continue
 			if shortest:
 				# for purposes of tie breaking, calculate the derivation
 				# probability in a different model.
-				newprob = exp(-getderivprob(entry.key, chart, sent))
+				newprob = exp(-getderivprob(entry.first, chart, sent))
 				score = (int(prob / log(0.5)), newprob)
-				if treestr not in parsetrees or score > parsetrees[treestr]:
-					parsetrees[treestr] = score
-					derivs[treestr] = entry.key
-			elif not mpd and treestr in parsetrees:
-				parsetrees[treestr].append(-prob)
-			elif not mpd or (treestr not in parsetrees
-						or -prob > parsetrees[treestr][0]):
-				parsetrees[treestr] = [-prob]
-				derivs[treestr] = entry.key
-	else:  # DOP reduction / bitpar
-		for (deriv, prob), entry in zip(derivations, entries):
-			if dopreduction:
+				if treestr not in derivlen or score > derivlen[treestr]:
+					derivlen[treestr] = score
+					derivs[treestr] = n
+			elif mpd:
+				if (treestr not in mpdtrees
+							or -prob > mpdtrees[treestr]):
+					mpdtrees[treestr] = -prob
+					derivs[treestr] = n
+			else:
+				mpptrees[<string>treestr.encode('utf8')].push_back(-prob)
+				if treestr not in derivs:
+					derivs[treestr] = n
+	else:  # DOP reduction
+		for n, (deriv, prob) in enumerate(chart.derivations):
+			entry = chart.rankededges[chart.root()][n]
+			if ostag:
+				deriv = removeadjunaries(deriv)
+				treestr = REMOVEDEC.sub('@1' if mpd or shortest else '', deriv)
+			elif dopreduction:
 				treestr = REMOVEIDS.sub('@1' if mpd or shortest else '', deriv)
 			else:
-				try:
-					treestr = recoverfragments(deriv, chart, backtransform)
-				except:
-					continue
+				raise ValueError
 			if shortest:
-				if bitpar:
-					# because with bitpar we don't know which rules have been
-					# used, read off the rules from the derivation ...
-					tree = canonicalize(Tree(deriv))
-					newprob = 0.0
-					for t in tree.subtrees():
-						if isinstance(t[0], Tree):
-							if not 1 <= len(t) <= 2:
-								raise ValueError('expected binarized tree.')
-							m = chart.grammar.rulenos[nodeprod(t)]
-							newprob += chart.grammar.bylhs[0][
-									chart.grammar.revmap[m]].prob
-						else:
-							m = chart.grammar.toid[t.label]
-							try:
-								lexrule = chart.grammar.lexicalbylhs[
-										m][sent[t[0]]]
-							except KeyError:
-								newprob += 30.0
-							else:
-								newprob += lexrule.prob
-				else:
-					newprob = getderivprob(entry.key, chart, sent)
+				newprob = getderivprob(entry.first, chart, sent)
 				score = (int(prob / log(0.5)), exp(-newprob))
-				if treestr not in parsetrees or (not dopreduction
-						and score > parsetrees[treestr]):
-					parsetrees[treestr] = score
+				if treestr not in derivlen or (not dopreduction
+						and score > derivlen[treestr]):
+					derivlen[treestr] = score
 					derivs[treestr] = deriv
 				elif dopreduction:
-					oldscore = parsetrees[treestr]
-					parsetrees[treestr] = oldscore[0], oldscore[1] + score[1]
-			elif treestr not in parsetrees or (not dopreduction and mpd
-					and -prob > parsetrees[treestr][0]):
-				parsetrees[treestr] = [-prob]
-				derivs[treestr] = deriv
-			elif treestr in parsetrees and (dopreduction or not mpd):
-				parsetrees[treestr].append(-prob)
+					oldscore = derivlen[treestr]
+					derivlen[treestr] = oldscore[0], oldscore[1] + score[1]
+			elif mpd:
+				if (treestr not in mpdtrees or
+						-prob > mpdtrees[treestr]):
+					mpdtrees[treestr] = -prob
+					derivs[treestr] = deriv
+			else:
+				mpptrees[<string>treestr.encode('utf8')].push_back(-prob)
+				if treestr not in derivs:
+					derivs[treestr] = deriv
 
-	if mpd and dopreduction:
-		results = [(REMOVEIDS.sub('', treestr), logprobsum(probs),
-				fragmentsinderiv(derivs[treestr], chart, backtransform))
-				for treestr, probs in parsetrees.items()]
-	elif shortest and dopreduction:
-		results = [(REMOVEIDS.sub('', treestr), (-a, b),
-				fragmentsinderiv(derivs[treestr], chart, backtransform))
-				for treestr, (a, b) in parsetrees.items()]
+	if ostag:
+		results = []
+		for it in mpptrees:
+			treestr = REMOVEDEC.sub('', it.first.decode('utf8'))
+			probs = it.second
+			results.append((treestr, logprobsum(probs),
+					ostagderivation(derivs[treestr], chart.sent)))
 	elif shortest:
-		results = [(treestr, (-a, b),
-				fragmentsinderiv(derivs[treestr], chart, backtransform))
-				for treestr, (a, b) in parsetrees.items()]
+		if dopreduction:
+			results = [(REMOVEIDS.sub('', treestr), (-a, b),
+					fragmentsinderiv_str(derivs[treestr], chart, backtransform))
+					for treestr, (a, b) in derivlen.items()]
+		else:
+			results = [(treestr, (-a, b),
+					fragmentsinderiv_re(
+						chart.rankededges[chart.root()][derivs[treestr]].first,
+						chart, backtransform))
+					for treestr, (a, b) in derivlen.items()]
+	elif mpd:
+		if dopreduction:
+			results = [(REMOVEIDS.sub('', treestr), exp(prob),
+					fragmentsinderiv_str(derivs[treestr], chart, backtransform))
+					for treestr, prob in mpdtrees.items()]
+		else:
+			results = [(treestr, exp(prob),
+					fragmentsinderiv_re(
+						chart.rankededges[chart.root()][derivs[treestr]].first,
+						chart, backtransform))
+					for treestr, prob in mpdtrees.items()]
+	elif dopreduction:
+		results = []
+		for it in mpptrees:
+			treestr = it.first.decode('utf8')
+			probs = it.second
+			results.append((treestr, logprobsum(probs),
+					fragmentsinderiv_str(derivs[treestr], chart, backtransform)))
 	else:
-		results = [(treestr, logprobsum(probs),
-				fragmentsinderiv(derivs[treestr], chart, backtransform))
-				for treestr, probs in parsetrees.items()]
+		results = []
+		for it in mpptrees:
+			treestr = it.first.decode('utf8')
+			probs = it.second
+			results.append((treestr, logprobsum(probs),
+					fragmentsinderiv_re(
+						chart.rankededges[chart.root()][derivs[treestr]].first,
+						chart, backtransform)))
 
 	msg = '%d derivations, %d parsetrees' % (
-			len(derivations if dopreduction else entries),
-			len(parsetrees))
+			len(chart.derivations) if dopreduction
+				else chart.rankededges[chart.root()].size(),
+			len(mpdtrees) or len(derivlen) or mpptrees.size())
 	return results, msg
 
 
-cdef maxconstituentscorrect(list derivations, Chart chart,
+cdef maxconstituentsparse(Chart chart,
 		list backtransform, double labda, set labels=None):
-	"""Approximate the Most Constituents Correct (MCC) parse from n-best list.
+	"""Approximate the Max Constituents Parse (MCP) parse from k-best list.
 
+	Also known as Most Constituents Correct.
 	:param derivations: list of derivations as strings
 	:param chart: the chart
 	:param backtransform: table of rules mapped to fragments
 	:param labda:
 		weight to assign to recall rate vs. the mistake rate;
-		the default 1.0 assigns equal weight to both.
+		1.0 assigns equal weight to both.
 	:param labels:
 		if given, the set of labels to optimize for;
 		by default, all labels are optimized.
 	"""
-	# NB: this requires derivations not entries.
+	# Cannot maximize this objective directly from chart because
+	# derivations need to be expanded first.
+	# NB: this requires derivation strings not entries.
 	cdef double sentprob = 0.0, maxscore = 0.0
 	cdef double prob, score, maxcombscore, contribution
 	cdef short start, spanlen
 	cdef object span, leftspan, rightspan, maxleft  # bitsets as Python ints
+	# FIXME: optimize datastructures
 	# table[start][spanlen][span][label] = prob
 	table = [[defaultdict(dict)
 				for _ in range(len(chart.sent) - n + 1)]
-			for n in range(len(chart.sent))]
+			for n in range(len(chart.sent) + 1)]
 	tree = None
 	# get marginal probabilities
-	for deriv, prob in derivations:
+	for deriv, prob in chart.derivations:
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
-			treestr = recoverfragments(deriv, chart, backtransform)
-		# rebinarize, collapse unaries, because we optimize only
-		# for constituents in the tree as it will be evaluated.
-		tree = addbitsets(
-				binarize(
-				collapseunary(unbinarize(
-					mergediscnodes(unbinarize(
-						Tree(treestr),
-						childchar=':', expandunary=False)),
-					expandunary=False),
-					joinchar='++'),
-					leftmostunary=True))
+			treestr = recoverfragments_str(deriv, chart, backtransform)
+		# Rebinarize because we optimize only for constituents in the tree as
+		# it will be evaluated. Collapse unaries because we only select the
+		# single best label in each cell.
+		tree = addbitsets(binarize(
+				collapseunary(
+					unbinarize(
+						mergediscnodes(unbinarize(
+							Tree(treestr),
+							childchar=':', expandunary=False)),
+						expandunary=False),
+					joinchar='+',
+					collapsepos=True,
+					collapseroot=True)))
 		sentprob += exp(-prob)
 		for t in tree.subtrees():
 			span = t.bitset
@@ -294,9 +316,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	cells = defaultdict(dict)  # cells[span] = (label, score, leftspan)
 	# select best derivation
 	for spanlen in range(1, len(chart.sent) + 1):
-		for start, _ in enumerate(table):
-			if len(table[start]) <= spanlen:
-				continue
+		for start in range(len(chart.sent) - spanlen + 1):
 			for span, tablecell in table[start][spanlen].items():
 				maxlabel, maxscore = NONCONSTLABEL, 0.0
 				if tablecell:
@@ -332,19 +352,19 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	try:
 		tmp = gettree(cells, tree.bitset)
 		result = unbinarize(Tree(tmp),
-				childchar='NONE', unarychar='++')
+				childchar='NONE', unarychar='+', expandunary=True)
 	except (ValueError, AttributeError):
-		return [], 'MCC failed. %s' % tmp
+		return [], 'MCP failed. %s' % tmp
 	else:
-		result.label = tree.label  # fix root label
 		return [(str(result), maxscore,
-				None)], 'sentprob: %g' % sentprob
+				None)], '%d derivations; sentprob: %g' % (
+				len(chart.derivations), sentprob)
 
 
 def gettree(cells, span):
 	"""Extract parse tree from most constituents correct table."""
 	if span not in cells:
-		raise ValueError('MCC: span not in cell: %r' % bin(span))
+		raise ValueError('MCP: span not in cell: %r' % bin(span))
 	label, unused_score, leftspan = cells[span]
 	if leftspan not in cells:
 		return '(%s %d)' % (label, pyintnextset(span, 0))
@@ -355,8 +375,8 @@ def gettree(cells, span):
 			gettree(cells, leftspan), gettree(cells, rightspan))
 
 
-cdef sldop(dict derivations, Chart chart, list sent, list tags,
-		int m, int sldop_n, list backtransform, entries, bint bitpar):
+cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n,
+		list backtransform):
 	"""'Proper' method for sl-dop.
 
 	Parses sentence once more to find shortest derivations, pruning away any
@@ -369,22 +389,22 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 
 	NB: doesn't seem to work so well, so may contain a subtle bug.
 		Does not support PCFG charts."""
+	cdef dict derivations = {}
 	cdef dict derivs = {}
+	cdef pair[RankedEdge, Prob] entry
+	cdef Chart chart2
+	cdef int n
 	# collect derivations for each parse tree
 	derivsfortree = defaultdict(set)
 	if backtransform is None:
+		derivations = dict(chart.derivations)
 		for deriv in derivations:
 			derivsfortree[REMOVEIDS.sub('', deriv)].add(deriv)
-	elif bitpar:
-		for deriv in derivations:
-			derivsfortree[recoverfragments(deriv, chart,
-					backtransform)].add(deriv)
 	else:
-		for entry in entries:
-			deriv = getderiv(chart.root(), (<DoubleEntry>entry).key, chart,
-					None)
-			derivations[deriv] = (<DoubleEntry>entry).value
-			derivsfortree[recoverfragments((<DoubleEntry>entry).key, chart,
+		for entry in chart.rankededges[chart.root()]:
+			deriv = <bytes>getderiv(chart.root(), entry.first, chart).decode('utf8')
+			derivations[deriv] = entry.second
+			derivsfortree[recoverfragments_re(entry.first, chart,
 					backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
 	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
@@ -392,27 +412,27 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
 
-	model = chart.grammar.modelnames[chart.grammar.currentmodel]
+	model = chart.grammar.currentmodel
 	chart.grammar.switch(u'shortest', logprob=True)
-	shortestderivations, unused_explored, chart2 = treeparsing(
+	shortestderivations, msg, chart2 = treeparsing(
 			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
-	if not chart2.rankededges.get(chart2.root()):
+	if not chart2:
 		return [], 'SL-DOP couldn\'t find parse for tree'
 	result = {}
-	for (deriv, s), entry in zip(shortestderivations,
-			chart2.rankededges[chart2.root()]):
+	for n, (deriv, s) in enumerate(shortestderivations):
+		entry = chart2.rankededges[chart2.root()][n]
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
-			treestr = recoverfragments(
-					deriv if bitpar else (<DoubleEntry>entry).key,
-					chart2, backtransform)
+			treestr = recoverfragments_re(entry.first, chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (-abs(int(s / log(0.5))), parsetreeprob[treestr])
-			derivs[treestr] = fragmentsinderiv(
-					deriv if bitpar or backtransform is None
-					else (<DoubleEntry>entry).key,
-					chart2, backtransform)
+			if backtransform is None:
+				derivs[treestr] = fragmentsinderiv_str(
+						deriv, chart2, backtransform)
+			else:
+				derivs[treestr] = fragmentsinderiv_re(
+						entry.first, chart2, backtransform)
 			if len(result) > sldop_n:
 				break
 	chart.grammar.switch(model, logprob=True)
@@ -423,8 +443,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	return [(tree, result[tree], derivs[tree]) for tree in result], msg
 
 
-cdef sldop_simple(dict derivations, list entries, int sldop_n,
-		Chart chart, list backtransform, bint bitpar):
+cdef sldop_simple(int sldop_n, Chart chart, list backtransform):
 	"""Simple sl-dop method.
 
 	Estimates shortest derivation directly from number of addressed nodes in
@@ -432,24 +451,25 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 	with the shortest derivation is returned. In other words, selects shortest
 	derivation among the list of available derivations, instead of finding the
 	shortest among all possible derivations using Viterbi."""
-	cdef DoubleEntry entry
+	cdef pair[RankedEdge, Prob] entry
+	cdef dict derivations = {}
 	cdef dict derivs = {}, keys = {}
+	cdef int n
 	derivsfortree = defaultdict(set)
 	# collect derivations for each parse tree
 	if backtransform is None:
+		derivations = dict(chart.derivations)
 		for deriv in derivations:
 			tree = REMOVEIDS.sub('', deriv)
 			derivsfortree[tree].add(deriv)
-	elif bitpar:
-		for deriv in derivations:
-			tree = recoverfragments(deriv, chart, backtransform)
-			derivsfortree[tree].add(deriv)
 	else:
-		for entry in entries:
-			deriv = getderiv(chart.root(), entry.key, chart, '}<')
-			tree = recoverfragments(entry.key, chart, backtransform)
-			keys[deriv] = entry.key
-			derivations[deriv] = entry.value
+		for n in range(<signed>chart.rankededges[chart.root()].size()):
+			entry = chart.rankededges[chart.root()][n]
+			deriv = <bytes>getderiv(chart.root(), entry.first, chart).decode('utf8')
+			deriv = str(unbinarize(Tree(deriv), childchar='}'))
+			tree = recoverfragments_re(entry.first, chart, backtransform)
+			keys[deriv] = n
+			derivations[deriv] = entry.second
 			derivsfortree[tree].add(deriv)
 
 	# sum over derivations to get parse trees
@@ -467,25 +487,29 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
-		derivs[tree] = fragmentsinderiv(
-				deriv if bitpar or backtransform is None else keys[deriv],
-				chart, backtransform)
+		if backtransform is None:
+			derivs[tree] = fragmentsinderiv_str(
+					deriv,
+					chart, backtransform)
+		else:
+			derivs[tree] = fragmentsinderiv_re(
+					chart.rankededges[chart.root()][keys[deriv]].first,
+					chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return [(tree, result[tree], derivs[tree]) for tree in result], msg
 
 
-cpdef str recoverfragments(deriv, Chart chart, list backtransform):
+cdef str recoverfragments_re(
+		RankedEdge deriv, Chart chart, list backtransform):
 	"""Reconstruct a DOP derivation from a derivation with flattened fragments.
 
-	:param deriv: a RankedEdge or a string representing a derivation.
+	:param deriv: a RankedEdge representing a derivation.
 	:param backtransform: a list with fragments (as string templates)
 		corresponding to grammar rules.
 	:returns: expanded derivation as a string.
 
-	The flattened fragments in the derivation should be left-binarized, expect
-	when ``deriv`` is a string in which case the derivation does not have to be
-	binarized.
+	The flattened fragments in the derivation should be left-binarized.
 
 	Does on-the-fly debinarization following labels that are not mapped to a
 	label in the coarse grammar, i.e., it assumes that neverblockre is only
@@ -493,20 +517,34 @@ cpdef str recoverfragments(deriv, Chart chart, list backtransform):
 	(containing the string '}<'). Note that this means getmapping() has to have
 	been called on `chart.grammar`, even when not doing coarse-to-fine
 	parsing."""
-	if isinstance(deriv, RankedEdge):
-		result = recoverfragments_(deriv, chart, backtransform)
-	elif isinstance(deriv, str):
-		deriv = Tree(deriv)
-		result = recoverfragments_str(deriv, chart, backtransform)
-	else:
-		raise ValueError('derivation has unexpected type %r.' % type(deriv))
+	result = recoverfragments_re_(deriv, chart, backtransform)
 	return REMOVEWORDTAGS.sub('', result)
 
 
-cdef str recoverfragments_(RankedEdge deriv, Chart chart,
+cpdef str recoverfragments_str(str deriv, Chart chart, list backtransform):
+	"""Reconstruct a DOP derivation from a derivation with flattened fragments.
+
+	:param deriv: a string representing a derivation.
+	:param backtransform: a list with fragments (as string templates)
+		corresponding to grammar rules.
+	:returns: expanded derivation as a string.
+
+	Does on-the-fly debinarization following labels that are not mapped to a
+	label in the coarse grammar, i.e., it assumes that neverblockre is only
+	used to avoid blocking nonterminals from the double-dop binarization
+	(containing the string '}<'). Note that this means getmapping() has to have
+	been called on `chart.grammar`, even when not doing coarse-to-fine
+	parsing."""
+	deriv1 = Tree(deriv)
+	result = recoverfragments_str_(deriv1, chart, backtransform)
+	return REMOVEWORDTAGS.sub('', result)
+
+
+cdef str recoverfragments_re_(RankedEdge deriv, Chart chart,
 		list backtransform):
-	cdef RankedEdge child
+	# cdef RankedEdge child
 	cdef list children = []
+	cdef vector[RankedEdge] rechildren
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
 	# NB: this is the only code that uses the .head field of RankedEdge
 
@@ -515,29 +553,29 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 		# keep going while left child is part of same binarized constituent
 		# instead of looking for a binarization marker in the label string, we
 		# use the fact that such labels do not have a mapping as proxy.
-		while chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
+		while chart.grammar.selfmapping[deriv.edge.rule.rhs1] == 0:
 			# one of the right children
-			children.append((<DoubleEntry>chart.rankededges[
-					chart.right(deriv)][deriv.right]).key)
+			rechildren.push_back(chart.rankededges[
+					chart.right(deriv)][deriv.right].first)
 			# move on to next node in this binarized constituent
-			deriv = (<DoubleEntry>chart.rankededges[
-					chart.left(deriv)][deriv.left]).key
+			deriv = chart.rankededges[
+					chart.left(deriv)][deriv.left].first
 		# last right child
 		if deriv.edge.rule.rhs2:  # is there a right child?
-			children.append((<DoubleEntry>chart.rankededges[
-					chart.right(deriv)][deriv.right]).key)
-	elif chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
-		deriv = (<DoubleEntry>chart.rankededges[
-				chart.left(deriv)][deriv.left]).key
+			rechildren.push_back(chart.rankededges[
+					chart.right(deriv)][deriv.right].first)
+	elif chart.grammar.selfmapping[deriv.edge.rule.rhs1] == 0:
+		deriv = chart.rankededges[
+				chart.left(deriv)][deriv.left].first
 	# left-most child
-	children.append((<DoubleEntry>chart.rankededges[
-			chart.left(deriv)][deriv.left]).key)
+	rechildren.push_back(chart.rankededges[
+			chart.left(deriv)][deriv.left].first)
 
 	# recursively expand all substitution sites
 	children = ['(%s %d)' % (chart.grammar.tolabel[chart.label(child.head)],
 			chart.lexidx(child.edge)) if child.edge.rule is NULL
-			else recoverfragments_(child, chart, backtransform)
-			for child in reversed(children)]
+			else recoverfragments_re_(child, chart, backtransform)
+			for child in rechildren][::-1]
 
 	# substitute results in template
 	return frag.format(*children)
@@ -559,10 +597,10 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 	# 	result += frag[n + 1]
 
 
-cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
+cdef str recoverfragments_str_(deriv, Chart chart, list backtransform):
 	cdef list children = []
 	cdef str frag
-	frag = backtransform[chart.grammar.rulenos[nodeprod(deriv)]]
+	frag = backtransform[chart.grammar.noderuleno(deriv)]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -581,7 +619,7 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	children.append(deriv[0])
 
 	# recursively expand all substitution sites
-	children = [recoverfragments_str(child, chart, backtransform)
+	children = [recoverfragments_str_(child, chart, backtransform)
 			if isinstance(child[0], Tree)
 			else ('(%s %d)' % (child.label, child[0]))
 			for child in reversed(children)]
@@ -590,69 +628,74 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	return frag.format(*children)
 
 
-def fragmentsinderiv(deriv, chart, list backtransform):
+cdef fragmentsinderiv_re(RankedEdge deriv, chart, list backtransform):
 	"""Extract the list of fragments that were used in a given derivation.
 
-	:returns: a list of fragments of the form ``(frag, sent)`` where frag is a
-		string and sent is a list of tokens; in ``sent``, ``None`` indicates a
-		frontier non-terminal, and a string indicates a token. """
+	:returns: a list of fragments in discbracket format."""
 	result = []
-	if isinstance(deriv, RankedEdge):
-		fragmentsinderiv_(deriv, chart, backtransform, result)
-	elif isinstance(deriv, str) and backtransform is None:
-		deriv = Tree(deriv)
-		result = [writediscbrackettree(
-				REMOVEIDS.sub('', str(splitfrag(node))),
-				chart.sent).rstrip()
-				for node in deriv.subtrees(frontiernt)]
-	elif isinstance(deriv, str):
-		deriv = Tree(deriv)
-		fragmentsinderiv_str(deriv, chart, backtransform, result)
-	else:
-		raise ValueError('deriv should be a RankedEdge or a string.')
+	fragmentsinderiv_re_(deriv, chart, backtransform, result)
 	return [_fragments.pygetsent(frag) for frag in result]
 
 
-cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
+def fragmentsinderiv_str(str deriv, chart, list backtransform):
+	"""Extract the list of fragments that were used in a given derivation.
+
+	:returns: a list of fragments in discbracket format."""
+	result = []
+	if backtransform is None:
+		deriv1 = Tree(deriv)
+		result = [writediscbrackettree(
+				REMOVEIDS.sub('', str(splitfrag(node))),
+				chart.sent).rstrip()
+				for node in deriv1.subtrees(frontiernt)]
+	else:
+		deriv1 = Tree(deriv)
+		fragmentsinderiv_str_(deriv1, chart, backtransform, result)
+	return [_fragments.pygetsent(frag) for frag in result]
+
+
+cdef fragmentsinderiv_re_(RankedEdge deriv, Chart chart,
 		list backtransform, list result):
 	cdef RankedEdge child
-	cdef list children = []
+	cdef vector[RankedEdge] rechildren
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
+	cdef int n
 
 	# collect all children w/on the fly left-factored debinarization
 	if deriv.edge.rule.rhs2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
 		# instead of looking for a binarization marker in the label string, we
 		# use the fact that such labels do not have a mapping as proxy.
-		while chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
+		while chart.grammar.selfmapping[deriv.edge.rule.rhs1] == 0:
 			# one of the right children
-			children.append((<DoubleEntry>chart.rankededges[
-					chart.right(deriv)][deriv.right]).key)
+			rechildren.push_back(chart.rankededges[
+					chart.right(deriv)][deriv.right].first)
 			# move on to next node in this binarized constituent
-			deriv = (<DoubleEntry>chart.rankededges[
-					chart.left(deriv)][deriv.left]).key
+			deriv = chart.rankededges[
+					chart.left(deriv)][deriv.left].first
 		# last right child
 		if deriv.edge.rule.rhs2:  # is there a right child?
-			children.append((<DoubleEntry>chart.rankededges[
-					chart.right(deriv)][deriv.right]).key)
-	elif chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
-		deriv = (<DoubleEntry>chart.rankededges[
-				chart.left(deriv)][deriv.left]).key
+			rechildren.push_back(chart.rankededges[
+					chart.right(deriv)][deriv.right].first)
+	elif chart.grammar.selfmapping[deriv.edge.rule.rhs1] == 0:
+		deriv = chart.rankededges[
+				chart.left(deriv)][deriv.left].first
 	# left-most child
-	children.append((<DoubleEntry>chart.rankededges[
-			chart.left(deriv)][deriv.left]).key)
+	rechildren.push_back(chart.rankededges[
+			chart.left(deriv)][deriv.left].first)
 
 	result.append(frag.format(*['(%s %s)' % (
-				chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
-				('%d=%s' % (chart.lexidx(deriv.edge),
-					chart.sent[chart.lexidx(deriv.edge)])
-					if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
-					else yieldranges(chart.indices(deriv.head))))
-				for deriv in reversed(children)]))
+				chart.grammar.tolabel[chart.label(child.head)].split('@')[0],
+				('%d=%s' % (chart.lexidx(child.edge),
+					chart.sent[chart.lexidx(child.edge)])
+					if '@' in chart.grammar.tolabel[chart.label(child.head)]
+					else yieldranges(chart.indices(child.head))))
+				for child in rechildren][::-1]))
 	# recursively visit all substitution sites
-	for child in reversed(children):
+	for n in range(rechildren.size() - 1, -1, -1):
+		child = rechildren[n]
 		if child.edge.rule is not NULL:
-			fragmentsinderiv_(child, chart, backtransform, result)
+			fragmentsinderiv_re_(child, chart, backtransform, result)
 		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
 			result.append('(%s %d=%s)' % (
 					chart.grammar.tolabel[chart.label(child.head)],
@@ -660,10 +703,11 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 					chart.sent[chart.lexidx(child.edge)]))
 
 
-cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
+cdef fragmentsinderiv_str_(
+		deriv, Chart chart, list backtransform, list result):
 	cdef list children = []
 	cdef str frag
-	frag = backtransform[chart.grammar.rulenos[nodeprod(deriv)]]
+	frag = backtransform[chart.grammar.noderuleno(deriv)]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -689,7 +733,7 @@ cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
-			fragmentsinderiv_str(child, chart, backtransform, result)
+			fragmentsinderiv_str_(child, chart, backtransform, result)
 		elif '@' not in child.label:
 			result.append('(%s %d=%s)' % (child.label, child[0],
 					chart.sent[child[0]]))
@@ -716,25 +760,34 @@ def splitfrag(node):
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
-		maskrules=False):
+		maskrules=True):
 	"""Assign probabilities to a sequence of trees with a DOP grammar.
 
 	Given a sequence of trees (as strings), parse them with a DOP grammar
 	to get parse tree probabilities; will consider multiple derivations.
 
 	:param maskrules: If True, prune any grammar rule not in the trees.
-		Exploits rulemapping of grammar which should be mapped to itself;
-		e.g., 'NP@2 => DT@3 NN' should be mapped to 'NP => DT NN' in the
-		same grammar. To remove the mask, issue ``grammar.setmask(None)``
-	"""
+		If DOP reduction is used, requires selfrulemapping of grammar which
+		should map to itself; e.g., 'NP@2 => DT@3 NN' should be mapped
+		to 'NP => DT NN' in the same grammar.
+	:returns: a tuple ``(derivations, msg, chart)``."""
 	# Parsing & pruning inside the disambiguation module is rather kludgy,
 	# but the problem is that we need to get probabilities of trees,
-	# not just of derivations. Therefore the coarse-to-fine methods
+	# not just of derivations. Therefore the regular coarse-to-fine methods
 	# do not apply directly.
+	cdef SmallChartItem item
 	cdef FatChartItem fitem
+	cdef Whitelist whitelist = Whitelist()
 	cdef int n, lensent = len(sent)
 	# cdef int selected = 0
-	whitelist = [set() for _ in grammar.toid]
+	if <unsigned>lensent < sizeof(uint64_t) * 8:
+		whitelist.small.resize(grammar.nonterminals)
+	else:
+		whitelist.fat.resize(grammar.nonterminals)
+	assert grammar.selfmapping is not NULL, ('treeparsing() requires '
+			'self mapping; call grammar.getmapping(None, ...)')
+	whitelist.mapping = grammar.selfmapping
+	whitelist.splitmapping = NULL
 	if maskrules:
 		grammar.setmask([])  # block all rules
 	for treestr in trees:
@@ -742,158 +795,73 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 		for node, (r, yf) in zip(tree.subtrees(),
 				lcfrsproductions(tree, sent)):
 			leaves = node.leaves()
-			if lensent < sizeof(uint64_t) * 8:
-				item = SmallChartItem(0, sum([1L << n for n in leaves]))
-			else:
-				fitem = item = FatChartItem(0)
-				for n in leaves:
-					SETBIT(fitem.vec, n)
 			try:
-				whitelist[grammar.toid[node.label]].add(item)
+				label = grammar.toid[node.label]
 			except KeyError:
 				return [], "'%s' not in grammar" % node.label, None
-
+			# whitelist based on (label, span)
+			if <unsigned>lensent < sizeof(uint64_t) * 8:
+				item = SmallChartItem(label, sum([1L << n for n in leaves]))
+				whitelist.small[label].insert(item)
+			else:
+				fitem = FatChartItem(label)
+				for n in leaves:
+					SETBIT(fitem.vec, n)
+				whitelist.fat[label].insert(fitem)
+			# whitelist based on grammar rule
 			if maskrules and isinstance(node[0], Tree):
 				try:
-					ruleno = grammar.rulenos[prodrepr(r, yf)]
+					ruleno = grammar.getruleno(r, yf)
 				except KeyError:
-					return [], "'%s' not in grammar" % prodrepr(r, yf), None
-				for n in grammar.rulemapping[ruleno]:
-					CLEARBIT(grammar.mask, n)
-					# if TESTBIT(grammar.mask, n):
-					# 	CLEARBIT(grammar.mask, n)
-					# 	selected += 1
-	# if maskrules:
-	# 	grammar = SubsetGrammar(grammar, selected)
+					return [], "not in grammar: %r %r" % (r, yf), None
+				if grammar.selfrulemapping is None:
+					CLEARBIT(grammar.mask, ruleno)
+				else:
+					for n in grammar.selfrulemapping[ruleno]:
+						CLEARBIT(grammar.mask, n)
+						# if TESTBIT(grammar.mask, n):
+						# 	CLEARBIT(grammar.mask, n)
+						# 	selected += 1
 
-	# Project labels to all possible labels that generate that label. For DOP
-	# reduction, all possible ids; for Double DOP, ignore artificial labels.
-	for label, n in grammar.toid.items():
-		if backtransform is None:
-			whitelist[n] = whitelist[grammar.toid[REMOVEIDS.sub('', label)]]
-		elif '@' in label or '}<' in label:
-			whitelist[n] = None  # do not prune item
-
-	# finally, we parse with the small set of allowed labeled spans.
-	# we do not parse with the PCFG parser even if possible, because that
+	# Finally, parse with the small set of allowed labeled spans & rules.
+	# Do not parse with the PCFG parser even if possible, because that
 	# requires a different way of pruning.
+	# FIXME: two pruning mechanisms; want both?
 	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist)
+	if maskrules:
+		grammar.setmask(None)
 
 	if not chart:
-		return [], 'tree parsing failed', None
-	return lazykbest(chart, m) + (chart, )
+		return [], 'tree parsing failed', chart
+	return lazykbest(chart, m), '', chart
 
 
-cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
+cdef Prob getderivprob(RankedEdge deriv, Chart chart, list sent):
 	"""Recursively calculate probability of a derivation.
 
 	Useful to obtain probability of derivation under different probability
 	model of the same grammar."""
-	cdef double result
+	cdef Prob result
 	if deriv.edge.rule is NULL:  # is terminal
 		label = chart.label(deriv.head)
 		word = sent[chart.lexidx(deriv.edge)]
-		return (<LexicalRule>chart.grammar.lexicalbylhs[label][word]).prob
+		return chart.grammar.lexical[
+				chart.grammar.lexicalbylhs[label][word.encode('utf8')]].prob
 	result = deriv.edge.rule.prob
-	result += getderivprob((<DoubleEntry>chart.rankededges[
-			chart.left(deriv)][deriv.left]).key,
+	result += getderivprob(chart.rankededges[
+			chart.left(deriv)][deriv.left].first,
 			chart, sent)
 	if deriv.edge.rule.rhs2:
-		result += getderivprob((<DoubleEntry>chart.rankededges[
-				chart.right(deriv)][deriv.right]).key,
+		result += getderivprob(chart.rankededges[
+				chart.right(deriv)][deriv.right].first,
 				chart, sent)
 	return result
 
 cpdef viterbiderivation(Chart chart):
 	"""Wrapper to get Viterbi derivation from chart."""
 	# Ask for at least 10 derivations because unary cycles.
-	derivations = lazykbest(chart, 10)[0]
+	derivations = lazykbest(chart, 10)
 	return derivations[0]
-
-
-def getsamples(Chart chart, k, debin=None):
-	"""Samples *k* derivations from a chart."""
-	cdef dict tables = {}
-	cdef Edge *edge
-	cdef Edges edges
-	cdef MoreEdges *edgelist
-	cdef double prob, prev
-	cdef size_t n
-	chartidx = {}
-	for item in chart.getitems():
-		chartidx[item] = []
-		edges = chart.getedges(item)
-		edgelist = edges.head if edges is not None else NULL
-		while edgelist is not NULL:
-			for n in range(edges.len if edgelist is edges.head
-					else EDGES_SIZE):
-				edge = &(edgelist.data[n])
-				# HACK: store pointer to edge as Python int
-				if edge.rule is NULL:
-					chartidx[item].append(
-							(chart.subtreeprob(item), <intptr_t>edge))
-				else:
-					prob = edge.rule.prob
-					# FIXME: work w/inside prob?
-					# prob += chart.subtreeprob(chart._left(item, edge))
-					# if edge.rule.rhs2:
-					# 	prob += chart.subtreeprob(chart._right(item, edge))
-					chartidx[item].append((prob, <intptr_t>edge))
-			edgelist = edgelist.prev
-		# sort edges so that highest prob (=lowest neglogprob) comes first
-		chartidx[item].sort()
-	for item in chartidx:
-		tables[item] = []
-		prev = 0.0
-		for prob, _ in chartidx[item]:
-			prev += exp(-prob)
-			tables[item].append(prev)
-	result = []
-	for _ in range(k):
-		result.append(samplechart(
-				chart.root(), chart, chartidx, tables, debin))
-	return result
-
-
-cdef samplechart(item, Chart chart,
-		dict chartidx, dict tables, str debin):
-	"""Samples a derivation from a chart."""
-	cdef Edge *edge
-	cdef RankedEdge rankededge
-	cdef double prob
-	cdef list lst = tables[item]
-	rnd = random() * lst[len(lst) - 1]
-	idx = bisect_right(lst, rnd)
-	_, ptr = chartidx[item][idx]
-	edge = <Edge *><intptr_t>ptr  # hack: convert Python int into pointer
-	label = chart.label(item)
-	if edge.rule is NULL:  # terminal
-		idx = chart.lexidx(edge)
-		rankededge = new_RankedEdge(item, edge, -1, -1)
-		chart.rankededges.setdefault(item, []).append(
-				new_DoubleEntry(rankededge, chart.subtreeprob(item), 0))
-		deriv = '(%s %d)' % (chart.grammar.tolabel[label], idx)
-		return deriv, chart.subtreeprob(item)
-	tree, p1 = samplechart(chart.copy(chart._left(item, edge)),
-			chart, chartidx, tables, debin)
-	prob = edge.rule.prob + p1
-	if edge.rule.rhs2:
-		tree2, p2 = samplechart(chart.copy(chart._right(item, edge)),
-					chart, chartidx, tables, debin)
-		tree += ' ' + tree2
-		prob += p2
-	if debin is None or debin not in chart.grammar.tolabel[label]:
-		tree = '(%s %s)' % (chart.grammar.tolabel[label], tree)
-	# create an edge that has as children the edges that were just created
-	# by our recursive calls
-	rankededge = new_RankedEdge(item, edge,
-			len(chart.rankededges[chart._left(item, edge)]) - 1,
-			(len(chart.rankededges[chart._right(item, edge)]) - 1)
-				if edge.rule.rhs2 else -1)
-	# NB: this is actually 'samplededges', not 'rankededges'
-	chart.rankededges.setdefault(item, []).append(
-			new_DoubleEntry(rankededge, prob, 0))
-	return tree, prob
 
 
 def doprerank(parsetrees, sent, k, Grammar coarse, Grammar fine):
@@ -949,10 +917,13 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	for n, pos in tree.pos():
 		word = sent[n]
 		chart[1 << n] = cell = {}
-		if word not in fine.lexicalbyword:
+		it = fine.lexicalbyword.find(word.encode('utf8'))
+		if it == fine.lexicalbyword.end():
 			cell[fine.toid[pos]] = -0.0
 			continue
-		for lexrule in fine.lexicalbyword[word]:
+		# for lexruleno in fine.lexicalbyword[word]:
+		for lexruleno in dereference(it).second:
+			lexrule = fine.lexical[lexruleno]
 			if (fine.tolabel[lexrule.lhs] == pos
 					or fine.tolabel[lexrule.lhs].startswith(pos + '@')):
 				cell[lexrule.lhs] = -lexrule.prob
@@ -965,10 +936,10 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 		if node.bitset not in chart:
 			chart[node.bitset] = {}
 		cell = chart[node.bitset]
-		prod = coarse.rulenos[prodrepr(r, yf)]
+		prod = coarse.getruleno(r, yf)
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
-				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
+				rule = &(fine.bylhs[0][fine.revrulemap[ruleno]])
 				if rule.rhs1 in cell:
 					if rule.lhs in cell:
 						cell[rule.lhs] = logprobadd(cell[rule.lhs],
@@ -979,7 +950,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 			leftcell = chart[node[0].bitset]
 			rightcell = chart[node[1].bitset]
 			for ruleno in fine.rulemapping[prod]:
-				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
+				rule = &(fine.bylhs[0][fine.revrulemap[ruleno]])
 				if (rule.rhs1 in leftcell and rule.rhs2 in rightcell):
 					newprob = (-rule.prob
 							+ leftcell[rule.rhs1] + rightcell[rule.rhs2])
@@ -1009,7 +980,7 @@ def mcrerank(parsetrees, sent, k, trees, vocab):
 				tmp['trees1'], trees, list(frags.values()), indices=True)
 		score = 0
 		rev = defaultdict(set)
-		for n, (frag, idx) in enumerate(zip(frags, indices)):
+		for frag, idx in zip(frags, indices):
 			# from: frag => (tree idx, freq)...
 			# to: tree idx => frags...
 			for i in idx:
@@ -1029,22 +1000,72 @@ def mcrerank(parsetrees, sent, k, trees, vocab):
 	return results, msg
 
 
-cdef str prodrepr(r, yf):
-	"""Produce string repr as in ``Grammar.rulenos[]`` for a rule.
+def ostagderivation(derivtreestr, sent):
+	"""Extract the list of fragments that were used in a given derivation.
 
-	>>> prodrepr((('X', 'A', '', 'C', 'D'), ((0, 1, 2, 3), )))
-	'0123 X A B C D'"""
-	yf = ','.join([''.join(map(str, component)) for component in yf])
-	return ' '.join([yf, ' '.join(r)])
+	:returns: a list of fragments of the form ``(tree, sent)``"""
+	derivtree = ParentedTree(derivtreestr)
+	# tmp = [REMOVEDEC.sub('', str(splitostagfrag(node, sent)))
+	try:
+		tmp = [str(splitostagfrag(node, sent))
+				for node in derivtree.subtrees(ostagfrontiernt)]
+		return [_fragments.pygetsent(frag) for frag in tmp]
+	except:
+		return []
 
 
-cdef str nodeprod(deriv):
-	"""Produce string repr as in ``Grammar.rulenos[]`` of a non-disc. Tree.
+def ostagfrontiernt(node):
+	"""Test if osTAG derivation node is a substitution/adjunction site."""
+	return ('@' not in node.label
+			or '[' in node.label and '[' not in node.parent.label)
 
-	>>> nodeprod(Tree('(X (A 0) (B 1) (C 2) (D 3))'))
-	'0123 X A B C D'"""
-	return ('%s %s %s' % (''.join(map(str, range(len(deriv)))),
-			deriv.label, ' '.join([a.label for a in deriv])))
+
+def splitostagfrag(node, sent):
+	"""Return copy of tree after pruning subtrees that are subst/adj sites."""
+	children = []
+	# FIXME: hopefully this can be simplified...
+	for child in node:
+		if not isinstance(child, Tree):
+			children.append('%d=%s' % (child, sent[child]))
+		elif '@' not in child.label or (
+				'[' not in child.label and '[' in node.label
+				and node.label.endswith(child.label + ']')):
+			# this is a substitution site, or a foot node:
+			children.append(Tree(child.label,
+					['%d:%d' % (min(child.leaves()), max(child.leaves()))]))
+		elif '[' in child.label and '[' not in node.label:
+			# this is an adjunction site, skip aux tree until foot node:
+			while '[' in child.label:
+				if (spinal(child[0])
+						or child.label.endswith(child[0].label + ']')):
+					child = child[0]
+				else:
+					child = child[1]
+			if '@' in child.label:  # add rest of initial tree
+				children.extend(
+						['%d=%s' % (child[0], sent[child[0]])]
+						if isinstance(child[0], int)
+						else splitostagfrag(child, sent))
+			else:  # this is a substitution site
+				children.append(
+						'%d:%d' % (min(child.leaves()), max(child.leaves())))
+		else:
+			children.append(
+					ParentedTree(child.label,
+						['%d=%s' % (child[0], sent[child[0]])])
+					if isinstance(child[0], int)
+					else splitostagfrag(child, sent))
+	return Tree(node.label, children)
+
+
+def removeadjunaries(tree):
+	"""Remove artificial unary adjunction nodes from osTAG derivation."""
+	tree = Tree(tree)
+	for node in tree.subtrees(lambda n: '[' not in n.label
+			and isinstance(n[0], Tree) and '[' in n[0].label):
+		node.label = node[0].label
+		node[:] = node[0]
+	return str(tree)
 
 
 def test():
@@ -1068,32 +1089,30 @@ def test():
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
 		a d e'''.splitlines()]
 	xgrammar, altweights = dopreduction(trees, sents)
-	grammar = Grammar(xgrammar)
-	grammar.register(u'shortest', altweights['shortest'])
+	grammar = Grammar(xgrammar, altweights=altweights)
+	grammar.getmapping(None, striplabelre=REMOVEIDS)
 	print(grammar)
 	sent = 'a b c'.split()
 	chart, _ = plcfrs.parse(sent, grammar, None, True)
 	assert chart
 	vitderiv, vitprob = viterbiderivation(chart)
-	derivations, entries = getderivations(chart, 1000, True, False, True)
-	mpd, _ = marginalize('mpd', derivations, entries, chart)
-	mpp, _ = marginalize('mpp', derivations, entries, chart)
-	mcc, _ = marginalize('mcc', derivations, entries, chart)
-	sldop_, _ = marginalize('sl-dop', derivations, entries, chart, k=1000,
+	getderivations(chart, 1000, derivstrings=True)
+	mpd, _ = marginalize('mpd', chart)
+	mpp, _ = marginalize('mpp', chart)
+	mcp, _ = marginalize('mcp', chart)
+	sldop_, _ = marginalize('sl-dop', chart, k=1000,
 			sldop_n=7, sent=sent)
-	sldopsimple, _ = marginalize('sl-dop-simple', derivations, entries,
+	sldopsimple, _ = marginalize('sl-dop-simple',
 			chart, k=1000, sldop_n=7, sent=sent)
-	short, _ = marginalize('shortest', derivations, entries, chart, sent=sent)
-	derivations, entries = getderivations(chart, 1000, False, True, True)
-	mppsampled, _ = marginalize('mpp', derivations, entries, chart)
+	short, _ = marginalize('shortest', chart, sent=sent)
 	print('\nvit:\t\t%s %r' % (REMOVEIDS.sub('', vitderiv),
 			exp(-vitprob)),
-		'MPD:\t\t%s %r' % e(mpd), 'MCC:\t\t%s %r' % e(mcc),
-		'MPP:\t\t%s %r' % e(mpp), 'MPP sampled:\t%s %r' % e(mppsampled),
+		'MPD:\t\t%s %r' % e(mpd), 'MCP:\t\t%s %r' % e(mcp),
+		'MPP:\t\t%s %r' % e(mpp),
 		'SL-DOP n=7:\t%s %r' % e(sldop_),
 		'simple SL-DOP:\t%s %r' % e(sldopsimple),
 		'shortest:\t%s %r' % e(short), sep='\n')
 
-__all__ = ['getderivations', 'marginalize', 'gettree', 'recoverfragments',
-		'fragmentsinderiv', 'treeparsing', 'viterbiderivation', 'getsamples',
+__all__ = ['getderivations', 'marginalize', 'gettree', 'recoverfragments_str',
+		'fragmentsinderiv_str', 'treeparsing', 'viterbiderivation',
 		'doprerank', 'dopparseprob', 'frontiernt', 'splitfrag']

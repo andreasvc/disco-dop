@@ -5,18 +5,15 @@ all: discodop
 clean:
 	rm -rf build/
 	find discodop -name '*.c' -delete
+	find discodop -name '*.cpp' -delete
 	find discodop -name '*.so' -delete
 	find discodop -name '*.pyc' -delete
 	find discodop -name '*.html' -delete
-	rm -rf discodop/__pycache__
+	rm -rf */__pycache__
 	cd docs && make clean
 
 discodop:
 	python3 setup.py install --user
-	cp build/lib.*/discodop/*.so discodop/
-
-py2:
-	python2 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
 
 docs:
@@ -34,10 +31,6 @@ debug:
 
 debug35:
 	python3.5-dbg setup.py install --user --debug
-	cp build/lib.*/discodop/*.so discodop/
-
-debug2:
-	python2-dbg setup.py install --user --debug
 	cp build/lib.*/discodop/*.so discodop/
 
 debugvalgrind: debug35
@@ -58,11 +51,6 @@ test: discodop
 	&& python3 -bb -tt tests.py \
 	&& cd tests/ && sh run.sh
 
-test2: py2
-	python2 `which py.test` --doctest-modules discodop/ tests/unittests.py \
-	&& PYTHONIOENCODING=utf-8 PYTHONHASHSEED=42 python2 -bb -tt -3 tests.py \
-	&& cd tests/ && sh run.sh
-
 # pylint: R=refactor, C0103 == Invalid name
 # pep8: W503 line break before binary operator; E402 module level import not at top of file
 lint: discodop
@@ -70,19 +58,12 @@ lint: discodop
 	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}' | sort -n
 	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^].\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
-	pep8 --ignore=E1,W1,E402,W503, \
+	pep8 --ignore=E1,W1,E402,W503 \
 		discodop/*.py web/*.py tests/*.py \
-	&& pep8 --ignore=F,W1,W503,E1,E211,E225,E227,E402,E901 \
+	&& pep8 --ignore=F,W1,W503,E1,E211,E225,E226,E227,E402,E901 \
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
 	&& python3 `which pylint` --indent-string='\t' --max-line-length=80 \
-		--disable=I,R,bad-continuation,invalid-name,star-args,wrong-import-position,wrong-import-order,ungrouped-imports \
-		--enable=cyclic-import \
-		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus,numpy,roaringbitmap \
-		discodop/*.py web/*.py tests/*.py
-
-lint2: py2
-	python2 `which pylint` --indent-string='\t' --max-line-length=80 \
-		--disable=I,R,bad-continuation,invalid-name,star-args,wrong-import-position,wrong-import-order,ungrouped-imports \
+		--disable=I,R,bad-continuation,invalid-name,star-args,wrong-import-position,wrong-import-order,ungrouped-imports,superfluous-parens \
 		--enable=cyclic-import \
 		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus,numpy,roaringbitmap \
 		discodop/*.py web/*.py tests/*.py

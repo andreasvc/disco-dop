@@ -122,25 +122,25 @@ function ajaxFunction() {
 			// collapse toggle-able items from here so that non-JS browsers
 			// may view the contents
 			if(id) {
-				togglelink('n' + id[1]);
-				togglelink('f' + id[1]);
-				togglelink('i' + id[1]);
+				toggle('n' + id[1]);
+				toggle('i' + id[1]);
+				toggle('d' + id[1]);
 			}
 			// scroll to bottom of page
 			window.scrollTo(0, document.body.scrollHeight);
 		}
 	};
-	var coarse = document.queryform.coarse;
 	var objfun = document.queryform.objfun;
-	var marg = document.queryform.marg;
 	var est = document.queryform.est;
+	// var coarse = document.queryform.coarse;
+	// var marg = document.queryform.marg;
 	var lang = document.queryform.lang;
 	url = "parse?html=1&sent=" + encodeURIComponent(document.queryform.sent.value)
-			+ "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
-			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
-			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			+ "&lang=" + encodeURIComponent(lang.options[lang.selectedIndex].value)
+			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
 			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
+			// + "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
+			// + "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			;
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
@@ -200,4 +200,26 @@ function mergecheckboxes() {
 		elem = document.getElementsByName(name);
 		if (!elem.value) elem.disabled = true;
 	}
+}
+
+function highlightdep(id) {
+	['word', 'tag', 'dependency', 'edge', 'arrow'].forEach(function(a) {
+		var elements = document.getElementsByClassName(a);
+		for (var i in elements) {
+			elements[i].style = '';
+		}
+	});
+	var elements = document.getElementsByClassName(id);
+	for (var i in elements) {
+		elements[i].style = 'stroke: black !important; ';
+	}
+}
+
+function nohighlightdep() {
+	['word', 'tag', 'dependency', 'edge', 'arrow'].forEach(function(a) {
+		var elements = document.getElementsByClassName(a);
+		for (var i in elements) {
+			elements[i].style = '';
+		}
+	});
 }

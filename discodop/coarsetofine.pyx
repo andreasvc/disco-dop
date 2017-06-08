@@ -1,24 +1,35 @@
-"""Project selected items from a chart to corresponding items in next grammar.
-"""
+"""Select suitably probable items from a chart and produce whitelist."""
 from __future__ import print_function
-from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libcpp.vector cimport vector
+from libcpp.utility cimport pair
+from libcpp.algorithm cimport sort
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
-from .containers cimport Grammar, Chart, ChartItem, Edge, Edges, MoreEdges, \
-		LexicalRule, RankedEdge, cellidx, compactcellidx, \
-		CFGtoSmallChartItem, CFGtoFatChartItem
+from .containers cimport Grammar, Chart, Edge, RankedEdge, LexicalRule, \
+		Label, ItemNo, compactcellidx, CFGtoSmallChartItem, \
+		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist
+from .bit cimport nextset, nextunset, anextset, anextunset
+from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart, CFGItem
+from .plcfrs cimport SmallLCFRSChart, FatLCFRSChart
 from .kbest import lazykbest
 import numpy as np
 
 include "constants.pxi"
 
-# alternative: take coarse chart, return fine chart w/whitelist.
+ctypedef fused ChartItem_fused:
+	SmallChartItem
+	FatChartItem
+	size_t
+
+# alternative: take coarse chart, return fine chart prepopulated with items
+# from whitelist. However, this may involve unnecessary work on labels of fine
+# chart that will not be used.
 # cpdef Chart prunechart(coarsechart, Grammar fine, int k,
-# 		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
+# 		bint splitprune, bint markorigin, bint finecfg):
 
 
 def prunechart(Chart coarsechart, Grammar fine, k,
-		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
+		bint splitprune, bint markorigin, bint finecfg):
 	"""Produce a white list of selected chart items.
 
 	The criterion is that they occur in the `k`-best derivations of ``chart``,
@@ -26,8 +37,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	projected to the labels in the mapping of the fine grammar, e.g., to ``X``
 	and ``X@n-m`` for a DOP reduction.
 
-	:param coarsechart: a Chart object produced by the PCFG or PLCFRS parser,
-		or derivations from bitpar.
+	:param coarsechart: a Chart object produced by the PCFG or PLCFRS parser.
 	:param fine: the grammar to map labels to after pruning. must have a
 		mapping to the coarse grammar established by ``fine.getmapping()``.
 	:param k: when ``k >= 1``: number of `k`-best derivations to consider;
@@ -42,133 +52,104 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	:param markorigin: in combination with splitprune, coarse labels include an
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2.
-	:param bitpar: prune from bitpar derivations instead of actual chart
-	:returns: ``(whitelist, items, msg)``
+	:returns: ``(whitelist, msg)``
 
 	For LCFRS, the white list is indexed as follows:
-			:whitelisted: ``whitelist[label][item] == None``
-			:blocked: ``item not in whitelist[label]``
+		:whitelisted: ``item in whitelist[label]``, ``item`` is a
+			SmallChartItem or FatChartItem depending on sent. len.
+		:blocked: ``item not in whitelist[label]``
 
 	For a CFG, indexing is as follows:
-		:whitelisted: ``whitelist[span][label] == None``
-		:blocked: ``label not in whitelist[cell]``
+		:whitelisted: ``label in whitelist[span]``,
+			``span`` is an integer encoding both begin and end;
+			different from a cell because does not include no. of nonterminals.
+		:blocked: ``label not in whitelist[span]``
 	"""
-	cdef set items
-	cdef list whitelist
-	cdef ChartItem chartitem
-	if fine.mapping is NULL:
+	cdef Whitelist whitelist = Whitelist()
+	cdef vector[ItemNo] items
+	cdef SmallChartItem sitem
+	cdef FatChartItem fitem
+	cdef Label label
+	cdef ItemNo item
+	cdef size_t span
+	if (fine.mapping is NULL or (splitprune and markorigin
+			and (fine.splitmapping is NULL or fine.splitmapping[0] is NULL))):
 		raise ValueError('need to call fine.getmapping(coarse, ...).')
-	if splitprune and markorigin:
-		if fine.splitmapping is NULL or fine.splitmapping[0] is NULL:
-			raise ValueError('need to call fine.getmapping(coarse, ...).')
 	# prune coarse chart and collect items
 	if 0 < k < 1:  # threshold on posterior probabilities
 		items, msg = posteriorthreshold(coarsechart, k)
 	else:  # construct a list of the k-best nonterminals to prune with
-		if bitpar:
-			items = bitparkbestitems(coarsechart, k, finecfg)
-		elif k == 0:
+		if k == 0:
 			coarsechart.filter()
-			items = set(coarsechart.getitems())
+			items = [n for n in range(coarsechart.parseforest.size())
+					if coarsechart.parseforest[n].size() != 0]
+			msg = ('coarse items before pruning: %d; after filter: %d'
+					% (coarsechart.parseforest.size(), len(items)))
 		else:
-			_ = lazykbest(coarsechart, k, derivs=False)
-			items = set(coarsechart.rankededges)
-		msg = ('coarse items before pruning: %d; after: %d, '
-				'based on %d/%d derivations' % (
-				len(coarsechart.getitems()), len(items),
-				len(coarsechart.rankededges[coarsechart.root()][:k]), k))
-	# project items to fine grammar
-	if finecfg:
-		cfgwhitelist = [set() for _ in range(compactcellidx(
+			lazykbest(coarsechart, k, derivs=False)
+			items = [n for n in range(coarsechart.rankededges.size())
+					if coarsechart.rankededges[n].size() != 0]
+			msg = ('coarse items before pruning: %d; after: %d, '
+					'based on %d/%d derivations' % (
+					coarsechart.parseforest.size(), len(items),
+					min(coarsechart.rankededges[coarsechart.root()].size(),
+					k), k))
+	if finecfg:  # index items by cell
+		whitelist.cfg.clear()
+		whitelist.cfg.resize(compactcellidx(
 				coarsechart.lensent - 1, coarsechart.lensent,
-				coarsechart.lensent, 1) + 1)]
+				coarsechart.lensent, 1) + 1)
 		for item in items:
+			span = coarsechart.asCFGspan(item)
 			label = coarsechart.label(item)
-			finespan = coarsechart.asCFGspan(item, fine.nonterminals)
-			for finelabel in range(1, fine.nonterminals):
-				if (fine.mapping[finelabel] == 0
-						or fine.mapping[finelabel] == label):
-					cfgwhitelist[finespan].add(finelabel)
-		return cfgwhitelist, None, msg
-	else:
-		whitelist = [None] * fine.nonterminals
-		kbestspans = [set() for _ in coarsechart.grammar.toid]
-		kbestspans[0] = None
-		# uses ids of labels in coarse chart
-		for item in items:
-			# we can use coarsechart here because we only use the item to
-			# define a span, which is the same for the fine chart.
-			chartitem = coarsechart.asChartItem(item)
-			label = chartitem.label
-			chartitem.label = 0
-			kbestspans[label].add(chartitem)
-		# now construct a list which references these coarse items:
-		for label in range(fine.nonterminals):
-			if splitprune and markorigin and fine.fanout[label] != 1:
-				if fine.splitmapping[label] is not NULL:
-					whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-							for n in range(fine.fanout[label])]
-			else:
-				if fine.mapping[label] != 0:
-					whitelist[label] = kbestspans[fine.mapping[label]]
-		return whitelist, items, msg
-
-
-def bitparkbestitems(Chart chart, int k, bint finecfg):
-	"""Produce ChartItems occurring in a dictionary of derivations.
-
-	:param chart: a chart where rankededges is a dictionary of CFG derivations.
-	:returns: a dictionary of ChartItems (mapping to None) occurring in the
-		derivations."""
-	cdef bint fatitems = chart.lensent >= (sizeof(uint64_t) * 8)
-	cdef list derivs = chart.rankededges[chart.root()]
-	cdef set items = set()
-	for deriv, _ in derivs[:k]:
-		t = Tree(deriv)
-		for n in t.subtrees():
-			label = chart.grammar.toid[n.label]
-			leaves = n.leaves()
-			start = min(leaves)
-			end = max(leaves) + 1
-			if finecfg:
-				# create a cellidx to the coarse chart here,
-				# only to convert it to a cellidx for the fine chart later...
-				item = cellidx(start, end, chart.lensent,
-						chart.grammar.nonterminals) + label
-			elif fatitems:
-				item = CFGtoFatChartItem(label, start, end)
-			else:
-				item = CFGtoSmallChartItem(label, start, end)
-			items.add(item)
-	return items
+			whitelist.cfg[span].insert(label)
+		# for span in range(whitelist.cfg.size()):
+		# 	sort(whitelist.cfg[span].begin(), whitelist.cfg[span].end())
+	else:  # index items by label
+		if <unsigned>coarsechart.lensent >= sizeof(sitem.vec) * 8:
+			whitelist.fat.clear()
+			whitelist.fat.resize(coarsechart.grammar.nonterminals)
+			for item in items:
+				label = coarsechart.label(item)
+				fitem = coarsechart.asFatChartItem(item)
+				whitelist.fat[label].insert(fitem)
+		else:
+			whitelist.small.clear()
+			whitelist.small.resize(coarsechart.grammar.nonterminals)
+			for item in items:
+				label = coarsechart.label(item)
+				sitem = coarsechart.asSmallChartItem(item)
+				whitelist.small[label].insert(sitem)
+	whitelist.mapping = fine.mapping
+	whitelist.splitmapping = fine.splitmapping
+	return whitelist, msg
 
 
 def posteriorthreshold(Chart chart, double threshold):
 	"""Prune labeled spans from chart below given posterior threshold.
 
 	:returns: dictionary of remaining items."""
+	cdef ItemNo itemidx
 	if not 0 < threshold < 1:
-		raise ValueError('probability threshold should be between 0 and 1.')
-	if not chart.itemsinorder:
-		raise ValueError('need list of chart items in topological order.')
-	origlogprob = chart.grammar.logprob
-	chart.grammar.switch(
-			chart.grammar.modelnames[chart.grammar.currentmodel],
-			logprob=False)
-	getinside(chart)
-	getoutside(chart)
-	chart.grammar.switch(
-			chart.grammar.modelnames[chart.grammar.currentmodel],
-			logprob=origlogprob)
+		raise ValueError('expected posterior threshold k with 0 < k < 1.')
+	if not chart.inside.size():
+		origlogprob = chart.grammar.logprob
+		chart.grammar.switch(chart.grammar.currentmodel, logprob=False)
+		getinside(chart)
+		getoutside(chart)
+		chart.grammar.switch(chart.grammar.currentmodel, logprob=origlogprob)
 	sentprob = chart.inside[chart.root()]
 	threshold *= sentprob
 	if not sentprob:
 		raise ValueError('sentence has zero posterior prob.: %g' % sentprob)
-	posterior = {item for item in chart.getitems()
-			if chart.inside[item] * chart.outside[item] > threshold}
+	posterior = [itemidx for itemidx
+			in range(chart.inside.size())
+			if chart.inside[itemidx] * chart.outside[itemidx] > threshold]
 
-	unfiltered = len(chart.getitems())
-	numitems = len(chart.outside)
+	unfiltered = chart.numitems() - 1
+	numitems = 0
+	for itemidx in range(1, chart.numitems()):
+		numitems += chart.outside[itemidx] != 0.0
 	numremain = len(posterior)
 	msg = ('coarse items before pruning=%d; filtered: %d;'
 			' pruned: %d; sentprob=%g' % (
@@ -178,10 +159,6 @@ def posteriorthreshold(Chart chart, double threshold):
 
 def getinside(Chart chart):
 	"""Compute inside probabilities for a chart given its parse forest."""
-	cdef size_t n
-	cdef Edge *edge
-	cdef Edges edges
-	cdef MoreEdges *edgelist
 	# this needs to be bottom up, so need order in which items were added
 	# currently separate list, chart.itemsinorder
 	# NB: sorting items by length is not enough,
@@ -191,78 +168,60 @@ def getinside(Chart chart):
 	# - normal => underflow (current)
 	# - logprobs => loss of precision w/addition
 	# - normal, scaled => how?
-
-	# packing parse forest:
-	# revitems = {item: n for n, item in enumerate(self.itemsinorder)}
-	# now self.inside[n] and self.outside[n] can be double arrays.
-	chart.inside = dict.fromkeys(chart.getitems(), 0.0)
+	cdef ItemNo n, item, leftitem, rightitem
+	cdef Edge edge
+	chart.inside.resize(chart.probs.size(), 0.0)
 
 	# traverse items in bottom-up order
-	for item in chart.itemsinorder:
-		edges = chart.getedges(item)
-		edgelist = edges.head if edges is not None else NULL
-		while edgelist is not NULL:
-			for n in range(edges.len if edgelist is edges.head
-					else EDGES_SIZE):
-				edge = &(edgelist.data[n])
-				if edge.rule is NULL:
-					label = chart.label(item)
-					word = chart.sent[chart.lexidx(edge)]
-					prob = (<LexicalRule>chart.grammar.lexicalbylhs[
-							label].get(word, 1.0)).prob
-				elif edge.rule.rhs2 == 0:
-					leftitem = chart._left(item, edge)
-					prob = (edge.rule.prob
-							* chart.inside[leftitem])
-				else:
-					leftitem = chart._left(item, edge)
-					rightitem = chart._right(item, edge)
-					prob = (edge.rule.prob
-							* chart.inside[leftitem]
-							* chart.inside[rightitem])
-				# chart.addprob(item, prob)
-				chart.inside[item] += prob
-			edgelist = edgelist.prev
+	for n in range(1, chart.numitems()):
+		item = chart.getitemidx(n)
+		for edge in chart.parseforest[item]:
+			if edge.rule is NULL:
+				prob = chart.lexprob(item, edge)
+			elif edge.rule.rhs2 == 0:
+				leftitem = chart._left(item, edge)
+				prob = (edge.rule.prob
+						* chart.inside[leftitem])
+			else:
+				leftitem = chart._left(item, edge)
+				rightitem = chart._right(item, edge)
+				prob = (edge.rule.prob
+						* chart.inside[leftitem]
+						* chart.inside[rightitem])
+			# chart.addprob(item, prob)
+			chart.inside[item] += prob
 
 
 def getoutside(Chart chart):
 	"""Compute outside probabilities for a chart given its parse forest."""
-	cdef size_t n
-	cdef Edge *edge
-	cdef Edges edges
-	cdef MoreEdges *edgelist
+	cdef ItemNo n, item, leftitem, rightitem
+	cdef Edge edge
 	cdef double outsideprob
 	# cdef double sentprob = chart.inside[chart.root()]
 	# traverse items in top-down order
-	# could use list with idx of item in itemsinorder
-	chart.outside = dict.fromkeys(chart.getitems(), 0.0)
+	chart.outside.resize(chart.probs.size(), 0.0)
 	chart.outside[chart.root()] = 1.0
-	for item in reversed(chart.itemsinorder):
+	for n in range(chart.numitems() - 1, 0, -1):
+		item = chart.getitemidx(n)
 		# can we define outside[item] simply as sentprob - inside[item] ?
 		# chart.outside[item] = sentprob - chart.inside[item]
-		edges = chart.getedges(item)
-		edgelist = edges.head if edges is not None else NULL
-		while edgelist is not NULL:
-			for n in range(edges.len if edgelist is edges.head
-					else EDGES_SIZE):
-				edge = &(edgelist.data[n])
-				if edge.rule is NULL:
-					pass
-				elif edge.rule.rhs2 == 0:
-					leftitem = chart._left(item, edge)
-					chart.outside[leftitem] += (edge.rule.prob
-							* chart.outside[item])
-				else:
-					leftitem = chart._left(item, edge)
-					rightitem = chart._right(item, edge)
-					outsideprob = chart.outside[item]
-					chart.outside[leftitem] += (edge.rule.prob
-							* chart.inside[rightitem]
-							* outsideprob)
-					chart.outside[rightitem] += (edge.rule.prob
-							* chart.inside[leftitem]
-							* outsideprob)
-			edgelist = edgelist.prev
+		for edge in chart.parseforest[item]:
+			if edge.rule is NULL:
+				pass
+			elif edge.rule.rhs2 == 0:
+				leftitem = chart._left(item, edge)
+				chart.outside[leftitem] += (edge.rule.prob
+						* chart.outside[item])
+			else:
+				leftitem = chart._left(item, edge)
+				rightitem = chart._right(item, edge)
+				outsideprob = chart.outside[item]
+				chart.outside[leftitem] += (edge.rule.prob
+						* chart.inside[rightitem]
+						* outsideprob)
+				chart.outside[rightitem] += (edge.rule.prob
+						* chart.inside[leftitem]
+						* outsideprob)
 
 
 def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
@@ -275,8 +234,8 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 	print(' C O A R S E ')
 	chart, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if chart:
-		derivations, entries = getderivations(chart, 10, True, False, True)
-		mpp, _ = marginalize("mpp", derivations, entries, chart)
+		getderivations(chart, 10, True)
+		mpp, _ = marginalize("mpp", chart)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
 			t = Tree.parse(t)
@@ -290,13 +249,13 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 		print("no parse")
 		return
 		# print(chart)
-	l, _, _ = prunechart(chart, fine, k, split, True, False, False)
+	l, msg = prunechart(chart, fine, k, split, True, False)
 	if verbose:
+		print(msg)
 		print("\nitems in 50-best of coarse chart")
-		_ = lazykbest(chart, k, derivs=False)
+		lazykbest(chart, k, derivs=False)
 		for a in chart.rankededges:
-			print(coarse.tolabel[(<ChartItem>a).label],
-					bin((<ChartItem>a).vec))
+			print(coarse.tolabel[a.label], bin(a.vec))
 		print("\nwhitelist:")
 		for n, x in enumerate(l):
 			if isinstance(x, dict):
@@ -308,8 +267,8 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 	chart2, _ = plcfrs.parse(sent, fine, tags=tags, whitelist=l,
 			splitprune=split, markorigin=True)
 	if chart2:
-		derivations, entries = getderivations(chart2, 10, True, False, True)
-		mpp, _ = marginalize("mpp", derivations, entries, chart2)
+		getderivations(chart2, 10, True)
+		mpp, _ = marginalize("mpp", chart2)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
 			t = Tree.parse(t)
@@ -409,5 +368,4 @@ def test():
 			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
 
-__all__ = ['prunechart', 'bitparkbestitems', 'posteriorthreshold',
-		'getinside', 'getoutside']
+__all__ = ['prunechart', 'posteriorthreshold', 'getinside', 'getoutside']

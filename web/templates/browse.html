@@ -102,7 +102,7 @@ function ajaxFunction(url, dir) {
 
 </script>
 <body onLoad="init(); ">
-<form name=frm><tt>
+<form name=frm><span class=mono>
 	<input type=hidden name=text value={{ textno }}>
 	<input type=hidden name=nomorph value=on {{ 'disabled' if not nomorph }}>
 	<input type=hidden name=nofunc value=on {{ 'disabled' if not nofunc }}>
@@ -111,7 +111,7 @@ function ajaxFunction(url, dir) {
 	| <a href="browse">list</a>
 	| {{ nextlink|safe }}
 	| {{ text }} | <font color=gray>(use left &amp; right arrow keys to browse)</font>
-</tt></form>
+</span></form>
 
 <div id=trees>
 {% for tree in trees %}

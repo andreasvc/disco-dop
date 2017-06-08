@@ -35,11 +35,7 @@ import logging
 import tempfile
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from collections import defaultdict, Counter
-try:
-	from cyordereddict import OrderedDict
-except ImportError:
-	from collections import OrderedDict
+from collections import defaultdict, Counter, OrderedDict
 from fractions import Fraction
 from .treebanktransforms import YEARRE
 from .tree import escape
@@ -430,7 +426,7 @@ def unknownwordftb(word, loc, _lexicon):
 	elif HASPUNC.search(word):
 		sig += "-HASPUNC"
 
-	if loc > 0 and len(word) > 0 and word[0] in UPPER:
+	if loc > 0 and word and word[0] in UPPER:
 		sig += "-UP"
 
 	return sig

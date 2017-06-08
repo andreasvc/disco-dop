@@ -21,7 +21,8 @@ from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
-from discodop.tree import Tree, DrawTree, writediscbrackettree
+from discodop.tree import Tree, DrawTree, DrawDependencies, \
+		writediscbrackettree
 from discodop.parser import Parser, readparam, readgrammars, probstr
 
 LIMIT = 40  # maximum sentence length
@@ -51,15 +52,15 @@ def parse():
 	Output is either in a HTML fragment or in plain text. To be invoked by an
 	AJAX call."""
 	sent = request.args.get('sent', None)
+	objfun = request.args.get('objfun', 'mpp')
 	est = request.args.get('est', 'rfe')
 	marg = request.args.get('marg', 'nbest')
-	objfun = request.args.get('objfun', 'mpp')
-	coarse = request.args.get('coarse', None)
+	coarse = request.args.get('coarse', 'pcfg')
 	html = 'html' in request.args
 	lang = request.args.get('lang', 'detect')
 	if not sent:
 		return ''
-	frags = nbest = None
+	nbest = None
 	senttok = tokenize(sent)
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
@@ -77,15 +78,17 @@ def parse():
 		PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
 		PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
 		if PARSERS[lang].stages[0].mode.startswith('pcfg') and coarse:
-			PARSERS[lang].stages[0].mode = coarse
-			PARSERS[lang].stages[1].k = (1e-5
-					if coarse == 'pcfg-posterior' else 50)
+			PARSERS[lang].stages[0].mode = (
+					'pcfg' if coarse == 'pcfg-posterior' else coarse)
+			if len(PARSERS[lang].stages) > 1:
+				PARSERS[lang].stages[1].k = (1e-5
+						if coarse == 'pcfg-posterior' else 50)
 
 		results = list(PARSERS[lang].parse(senttok))
 		if results[-1].noparse:
 			parsetrees = []
 			result = 'no parse!'
-			frags = nbest = ''
+			nbest = dep = depsvg = ''
 		else:
 			if SHOWMORPH:
 				replacemorph(results[-1].parsetree)
@@ -96,16 +99,10 @@ def parse():
 			parsetrees = results[-1].parsetrees or []
 			parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
 			parsetrees_ = []
-			fragments = results[-1].fragments or ()
 			APP.logger.info('[%s] %s', probstr(prob), tree)
 			tree = Tree.parse(tree, parse_leaf=int)
 			result = Markup(DrawTree(tree, senttok).text(
 					unicodelines=True, html=html, funcsep='-'))
-			frags = Markup('Phrasal fragments used in the most probable '
-					'derivation of the highest ranked parse tree:\n'
-					+ '\n\n'.join(
-					DrawTree(frag).text(unicodelines=True, html=html)
-					for frag in fragments if frag.count('(') > 1))
 			for tree, prob, x in parsetrees:
 				tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
 				if SHOWMORPH:
@@ -113,10 +110,31 @@ def parse():
 				if SHOWFUNC:
 					treebank.handlefunctions('add', tree, pos=True)
 				parsetrees_.append((tree, prob, x))
-			nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
+			if PARSERS[lang].headrules:
+				xtree = PARSERS[lang].postprocess(
+						parsetrees[0][0], senttok, -1)[0]
+				dep = treebank.writedependencies(xtree, senttok, 'conll')
+				depsvg = Markup(DrawDependencies.fromconll(dep).svg())
+			else:
+				dep = depsvg = ''
+			rid = randid()
+			nbest = Markup('\n\n'.join('%d. [%s] '
+					'<a href=\'javascript: toggle("f%s%d"); \'>'
+					'toggle fragments</a>\n'
+					'<span id=f%s%d style="display: none; ">'
+					'Fragments used in the highest ranked derivation'
+					' of this parse tree:\n%s</span>\n%s' % (
+						n + 1,
+						probstr(prob),
+						rid, n + 1,
+						rid, n + 1,
+						'\n\n'.join(
+							DrawTree(frag).text(unicodelines=True, html=html)
+							for frag in fragments or ()  # if frag.count('(') > 1
+						),
 						DrawTree(tree, senttok).text(
 							unicodelines=True, html=html, funcsep='-'))
-					for n, (tree, prob, _) in enumerate(parsetrees_)))
+					for n, (tree, prob, fragments) in enumerate(parsetrees_)))
 		msg = '\n'.join(stage.msg for stage in results)
 		elapsed = [stage.elapsedtime for stage in results]
 		elapsed = 'CPU time elapsed: %s => %gs' % (
@@ -124,20 +142,20 @@ def parse():
 		info = '\n'.join(('length: %d; lang=%s; est=%s; objfun=%s; marg=%s' % (
 				len(senttok), lang, est, objfun, marg), msg, elapsed,
 				'10 most probable parse trees:',
-				'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob),
+				''.join('%d. [%s] %s' % (n + 1, probstr(prob),
 						writediscbrackettree(tree, senttok))
 						for n, (tree, prob, _) in enumerate(parsetrees))
 				+ '\n'))
-		CACHE.set(key, (sent, result, frags, nbest, info, link), timeout=5000)
+		CACHE.set(key, (sent, result, nbest, info, link, dep, depsvg),
+				timeout=5000)
 	else:
-		(sent, result, frags, nbest,  # pylint: disable=unpacking-non-sequence
-				info, link) = resp  # pylint: disable=unpacking-non-sequence
+		(sent, result, nbest, info, link, dep, depsvg) = resp
 	if html:
 		return render_template('parsetree.html', sent=sent, result=result,
-				frags=frags, nbest=nbest, info=info, link=link,
-				randid=randid())
+				nbest=nbest, info=info, link=link, dep=dep,
+				depsvg=depsvg, randid=randid())
 	else:
-		return Response('\n'.join((nbest, frags, info, result)),
+		return Response('\n'.join((nbest, info, result)),
 				mimetype='text/plain')
 
 
@@ -148,11 +166,11 @@ def favicon():
 			'parse.ico', mimetype='image/vnd.microsoft.icon')
 
 
-@APP.route('/parser/static/main.js')
+@APP.route('/parser/static/script.js')
 def javascript():
 	"""Serve javascript."""
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
-			'main.js', mimetype='text/javascript')
+			'script.js', mimetype='text/javascript')
 
 
 @APP.route('/parser/static/style.css')
@@ -259,4 +277,9 @@ loadparsers()
 
 
 if __name__ == '__main__':
-	APP.run(debug=False, host='0.0.0.0')
+	import sys
+	from getopt import gnu_getopt
+	opts, _args = gnu_getopt(sys.argv[1:], '', ['port=', 'ip=', 'debug'])
+	opts = dict(opts)
+	APP.run(debug='--debug' in opts, host=opts.get('--ip', '0.0.0.0'),
+			port=int(opts.get('--port', 5000)))

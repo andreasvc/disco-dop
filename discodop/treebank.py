@@ -4,17 +4,11 @@ from __future__ import division, print_function, absolute_import, \
 import os
 import re
 import sys
-if sys.version_info[0] == 2:
-	import xml.etree.cElementTree as ElementTree
-else:
-	import xml.etree.ElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict
-try:
-	from cyordereddict import OrderedDict
-except ImportError:
-	from collections import OrderedDict
+import xml.etree.ElementTree as ElementTree
+from collections import OrderedDict
 from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
 		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE
 from .treetransforms import removeemptynodes
@@ -210,7 +204,7 @@ class BracketCorpusReader(CorpusReader):
 	def _read_blocks(self):
 		for filename in self._filenames:
 			with openread(filename, encoding=self._encoding) as inp:
-				for n, block in enumerate((line	for line in inp if line), 1):
+				for n, block in enumerate((line for line in inp if line), 1):
 					yield n, block
 
 	def _parse(self, block):
@@ -304,7 +298,8 @@ class NegraCorpusReader(CorpusReader):
 								'start=%s, end=%s' % (sentid, thissentid))
 						started = False
 						if sentid in results:
-							raise ValueError('duplicate sentence ID: %s' % sentid)
+							raise ValueError(
+									'duplicate sentence ID: %s' % sentid)
 						results.add(sentid)
 						lines.append(line.strip())
 						yield sentid, lines
@@ -431,20 +426,6 @@ class AlpinoCorpusReader(CorpusReader):
 				xmlblock, self.functions, self.morphology, self.lemmas)
 
 
-class DactCorpusReader(AlpinoCorpusReader):
-	"""Corpus reader for Alpino trees in Dact format (DB XML)."""
-
-	def _read_blocks(self):
-		import alpinocorpus
-		if self._encoding not in (None, 'utf8', 'utf-8'):
-			raise ValueError('Encoding specified in XML files, '
-					'cannot be overriden.')
-		for filename in self._filenames:
-			corpus = alpinocorpus.CorpusReader(filename)
-			for entry in corpus.entries():
-				yield entry.name(), entry.contents()
-
-
 def exporttree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sentence from tree in export format given as list of lines."""
 	def getchildren(parent):
@@ -515,7 +496,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 						'word' in child.keys() or 'cat' in child.keys()):
 					subtree.source[PARENT] = node.get('id')
 					result.append(subtree)
-			if not len(result):
+			if not result:
 				return None
 		elif 'word' in node.keys():
 			source[TAG] = node.get('pt') or node.get('pos')
@@ -729,8 +710,10 @@ def dependencies(root):
 
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
-	if root:
-		deps.append((_makedep(root, deps), 'ROOT', 0))
+	for child in root:
+		deps.append((_makedep(child, deps), 'root', 0))
+	# if root:
+	# 	deps.append((_makedep(root, deps), 'ROOT', 0))
 	return sorted(deps)
 
 
@@ -1047,13 +1030,13 @@ READERS = OrderedDict((('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
-		('alpino', AlpinoCorpusReader), ('dact', DactCorpusReader)))
-WRITERS = ('export', 'bracket', 'discbracket', 'dact',
+		('alpino', AlpinoCorpusReader)))
+WRITERS = ('export', 'bracket', 'discbracket',
 		'conll', 'mst', 'tokens', 'wordpos')
 
 __all__ = ['Item', 'CorpusReader', 'BracketCorpusReader',
 		'DiscBracketCorpusReader', 'NegraCorpusReader', 'AlpinoCorpusReader',
-		'TigerXMLCorpusReader', 'DactCorpusReader', 'exporttree',
+		'TigerXMLCorpusReader', 'exporttree',
 		'exportsplit', 'alpinotree', 'writetree', 'writeexporttree',
 		'writealpinotree', 'writedependencies', 'dependencies', 'deplen',
 		'handlefunctions', 'handlemorphology', 'incrementaltreereader',

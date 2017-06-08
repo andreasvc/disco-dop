@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Discontinuous parsing</title>
-<script src="static/main.js"></script>
+<script src="static/script.js"></script>
 <link type="text/css" rel="stylesheet" href="static/style.css">
 
 <body onLoad="placeFocus();" >
@@ -49,6 +49,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>EWE: Equal Weights Estimate
 	</ul>
 
+	<!--
 	Marginalization:
 	<ul>
 	<li>n-best: find the n most probable derivations.
@@ -61,6 +62,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>posterior: Prune with posterior probabilities
 	<li>bitpar: Use the bitpar parser (max 1000 derivations)
 	</ul>
+	-->
 
 	<p>
 	The source code is available at <a href="https://github.com/andreasvc/disco-dop/#readme">http://github.com/andreasvc/disco-dop/</a>
@@ -113,6 +115,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 					<option value=rfe>RFE</option>
 					<option value=ewe>EWE</option>
 				</select>
+				<!--
 				<select name=marg>
 					<option value=nbest>n-best</option>
 					<option value=sample>sample</option>
@@ -123,6 +126,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 					<option value=pcfg-posterior>posterior</option>
 					<option value=pcfg-bitpar-nbest>bitpar</option>
 				</select>
+				-->
 				<input type=hidden name=html value=1 />
 				<input type=submit value=Parse />
 			</td>

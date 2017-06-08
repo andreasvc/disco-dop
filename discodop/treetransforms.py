@@ -20,14 +20,11 @@ This file contains three main transformations:
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
-import sys
 from operator import attrgetter
 from itertools import islice
 from collections import defaultdict, Counter
-if sys.version_info[0] > 2:
-	unicode = str  # pylint: disable=redefined-builtin
 from .tree import Tree, ImmutableTree, isdisc, bitfanout
-from .util import ishead, OrderedSet
+from .util import ishead, OrderedSet, PyAgenda
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -38,9 +35,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		revhorzmarkov=0, markhead=False, headoutward=False,
 		childchar='|', parentchar='^', tailmarker='',
 		leftmostunary=False, rightmostunary=False, threshold=2,
-		artpa=True, ids=None, filterfuncs=(),
-		labelfun=None, dot=False, abbrrepetition=False,
-		direction=False):
+		artpa=True, ids=None, filterlabels=(),
+		labelfun=None, dot=False, direction=False):
 	"""
 	Binarize a Tree object.
 
@@ -74,16 +70,17 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		factored; i.e., for a value of 2, do a normal binarization; for a
 		value of 1, also factor binary productions to include an artificial
 		node, etc.
-	:param filterfuncs: n-ary branches contain children with grammatical
-		functions for labels (optionally with parent annotation of the form
-		``FUNC/PARENT``). Any function in the sequence ``filterfuncs`` will
-		not become part of the horizontal context of the labels. Can be
-		used to filter out adjunctions from this context.
+	:param filterlabels: filter any labels matching this sequence from the
+		horizontal markovization context. If labels are of the form ``A/B``,
+		only A is used to match against this sequence. Also, ``labelfun`` is
+		first applied to the label, if given. Can be used to filter out
+		modifiers, s.t. the context contains only required elements.
 	:param labelfun: a function to derive a label from a node to be used for
 		the horizontal markovization context; the default is to use
 		``child.label`` for a given child node.
-	:param abbrrepetition: in horizontal context, reduce sequences of
-		identical labels: e.g., ``<mwp,mwp,mwp,mwp>`` becomes ``<mwp+>``
+	:param direction: if True, mark the the direction of the binarization with
+		l, r, or m; l is everything before the head, r to the right, and m
+		just before introducing the head.
 
 	>>> from discodop.heads import sethead
 	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))')
@@ -96,9 +93,10 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	>>> print(binarize(tree, headoutward=True, leftmostunary=True,
 	... rightmostunary=True))
 	(S (S|<X,D,E> (X (X|<A,B,C> (A 0) (X|<B,C> (B 3) (X|<C> (C 4))))) \
-(S|<D,E> (S|<D> (D 1)) (E 2))))
+(S|<D,E> (S|<D,E> (D 1)) (E 2))))
 	"""
 	# FIXME: combination of factor='left' and headoutward=True is broken.
+	# FIXME: horiz. markov label is wrong when direction switches
 	# assume all nodes have homogeneous children, terminals have no siblings
 	if factor not in ('left', 'right'):
 		raise ValueError("factor should be 'left' or 'right'.")
@@ -146,7 +144,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					siblings += node[headidx].label + ';'
 				siblings += ','.join(labelfun(child)
 						for child in node[:horzmarkov]
-						if labelfun(child).split('/', 1)[0] not in filterfuncs)
+						if labelfun(child).split('/', 1)[0] not in filterlabels)
 			if dot:
 				siblings += '.'
 			mark = '<%s>%s' % (siblings, parents)
@@ -162,11 +160,6 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		else:
 			if isinstance(node[0], Tree):
 				childlabels = [labelfun(child) for child in node]
-				if filterfuncs:
-					childlabels = [x.split('/', 1)[0] for x in childlabels
-							if x.split('/', 1)[0] not in filterfuncs]
-				if abbrrepetition:
-					childlabels = abbr(childlabels)
 			else:
 				childlabels = []
 			childnodes = list(node)
@@ -192,9 +185,10 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					siblings += 'l:'
 				if markhead and headidx is not None:
 					siblings += childlabels[headidx] + ';'
-				siblings += ','.join(childlabels[start:end])
 				if dot:
 					siblings += '.'
+				siblings += ','.join(a for a in childlabels[start:end]
+						if a not in filterlabels)
 				mark = '<%s>%s' % (siblings, parents)
 				if ids is not None:  # numeric identifier
 					mark = '<%s>' % ids[mark]
@@ -226,15 +220,19 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 				if markhead and headidx is not None:
 					siblings += childlabels[headidx] + ';'
 				if dot:
-					siblings += ','.join(childlabels[:start]) + '.'
+					siblings += ','.join(a for a in childlabels[:start]
+							if a not in filterlabels) + '.'
 				if revhorzmarkov:
 					if factor == 'right':
-						siblings += ','.join(childlabels[
-								max(start - revhorzmarkov, 0):start]) + ';'
+						siblings += ','.join(a for a in childlabels[
+								max(start - revhorzmarkov, 0):start]
+								if a not in filterlabels) + ';'
 					else:  # factor == 'left':
-						siblings += ','.join(childlabels[
-								end:end + revhorzmarkov]) + ';'
-				siblings += ','.join(childlabels[start:end])
+						siblings += ','.join(a for a in childlabels[
+								end:end + revhorzmarkov]
+								if a not in filterlabels) + ';'
+				siblings += ','.join([a for a in childlabels[start:]
+						if a not in filterlabels][:horzmarkov])
 				mark = '<%s>%s' % (siblings, parents)
 				if ids is not None:  # numeric identifier
 					mark = '<%s>' % ids[mark]
@@ -248,12 +246,14 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					# insert unary for switch of direction
 					newnode = treeclass(curnode.label, curnode[:])
 					curnode[:] = [newnode]
-					# direction is 'm', no horz. markovization
-					newnode.label = ''.join((origlabel, childchar, '<',
-							'm:' if direction else '',
-							childlabels[headidx] + ';'
-								if markhead and headidx is not None else '',
-							'>', parents))
+					if dot:
+						siblings = 'm' + siblings[1:]
+					else:
+						siblings = 'm:' if direction else ''
+						if markhead and headidx is not None:
+							siblings += childlabels[headidx] + ';'
+					newnode.label = ''.join((
+						origlabel, childchar, '<', siblings, '>', parents))
 					curnode = newnode
 			assert len(childnodes) == 1 + (not rightmostunary)
 			curnode.extend(childnodes)
@@ -387,7 +387,7 @@ def handledisc(tree):
 
 def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2,
-		filterfuncs=(), labelfun=attrgetter('label')):
+		filterlabels=(), labelfun=attrgetter('label')):
 	"""Binarize one constituent with a left/right factored binarization.
 
 	Children remain unmodified. Nodes must be immutable and contain bitsets;
@@ -403,7 +403,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	elif 1 <= len(node) <= 2:
 		if ids is None:
 			key = '%s%s' % (','.join(labelfun(child) for child in node[:h]
-					if labelfun(child) not in filterfuncs),
+					if labelfun(child) not in filterlabels),
 					getyf(node[0], node[1] if len(node) > 1 else None)
 					if markyf else '')
 		else:
@@ -424,7 +424,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			newbitset = node[i].bitset | prev.bitset
 			if factor == 'right' and (ids is None or i > 1):
 				key = ','.join(labelfun(child) for child in node[i:i + h]
-						if labelfun(child) not in filterfuncs)
+						if labelfun(child) not in filterlabels)
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
@@ -432,7 +432,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			elif factor == 'left' and (ids is None or i < len(node) - 2):
 				key = ','.join(labelfun(child)
 						for child in node[max(0, i - h + 1):i + 1]
-						if labelfun(child) not in filterfuncs)
+						if labelfun(child) not in filterlabels)
 				if markyf:
 					key += getyf(prev, node[i])
 				if ids is not None:
@@ -483,7 +483,9 @@ def markovthreshold(trees, n, horzmarkov, vertmarkov):
 
 
 def splitdiscnodes(tree, markorigin=False):
-	"""Boyd (2007): Discontinuity revisited. http://aclweb.org/anthology/W07-1506
+	"""Return a continuous version of tree by splitting discontinuous nodes.
+
+	Boyd (2007): Discontinuity revisited. http://aclweb.org/anthology/W07-1506
 
 	:markorigin=False: VP* (bare label)
 	:markorigin=True: VP*1 (add index)
@@ -631,10 +633,12 @@ def binarizetree(tree, binarization, relationalrealizational):
 				rightmostunary=binarization.rightmostunary,
 				markhead=binarization.markhead,
 				headoutward=binarization.headrules is not None,
-				direction=binarization.headrules is not None,
-				filterfuncs=(relationalrealizational['ignorefunctions']
+				direction=binarization.headrules is not None
+						and binarization.direction,
+				dot=binarization.dot,
+				filterlabels=(relationalrealizational['ignorefunctions']
 					+ (relationalrealizational['adjunctionlabel'], ))
-					if relationalrealizational else (),
+					if relationalrealizational else binarization.filterlabels,
 				labelfun=binarization.labelfun)
 	elif binarization.method == 'optimal':
 		return Tree.convert(optimalbinarize(tree))
@@ -712,12 +716,11 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	# do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
 		return factorconstituent(tree, sep=sep, h=h)
-	from .plcfrs import Agenda
 	labels = [a.label for a in tree]
 	# the four main datastructures:
 	# the agenda is a priority queue of partial binarizations to explore
 	# the first complete binarization that is dequeued is the optimal one
-	agenda = Agenda()
+	agenda = PyAgenda()
 	# the working set contains all the optimal partial binarizations
 	# keys are binarizations, values are their scores
 	workingset = {}
@@ -846,21 +849,6 @@ def contsets(nodes):
 		yield subset
 
 
-def abbr(childlabels):
-	"""Reduce sequences of identical labels.
-
-	>>> print(' '.join(abbr(['mwp', 'mwp', 'mwp', 'mwp'])))
-	mwp+"""
-	result, inrun = [], ''
-	for a, b in zip(childlabels, childlabels[1:] + [None]):
-		if a == b:
-			inrun = '+'
-		else:
-			result.append(a + inrun)
-			inrun = ''
-	return result
-
-
 def getbits(bitset):
 	"""Iterate over the indices of set bits in a bitset."""
 	n = 0
@@ -878,7 +866,7 @@ def addbitsets(tree):
 
 	The bitset attribute is a Python integer corresponding to the information
 	that leaves() would return for that node."""
-	if isinstance(tree, (str, unicode)):
+	if isinstance(tree, str):
 		result = ImmutableTree(tree)
 	elif isinstance(tree, ImmutableTree):
 		result = tree
@@ -921,6 +909,6 @@ __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
 		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
 		'canonicalize', 'optimalbinarize', 'minimalbinarization',
 		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
-		'contsets', 'abbr', 'getbits', 'addbitsets', 'getyf',
+		'contsets', 'getbits', 'addbitsets', 'getyf',
 		'treebankfanout', 'handledisc', 'removeemptynodes', 'removeterminals',
 		'binarizetree']
