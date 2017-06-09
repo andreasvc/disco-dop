@@ -229,11 +229,10 @@ def lazykbest(Chart chart, int k, bint derivs=True):
 	cdef RankedEdgeSet explored
 	cdef pair[RankedEdge, Prob] entry
 	cdef vector[pair[RankedEdge, Prob]] tmp
-	cdef ItemNo root
+	cdef ItemNo root = chart.root()
 	cdef int n = 0
-	if chart.root() is None:
+	if root == 0:
 		raise ValueError('kbest: no complete derivation in chart')
-	root = chart.root()
 	chart.rankededges.clear()
 	chart.rankededges.resize(chart.parseforest.size())
 	lazykthbest(root, k, k, cand, chart, explored, MAX_DEPTH)

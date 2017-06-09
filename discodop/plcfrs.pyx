@@ -82,7 +82,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 	cdef ItemNo _left(self, ItemNo itemidx_unused, Edge edge):
 		cdef SmallChartItem tmp
 		if edge.rule is NULL:
-			return None
+			return 0
 		tmp.label = edge.rule.rhs1
 		tmp.vec = edge.pos.lvec
 		return self.itemindex[tmp]
@@ -90,7 +90,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
 		cdef SmallChartItem tmp
 		if edge.rule is NULL or edge.rule.rhs2 == 0:
-			return None
+			return 0
 		tmp.label = edge.rule.rhs2
 		tmp.vec = self.items[itemidx].vec ^ edge.pos.lvec
 		return self.itemindex[tmp]
@@ -100,7 +100,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 	def root(self):
 		if self.itemindex.find(self._root()) == self.itemindex.end():
-			return None
+			return 0
 		return self.itemindex[self._root()]
 
 	cdef Label label(self, ItemNo itemidx):
@@ -179,14 +179,14 @@ cdef class FatLCFRSChart(LCFRSChart):
 
 	cdef ItemNo _left(self, ItemNo itemidx_unused, Edge edge):
 		if edge.rule is NULL:
-			return None
+			return 0
 		return edge.pos.lidx
 
 	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
 		cdef FatChartItem tmp
 		cdef size_t n
 		if edge.rule is NULL or edge.rule.rhs2 == 0:
-			return None
+			return 0
 		tmp = self.items[edge.pos.lidx]
 		tmp.label = edge.rule.rhs2
 		for n in range(SLOTS):
@@ -199,7 +199,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 	def root(self):
 		cdef FatChartItem tmp = self._root()
 		if self.itemindex.find(tmp) == self.itemindex.end():
-			return None
+			return 0
 		return self.itemindex[tmp]
 
 	cdef Label label(self, ItemNo itemidx):

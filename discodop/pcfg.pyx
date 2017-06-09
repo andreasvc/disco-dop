@@ -661,6 +661,7 @@ cdef inline void applyunaryrules(
 	cdef:
 		Grammar grammar = chart.grammar
 		Label lhs, rhs1
+		Prob prob
 		ProbRule *rule
 		uint64_t item, leftitem
 		uint64_t ccell = compactcellidx(left, right, chart.lensent, 1)

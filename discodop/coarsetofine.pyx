@@ -170,6 +170,7 @@ def getinside(Chart chart):
 	# - normal, scaled => how?
 	cdef ItemNo n, item, leftitem, rightitem
 	cdef Edge edge
+	cdef double prob
 	chart.inside.resize(chart.probs.size(), 0.0)
 
 	# traverse items in bottom-up order
@@ -196,6 +197,7 @@ def getoutside(Chart chart):
 	"""Compute outside probabilities for a chart given its parse forest."""
 	cdef ItemNo n, item, leftitem, rightitem
 	cdef Edge edge
+	cdef double prob
 	cdef double outsideprob
 	# cdef double sentprob = chart.inside[chart.root()]
 	# traverse items in top-down order

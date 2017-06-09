@@ -111,6 +111,7 @@ cdef class Chart:
 		"""Return lexical probability given a lexical edge."""
 		cdef Label label = self.label(itemidx)
 		cdef string word = self.sent[self.lexidx(edge)].encode('utf8')
+		cdef Prob prob
 		it = self.grammar.lexicalbylhs.find(label)
 		if it != self.grammar.lexicalbylhs.end():
 			it2 = dereference(it).second.find(word)
