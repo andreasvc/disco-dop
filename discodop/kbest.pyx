@@ -184,15 +184,17 @@ cdef inline _getderiv(string &result, ItemNo v, RankedEdge& ej, Chart chart):
 	cdef RankedEdge rankededge
 	cdef Label label = chart.label(v)
 	cdef char buf[10]
-	cdef int x
+	cdef int retval
 	result.append(b'(')
 	result.append(chart.grammar.tolabel.ob[label])
-	result.append(b' ')
 	if ej.edge.rule is NULL:  # lexical rule, left child is terminal
 		# C++ way to convert int to string requires streams, C++11, or boost
-		x = sprintf(buf, '%d', chart.lexidx(ej.edge))
+		retval = sprintf(buf, ' %d)', chart.lexidx(ej.edge))
+		if retval <= 0:
+			raise ValueError('sprintf error; return value %d' % retval)
 		result.append(buf)
 	else:
+		result.append(b' ')
 		item = chart.left(ej)
 		rankededge = chart.rankededges[item][ej.left].first
 		_getderiv(result, item, rankededge, chart)
@@ -201,7 +203,7 @@ cdef inline _getderiv(string &result, ItemNo v, RankedEdge& ej, Chart chart):
 			result.append(b' ')
 			rankededge = chart.rankededges[item][ej.right].first
 			_getderiv(result, item, rankededge, chart)
-	result.append(b')')
+		result.append(b')')
 
 
 cdef string getderiv(ItemNo v, RankedEdge ej, Chart chart):
