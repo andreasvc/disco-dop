@@ -71,7 +71,7 @@ else:
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
 directives = {
-		'profile': True,
+		'profile': False,
 		'cdivision': True,
 		'fast_fail': True,
 		'nonecheck': False,
