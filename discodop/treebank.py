@@ -204,8 +204,7 @@ class BracketCorpusReader(CorpusReader):
 	def _read_blocks(self):
 		for filename in self._filenames:
 			with openread(filename, encoding=self._encoding) as inp:
-				for n, block in enumerate((line for line in inp if line), 1):
-					yield n, block
+				yield from enumerate((line for line in inp if line), 1)
 
 	def _parse(self, block):
 		c = count()
@@ -427,7 +426,10 @@ class AlpinoCorpusReader(CorpusReader):
 
 
 def exporttree(block, functions=None, morphology=None, lemmas=None):
-	"""Get tree, sentence from tree in export format given as list of lines."""
+	"""Get tree, sentence from tree in export format given as list of lines.
+
+	:param block: a list of lines
+	:returns: Item object, with tree, sent, command, block fields."""
 	def getchildren(parent):
 		"""Traverse tree in export format and create Tree object."""
 		results = []
@@ -463,15 +465,20 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 def exportsplit(line):
 	"""Take a line in export format and split into fields.
 
-	Add dummy fields lemma, sec. edge if those fields are absent."""
-	if "%%" in line:  # we don't want comments.
-		line = line[:line.index("%%")]
+	Strip comments. Add dummy field for lemma if absent.
+
+	:returns: a list with >= 6 elements; if > 6, length is even since
+		secondary edges are defined by pairs of (label, parentid) fields.
+	"""
+	commentidx = line.find('%%')  # remove comments.
+	if commentidx != -1:
+		line = line[:commentidx]
 	fields = line.split()
 	fieldlen = len(fields)
 	if fieldlen < 5:
 		raise ValueError('expected at least 5 columns: %r' % fields)
 	elif fieldlen & 1:  # odd number of fields?
-		fields[1:1] = ['--']  # add empty lemma field
+		fields.insert(LEMMA, '--')  # add empty lemma field
 	return fields
 
 

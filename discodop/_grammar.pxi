@@ -748,6 +748,13 @@ cdef class Grammar:
 		"""Return words in lexicon as list."""
 		return [x.first.decode('utf8') for x in self.lexicalbyword]
 
+	def getlexprobs(self, str word):
+		"""Return a list of probabilities for a word."""
+		it = self.lexicalbyword.find(word.encode('utf8'))
+		if it == self.lexicalbyword.end():
+			return []
+		return [self.lexical[n].prob for n in dereference(it).second]
+
 	def __str__(self):
 		rules = '\n'.join(filter(None,
 			[self.rulestr(n) for n in range(self.numrules)]))

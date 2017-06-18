@@ -340,8 +340,7 @@ def merge(*iterables, key=None):
 		entry = heappop(heap)
 		item, iterable = entry.key
 		yield item
-		for item in iterable:
-			yield item
+		yield from iterable
 
 
 ANSICOLOR = {

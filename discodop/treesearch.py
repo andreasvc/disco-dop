@@ -137,8 +137,7 @@ class CorpusSearcher(object):
 			for filename, value in self.counts(
 					query, subset, start, end).items():
 				result[filename].append(value)
-		for filename, counts in result.items():
-			yield filename, counts
+		yield from result.items()
 
 	def batchsents(self, queries, subset=None, start=None, end=None,
 			maxresults=100, brackets=False):
@@ -149,8 +148,7 @@ class CorpusSearcher(object):
 			for value in self.sents(
 					query, subset, start, end, maxresults, brackets):
 				result[value[0]].append(value[1:])
-		for filename, values in result.items():
-			yield filename, values
+		yield from result.items()
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):

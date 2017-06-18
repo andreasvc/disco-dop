@@ -234,27 +234,24 @@ def tokenize(text):
 	return tuple(text.split())
 
 
-def unigramprob(model, sent, smooth=1e-20):
+def unigramprob(model, sent, smooth=-math.log(1e-20)):
 	"""Simple smoothed unigram probability of sentence given grammar.
 
 	:returns: a logprob for the sentence given lexical probabilities in first
-		grammar of ``model`` of the most likely POS tag for each word;
+		stage of ``model`` of the most likely POS tag for each word;
 		or ``smooth`` if the word is not in the lexicon."""
-	lexicon = model.stages[0].grammar.lexicalbyword
-	if model.stages[0].grammar.logprob:
-		logprobs = [min(pos.prob for pos in lexicon[word]) if word in lexicon
-				else -math.log(smooth) for word in sent]
-	else:
-		logprobs = [-math.log(max(pos.prob for pos in lexicon[word])
-				if word in lexicon else smooth) for word in sent]
-	return math.exp(-sum(logprobs))
+	grammar = model.stages[0].grammar
+	if not grammar.logprob:
+		return sum(-math.log(max(grammar.getlexprobs(word),
+				default=-math.exp(smooth))) for word in sent)
+	return sum(min(grammar.getlexprobs(word), default=smooth) for word in sent)
 
 
 def guesslang(sent):
 	"""Heuristic: pick language that contains most words from input."""
 	probs = {lang: unigramprob(PARSERS[lang], sent) for lang in PARSERS}
 	APP.logger.info('Lang: %r; Sent: %s', probs, ' '.join(sent))
-	return max(probs, key=probs.get)
+	return min(probs, key=probs.get)
 
 
 def replacemorph(tree):
