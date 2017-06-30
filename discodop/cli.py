@@ -64,7 +64,8 @@ Pipe the output through 'less -R' to preserve the colors."""
 
 	def processtree(tree, sent):
 		"""Produced output for a single tree."""
-		dt = DrawTree(tree, sent, abbr='--abbr' in opts)
+		dt = DrawTree(
+				tree, sent, abbr='--abbr' in opts, secedge='--secedge' in opts)
 		if output == 'text' or output == 'html':
 			return dt.text(unicodelines=True, ansi=ansi, html=html,
 					funcsep=funcsep)
@@ -78,7 +79,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 			return dt.tikzqtree() + '\n'
 		raise ValueError('unrecognized --output format')
 
-	flags = ('test', 'help', 'abbr', 'plain', 'frontier')
+	flags = ('test', 'help', 'abbr', 'plain', 'frontier', 'secedge')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=',
 			'output=')
 	try:

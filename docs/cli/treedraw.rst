@@ -19,6 +19,7 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
                   :'replace': replace POS tags with morphology tags,
                   :'between': add morphological node between POS tag and word.
 
+--secedge         Show secondary edges with coindexation on node labels.
 --abbr            abbreviate labels longer than 5 characters.
 --plain           disable ANSI/HTML colors.
 --frontier        only show terminal and non-terminal leaves.

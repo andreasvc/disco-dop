@@ -1004,7 +1004,7 @@ class DrawTree(object):
 					'</pre></body></html>'))
 
 	def __init__(self, tree, sent=None, abbr=False, highlight=(),
-			highlightfunc=()):
+			highlightfunc=(), secedge=False):
 		self.tree = tree
 		self.sent = sent
 		if isinstance(tree, str):
@@ -1039,8 +1039,8 @@ class DrawTree(object):
 				n.label = n.label[:4] + '\u2026'  # unicode '...' ellipsis
 		self.sent = [ptbunescape(token) for token in self.sent]
 		self.highlight = self.highlightfunc = None
-		self.nodes, self.coords, self.edges = self.nodecoords(
-				self.tree, self.sent, highlight, highlightfunc)
+		self.nodes, self.coords, self.edges, self.labels = self.nodecoords(
+				self.tree, self.sent, highlight, highlightfunc, secedge)
 
 	def __str__(self):
 		return self.text(unicodelines=True)
@@ -1054,7 +1054,7 @@ class DrawTree(object):
 		"""Return a rich representation for IPython notebook."""
 		return self.svg()
 
-	def nodecoords(self, tree, sent, highlight, highlightfunc):
+	def nodecoords(self, tree, sent, highlight, highlightfunc, secedge):
 		"""Produce coordinates of nodes on a grid.
 
 		Objective:
@@ -1191,8 +1191,8 @@ class DrawTree(object):
 			childcols[m[:-1]].add((0, i))
 
 		# add other nodes centered on their children,
-		# if the center is already taken, back off
-		# to the left and right alternately, until an empty cell is found.
+		# if the center is already taken, back off to the left and right;
+		# alternately, until an empty cell is found.
 		for n in sorted(levels, reverse=True):
 			nodesatdepth = levels[n]
 			startoflevel = len(matrix)
@@ -1251,7 +1251,35 @@ class DrawTree(object):
 			for j, _ in enumerate(tree[i]):
 				edges[ids[i + (j, )]] = ids[i]
 
-		return nodes, coords, edges
+		# handle secondary edges
+		labels = {}
+		for a in nodes:
+			label = labels.setdefault(a,
+					(nodes[a].label
+							if isinstance(nodes[a], Tree)
+							else nodes[a]))
+			if (secedge and isinstance(nodes[a], Tree)
+					and nodes[a].source is not None):
+				coindexes = []
+				for secedgelabel, secedgeparent in zip(
+						nodes[a].source[6::2],
+						nodes[a].source[7::2]):
+					coindexes.append('%s:%d' % (
+							secedgelabel, int(secedgeparent) - 500))
+					for b, node in nodes.items():
+						if (getattr(node, 'source', None) is not None
+								and node.source[0] == '#%s' % secedgeparent):
+							labels[b] = (node.label
+									+ '=%d' % (int(secedgeparent) - 500))
+							break
+					else:
+						raise ValueError('secondary parent %s not found.'
+								% secedgeparent)
+				if coindexes:
+					labels[a] = '%s[%s]' % (nodes[a].label,
+							','.join(coindexes))
+
+		return nodes, coords, edges, labels
 
 	def svg(self, hscale=40, hmult=3, nodecolor='blue', leafcolor='red',
 			funccolor='green', funcsep=None):
@@ -1315,17 +1343,17 @@ class DrawTree(object):
 		# write nodes with coordinates
 		for n, (row, column) in self.coords.items():
 			node = self.nodes[n]
+			label = self.labels[n]
 			x = column * hscale + hstart
 			y = row * vscale + vstart
 			color = 'black'
 			if n in self.highlight:
 				color = nodecolor if isinstance(node, Tree) else leafcolor
-			if (funcsep and isinstance(node, Tree) and funcsep in node.label
-					and node.label not in PTBPUNC):
-				cat, func = node.label.split(funcsep, 1)
+			if (funcsep and isinstance(node, Tree) and funcsep in label
+					and label not in PTBPUNC):
+				cat, func = label.split(funcsep, 1)
 			else:
-				cat = node.label if isinstance(node, Tree) else node
-				func = None
+				cat, func = label, None
 			result.append('\t<text x="%g" y="%g" '
 					'style="text-anchor: middle; font-size: %dpx;" >'
 					'<tspan style="fill: %s; ">%s</tspan>' % (
@@ -1355,6 +1383,9 @@ class DrawTree(object):
 		:param funccolor, funcsep: if ``funcsep`` is a string, it is taken as a
 			separator for function tags; when it occurs, the rest of the label
 			is drawn with ``funccolor``.
+		:param secedge: if True, add coindexation to show secondary edges
+			and labels; e.g., an NP with a object primary edge: NP-OBJ;
+			the same NP with a secondary edge: NP-OBJ[SBJ:1] and S=1.
 		:param maxwidth: maximum number of characters before a label starts to
 			wrap across multiple lines; pass None to disable."""
 		if unicodelines:
@@ -1395,8 +1426,7 @@ class DrawTree(object):
 			row, column = self.coords[a]
 			matrix[row][column] = a
 			maxcol = max(maxcol, column)
-			label = (self.nodes[a].label if isinstance(self.nodes[a], Tree)
-						else self.nodes[a])
+			label = self.labels[a]
 			if maxwidth and len(label) > maxwidth:
 				label = wrapre.sub(r'\1\n', label).strip()
 			label = label.split('\n')
@@ -1533,13 +1563,14 @@ class DrawTree(object):
 				if col in matrix[row]:
 					n = matrix[row][col]
 					node = self.nodes[n]
+					label = self.labels[n]
 					func = ''
 					if isinstance(node, Tree):
-						cat = node.label
+						cat = label
 						color = nodecolor
-						if (funcsep and funcsep in node.label
-								and node.label not in PTBPUNC):
-							cat, func = node.label.split(funcsep, 1)
+						if (funcsep and funcsep in label
+								and label not in PTBPUNC):
+							cat, func = label.split(funcsep, 1)
 							func = r'%s\textcolor{%s}{%s}' % (
 									funcsep, funccolor, func)
 						label = latexlabel(cat)
@@ -1573,13 +1604,14 @@ class DrawTree(object):
 		# write nodes with coordinates
 		for n, (row, column) in self.coords.items():
 			node = self.nodes[n]
+			label = self.labels[n]
 			func = ''
 			if isinstance(node, Tree):
-				cat = node.label
+				cat = label
 				color = nodecolor
-				if (funcsep and funcsep in node.label
-						and node.label not in PTBPUNC):
-					cat, func = node.label.split(funcsep, 1)
+				if (funcsep and funcsep in label
+						and label not in PTBPUNC):
+					cat, func = label.split(funcsep, 1)
 					func = r'%s\textcolor{%s}{%s}' % (
 							funcsep, funccolor, func)
 				label = latexlabel(cat)
