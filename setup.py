@@ -73,7 +73,6 @@ else:
 directives = {
 		'profile': False,
 		'cdivision': True,
-		'fast_fail': True,
 		'nonecheck': False,
 		'wraparound': False,
 		'boundscheck': False,
