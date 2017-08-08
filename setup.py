@@ -18,6 +18,9 @@ if USE_CYTHON:
 	try:
 		from Cython.Build import cythonize
 		from Cython.Distutils import build_ext
+		from Cython.Compiler import Options
+		Options.fast_fail = True
+		Options.auto_pickle = False
 	except ImportError as err:
 		raise RuntimeError('could not import Cython.')
 	cmdclass = dict(build_ext=build_ext)
@@ -34,8 +37,6 @@ with open('README.rst') as inp:
 REQUIRES = [
 		'numpy',  # '>=1.6.1',
 		'roaringbitmap',  # '>=0.4',
-		'pytest',
-		'sphinx',
 		]
 if USE_CYTHON:
 	REQUIRES.append('cython')  # '>=0.21'
@@ -73,7 +74,6 @@ else:
 directives = {
 		'profile': False,
 		'cdivision': True,
-		'fast_fail': True,
 		'nonecheck': False,
 		'wraparound': False,
 		'boundscheck': False,
