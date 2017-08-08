@@ -9,7 +9,6 @@ from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections import Set, Iterable
 
-
 def ishead(tree):
 	"""Test whether this node is the head of the parent constituent."""
 	return getattr(tree, 'head', False)
@@ -28,11 +27,6 @@ def workerfunc(func):
 	@wraps(func)
 	def wrapper(*args, **kwds):
 		"""Apply decorated function."""
-		try:
-			import faulthandler
-			faulthandler.enable()  # Dump information on segfault.
-		except (ImportError, io.UnsupportedOperation):
-			pass
 		# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
 		try:
 			return func(*args, **kwds)
