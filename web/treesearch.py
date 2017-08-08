@@ -81,7 +81,7 @@ COLORS = dict(enumerate('''\
 def check_auth(username, password):
 	"""This function is called to check if a username / password
 	combination is valid."""
-	return PASSWD is None or (username in PASSWD and password == PASSWD[username])
+	return  username in PASSWD and password == PASSWD[username]
 
 
 def authenticate():
@@ -98,7 +98,8 @@ def requires_auth(f):
 	def decorated(*args, **kwargs):
 		"""This docstring intentionally left blank."""
 		auth = request.authorization
-		if not auth or not check_auth(auth.username, auth.password):
+		if PASSWD is not None and (
+				not auth or not check_auth(auth.username, auth.password)):
 			return authenticate()
 		return f(*args, **kwargs)
 	return decorated
@@ -1236,8 +1237,9 @@ try:
 		PASSWD = {a.strip(): b.strip() for a, b
 				in (line.split(':', 1) for line in fileobj)}
 	log.info('password protection enabled.')
-except IOError:
-	log.info('no password protection.')
+except Exception as err:
+	PASSWD = None
+	log.info('no password protection: %s' % err)
 if __name__ == '__main__':
 	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),

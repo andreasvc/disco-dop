@@ -54,13 +54,18 @@ div.barplot span {
     {% if havetgrep %}
     <a href="javascript: toggle('tgrephelp'); ">TGrep2</a>,
     {% endif %}
+    {% if havefrag %}
     <a href="javascript: toggle('fraghelp'); ">fragment</a>,
+    {% endif %}
     <a href="javascript: toggle('regexhelp'); ">regex</a>.
     <br>
 
     Available macros:
     {% if havetgrep %}
     <a href="static/tgrepmacros.txt">TGrep2</a>,
+    {% endif %}
+    {% if havefrag %}
+    <a href="static/fragmacros.txt">fragment</a>,
     {% endif %}
     <a href="static/regexmacros.txt">regex</a>.
     <br>
@@ -247,16 +252,28 @@ div.barplot span {
 </div>
 <div id=fraghelp style="display: none; "><pre>{{ """Tree fragments.
 
+Finds occurrences of given tree fragment. A non-terminal in the query
+with one or more children only matches against non-terminals with the same
+label and the same children (i.e., not a subset). A non-terminal in the query
+without children, e.g., '(NP )', matches against all non-terminals with the
+same label.
+
+Macros can be invoked by '{name}', which will be replaced by the content of the
+macro 'name'.
+
 regular bracket trees:
 (S (NP Mary) (VP (VB is) (JJ rich)) (. .))
 (S (NP ) (VP (VB is) (JJ )) (. .))
 
 discontinuous trees:
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3)) is John rich ?
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3)) is   ?
+sentence: is John rich ?:
+(S (VP (VB 0=is) (JJ 2=rich)) (NP 1=John) (? 3=?))
+
+sentence fragment: is ... ... ?
+(S (VP (VB 0=is) (JJ 2=)) (NP 1=) (? 3=?))
 """|e }}</pre>
-See <a href="http://andreasvc.github.io/discodop/fileformats.html#bracket">
-http://andreasvc.github.io/discodop/fileformats.html#bracket</a>
+See <a href="http://discodop.readthedocs.io/en/latest/fileformats.html#bracket">
+http://discodop.readthedocs.io/en/latest/fileformats.html#bracket</a>
 </div>
 <div id=regexhelp style="display: none; "><pre>Regular expressions can contain both special and ordinary characters.
 Most ordinary characters, like "A", "a", or "0", are the simplest

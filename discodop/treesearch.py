@@ -461,6 +461,9 @@ class FragmentSearcher(CorpusSearcher):
 		(S (NP (DT The) (NN )) (VP ))
 		(NP (DT 0=The) (NN 1=queen))
 
+	:param macros: a file containing lines of the form ``'name=fragment'``;
+		an occurrence of ``'{name}'`` will be replaced with ``fragment`` when
+		it appears in a query.
 	:param inmemory: if True, keep all corpora in memory; otherwise,
 		load them from disk with each query.
 	"""
@@ -509,12 +512,6 @@ class FragmentSearcher(CorpusSearcher):
 			with openread(macros) as tmp:
 				self.macros = dict(line.strip().split('=', 1) for line in tmp)
 		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
-
-	def __del__(self):
-		if not hasattr(self, 'files'):
-			# __init__ didn't succeed, so don't bother closing
-			return
-		self.close()
 
 	def close(self):
 		del self.vocab
@@ -768,7 +765,7 @@ class RegexSearcher(CorpusSearcher):
 	do not count towards line numbers (e.g., when used as paragraph breaks).
 
 	:param macros: a file containing lines of the form ``'name=regex'``;
-		an occurrence of ``'{name}'`` will be suitably replaced when it
+		an occurrence of ``'{name}'`` will be replaced with ``regex`` when it
 		appears in a query.
 	:param ignorecase: ignore case in all queries."""
 
@@ -802,12 +799,6 @@ class RegexSearcher(CorpusSearcher):
 				buf = mmap.mmap(fileno, 0, access=mmap.ACCESS_READ)
 				self.files[filename] = (fileno, buf)
 		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
-
-	def __del__(self):
-		if not hasattr(self, 'files'):
-			# __init__ didn't succeed, so don't bother closing
-			return
-		self.close()
 
 	def close(self):
 		if self.files is None:
