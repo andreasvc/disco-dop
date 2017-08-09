@@ -464,7 +464,6 @@ cdef class Grammar:
 		cdef int n
 		cdef Prob *tmp
 		cdef Prob [:] ob
-		cdef LexicalRule lexrule
 		cdef size_t numweights = self.numrules + self.lexical.size()
 		if self.currentmodel == name and self.logprob == logprob:
 			return
@@ -494,10 +493,8 @@ cdef class Grammar:
 			self.rbinary[0][n].prob = tmp[self.rbinary[0][n].no]
 		for n in range(self.numunary):
 			self.unary[0][n].prob = tmp[self.unary[0][n].no]
-		n = self.numrules
-		for lexrule in self.lexical:
-			lexrule.prob = tmp[n]
-			n += 1
+		for n in range(self.lexical.size()):
+			self.lexical[n].prob = tmp[self.numrules + n]
 		self.logprob = logprob
 		self.currentmodel = name
 
