@@ -729,7 +729,7 @@ cdef class FixedVocabulary(Vocabulary):
 			raise ValueError('could not get buffer from mmap.')
 		header = <uint32_t *>ptr
 		ob.prodbuf.d.aschar = &(ptr[offset])
-		ob.prodbuf.len = header[0]
+		ob.prodbuf.len = header[0] * sizeof(Rule)
 		ob.prodbuf.capacity = 0
 		offset += header[0] * sizeof(Rule)
 		ob.labelidx.d.aschar = &(ptr[offset])
