@@ -164,8 +164,9 @@ class Parser(object):
 		self.verbosity = prm.verbosity
 		self.funcclassifier = funcclassifier
 		self.headrules = None
-		if prm.binarization.headrules and os.path.exists(
-				prm.binarization.headrules):  # FIXME: store headrules in grammar?
+		if prm.binarization and prm.binarization.headrules and os.path.exists(
+				prm.binarization.headrules):
+			# FIXME: store headrules in grammar? non-essential
 			self.headrules = readheadrules(prm.binarization.headrules)
 		for stage in prm.stages:
 			model = 'default'
@@ -177,8 +178,8 @@ class Parser(object):
 			if stage.mode != 'mc-rerank':
 				stage.grammar.switch(model, logprob=True)
 			if prm.verbosity >= 3:
-				logging.debug(stage.name)
-				logging.debug(stage.grammar)
+				print(stage.name)
+				print(stage.grammar)
 
 	def parse(self, sent, tags=None, goldtree=None):
 		"""Parse a sentence and perform postprocessing.
@@ -346,7 +347,7 @@ class Parser(object):
 							else ('p=%g' % exp(-prob)), deriv)
 						for n, (deriv, prob) in enumerate(
 							chart.derivations[:100]))))
-					print('sum of probabitilies: %g\n' % sum(exp(-prob)
+					print('sum of probabilities: %g\n' % sum(exp(-prob)
 							for _, prob in chart.derivations[:100]))
 				if stage.objective == 'shortest':
 					stage.grammar.switch('default' if stage.estimator == 'rfe'
@@ -365,7 +366,7 @@ class Parser(object):
 					print('100-best parse trees:\n%s' % '\n'.join(
 							'%d. %s %s' % (n + 1, probstr(prob), treestr)
 							for n, (treestr, prob, _) in enumerate(besttrees)))
-					print('sum of probabitilies: %g\n' %
+					print('sum of probabilities: %g\n' %
 							sum((prob[1] if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
 				if not stage.prune and tree is not None:
@@ -419,7 +420,8 @@ class Parser(object):
 			treetransforms.mergediscnodes(treetransforms.unbinarize(
 					parsetree, childchar=':', expandunary=False))
 		# when possible, infer head from binarization
-		if self.binarization.headrules and self.binarization.rightmostunary:
+		if (self.binarization and self.binarization.headrules
+				and self.binarization.rightmostunary):
 			saveheads(parsetree, self.binarization.tailmarker)
 		treetransforms.unbinarize(parsetree, expandunary=False)
 		treetransforms.removefanoutmarkers(parsetree)
@@ -800,7 +802,9 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile('.+}<'))
-		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)))
+		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)),
+				transformations=None, binarization=None, postagging=None,
+				relationalrealizational=None)
 		parser = Parser(prm)
 		morph = None
 		del args[:2]

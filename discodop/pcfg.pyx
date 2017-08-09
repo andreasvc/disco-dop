@@ -627,7 +627,6 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		# NB: use gold tags if given, even if (word, tag) was not part of
 		# training data or if it was pruned, modulo state splits etc.
 		if not recognized and tag is not None:
-			# for lhs in grammar.lexicalbylhs:
 			for x in grammar.lexicalbylhs:
 				lhs = x.first
 				if tagre.match(grammar.tolabel[lhs]):

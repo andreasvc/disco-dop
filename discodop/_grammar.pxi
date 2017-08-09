@@ -133,7 +133,6 @@ cdef class Grammar:
 	def _convertrules(self, bytes rules):
 		"""Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs."""
-		cdef int numother = 0
 		cdef uint32_t n = 0, m
 		cdef Prob w
 		cdef ProbRule cur
@@ -278,7 +277,7 @@ cdef class Grammar:
 			self.rulenos[key] = n
 			n += 1
 
-		self.numrules = self.numunary + self.numbinary + numother
+		self.numrules = self.numunary + self.numbinary
 		self.phrasalnonterminals = self.toid.ob.size()
 		if not self.numrules:
 			raise ValueError('No rules found')
@@ -293,6 +292,7 @@ cdef class Grammar:
 		cdef string tag, weight
 		cdef string word
 		cdef LexicalRule lexrule
+		cdef uint32_t lexruleno
 
 		while True:
 			fields.clear()
@@ -312,7 +312,8 @@ cdef class Grammar:
 			for n in range(1, fields.size()):
 				x = fields[n].find_first_of(ord(b' '))
 				if x > fields[n].size():
-					raise ValueError('Expected: word<TAB>tag1<SPACE>weight1...'
+					raise ValueError('Expected: word<TAB>tag1<SPACE>weight1'
+							'<TAB>tag2<SPACE>weight2...\n'
 							'Got: %r' % prev[:buf - prev].decode('utf8'))
 				tag = string(fields[n].c_str(), x)
 				weight = string(fields[n].c_str() + x + 1)
@@ -394,8 +395,6 @@ cdef class Grammar:
 			if it != self.lexicalbylhs.end():
 				for x in dereference(it).second:
 					mass += self.defaultmodel[self.numrules + x.second]
-			# for lexruleno in self.lexicalbylhs.get(lhs, {}).values():
-			# 	mass += self.defaultmodel[self.numrules + lexruleno]
 			n = 0
 			while self.bylhs[lhs][n].lhs == lhs:
 				self.defaultmodel[self.bylhs[lhs][n].no] /= mass
@@ -404,8 +403,6 @@ cdef class Grammar:
 			if it != self.lexicalbylhs.end():
 				for x in dereference(it).second:
 					self.defaultmodel[self.numrules + x.second] /= mass
-			# for lexruleno in self.lexicalbylhs.get(lhs, {}).values():
-			# 	self.defaultmodel[self.numrules + lexruleno] /= mass
 		self.currentmodel = None
 		self.switch('default', self.logprob)
 
