@@ -691,20 +691,19 @@ cdef class Vocabulary:
 	def tofile(self, str filename):
 		"""Helper function for pickling."""
 		cdef FILE *out = fopen(filename.encode('utf8'), b'wb')
-		cdef array header = array(
-				'I', [len(self.prods), len(self.labels) + 1, self.labelbuf.len])
 		cdef size_t written = 0
+		cdef uint32_t header[3]
+		header[:] = [len(self.prods), len(self.labels) + 1, self.labelbuf.len]
 		if out is NULL:
 			raise ValueError('could not open file.')
 		try:
-			written += fwrite(header.data.as_voidptr, sizeof(uint32_t),
-					len(header), out)
+			written += fwrite(<void *>header, 1, sizeof(header), out)
 			written += fwrite(self.prodbuf.d.ptr, 1, self.prodbuf.len, out)
-			written += fwrite(self.labelidx.d.ptr, sizeof(uint32_t),
-					self.labelidx.len, out)
+			written += fwrite(self.labelidx.d.ptr, 1,
+					self.labelidx.len * sizeof(uint32_t), out)
 			written += fwrite(self.labelbuf.d.ptr, 1, self.labelbuf.len, out)
-			if (written != len(header) + self.prodbuf.len
-					+ self.labelidx.len + self.labelbuf.len):
+			if (written != sizeof(header) + self.prodbuf.len
+					+ self.labelidx.len * sizeof(uint32_t) + self.labelbuf.len):
 				raise ValueError('error writing to file.')
 		finally:
 			fclose(out)
