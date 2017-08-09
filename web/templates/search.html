@@ -161,7 +161,7 @@ div.barplot span {
             <span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
                 form['normquery'] }}"></span></label>
     </td><td></td></tr>
-    {% if metadata is not none %}
+    {% if metadata is defined %}
     <tr id=variables>
     <td style="vertical-align:top;">Variables:</td>
     <td><label>Correlate with (continuous) or break down by (categorical): <select name=target>
@@ -200,7 +200,7 @@ div.barplot span {
         <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
         (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
         <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)
-        {% if metadata is not none %}
+        {% if metadata is defined %}
         <label>Select subset from metadata:
             <select name=subset>
                 <option value="">(none)</option>

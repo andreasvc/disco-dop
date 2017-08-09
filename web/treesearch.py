@@ -647,7 +647,7 @@ def style():
 		n, shortest = min(enumerate(next(iter(CORPUSINFO.values()))),
 				key=lambda x: x[1].len)
 		yield ('Results based on first %d sentences (=shortest text %s).'
-				% (shortest, TEXTS[n]))
+				% (shortest.len, TEXTS[n]))
 
 		# produce a plot for each field
 		fields = ()
