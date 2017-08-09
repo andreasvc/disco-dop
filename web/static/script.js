@@ -36,11 +36,11 @@ function toggletextbox() {
 	if(state.disabled) {
 		state.disabled = false;
 		next.innerHTML = cur.value;
-		link.innerHTML = 'small';
+		link.innerHTML = 'smaller';
 	} else {
 		state.disabled = true;
 		next.value = cur.value;
-		link.innerHTML = 'large';
+		link.innerHTML = 'larger';
 	}
 }
 

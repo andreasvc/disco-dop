@@ -1133,7 +1133,8 @@ def getcorpus():
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
 		for filename in tfiles + ffiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
-				for a in tfiles + ffiles + tokfiles)):
+				for a in tfiles + ffiles + tokfiles)
+				or corpusinfo.keys() != corpora.keys()):
 		corpusinfo = {}
 		for engine in corpora:
 			corpusinfo[engine] = []

@@ -40,8 +40,8 @@ div.barplot span {
 </style>
 
 <body onLoad="triggerForm('output', '{{ output }}');
-	  triggerForm('norm', '{{ form.get('norm', 'sents') }}');
-	  triggerForm('engine', '{{ form.get('engine', 'tgrep2') }}'); " >
+      triggerForm('norm', '{{ form.get('norm', 'sents') }}');
+      triggerForm('engine', '{{ form.get('engine', 'tgrep2') }}'); " >
 <div class="content">
 <h3>Treebank Search</h3>
 
@@ -73,8 +73,10 @@ div.barplot span {
     | <a href="/style">Statistics &amp; readability measures</a>
 </p></blockquote>
 
-<form method=get name=queryform onSubmit="mergecheckboxes(); "><table>
-	<tbody>
+<form method=get name=queryform onSubmit="mergecheckboxes(); ">
+<table><tbody><tr valign=top><td>
+<table>
+    <tbody>
     <tr valign=top><td><label for=f1>Query:</label></td>
         <td>
             <input type=text
@@ -89,15 +91,13 @@ div.barplot span {
                 id=f2 rows=10 cols=80>{{ form['query'] }}</textarea>
             <input type=hidden name=textarea
                 value=on {{ '' if 'textarea' in form else 'disabled' }}>
+            <a href="javascript: toggletextbox(); ">
+                <span id=textboxlink>{{ 'smaller' if 'textarea' in form else 'larger' }}</span>
+                textbox</a>
         </td>
-        <td><input type=submit>
-			<a href="javascript: toggletextbox(); ">switch to
-				<span id=textboxlink>{{ 'small' if 'textarea' in form else 'large' }}</span>
-				textbox</a>
-		</td>
     </tr>
     <tr><td style="vertical-align: text-top; ">
-    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: togglelink('selecttexts'); " id="linkselecttexts">hide selection</a>;
+    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected;
     Query engine:
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
@@ -111,28 +111,7 @@ div.barplot span {
     {% endif %}
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine', default) == 'regex'
-		}} onChange="hide('treesoutput', '');">regex</label>
-    <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
-    (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
-    <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)
-    {% if metadata is not none %}
-    <label>Select subset from metadata:
-        <select name=subset>
-            <option value="">(none)</option>
-            {% for cat in categoricalcolumns -%}
-				{% for val in metadata[cat].unique() -%}
-					<option value="{{ cat }}={{ val }}">{{ cat }}={{ val }}</option>
-				{% endfor -%}
-            {% endfor -%}
-    </select></label>
-    {% endif %}
-    <br>
-    <input type=hidden name=texts value="">
-    {% for text in texts -%}
-    <label><input type=checkbox name=textcheck value={{ loop.index0 }}{{
-        ' checked' if loop.index0 in selectedtexts }} onChange="numchecked(); ">{{ text }}</label><br>
-    {% endfor -%}
-    </div>
+        }} onChange="hide('treesoutput', '');">regex</label>
     <br>
     <label>Slice:
         <input type=text name=slice value="{{ form['slice'] }}" size=10>
@@ -162,7 +141,7 @@ div.barplot span {
         Extract fragments from matches;</label>
     </span>
     </td><td></td></tr>
-	</tbody>
+    </tbody>
     <tbody id=normrow>
     <tr>
     <td style="vertical-align:top;">Normalization:</td>
@@ -181,11 +160,11 @@ div.barplot span {
         custom query:
             <span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
                 form['normquery'] }}"></span></label>
-	</td><td></td></tr>
+    </td><td></td></tr>
     {% if metadata is not none %}
-	<tr id=variables>
+    <tr id=variables>
     <td style="vertical-align:top;">Variables:</td>
-	<td><label>Correlate with (continuous) or break down by (categorical): <select name=target>
+    <td><label>Correlate with (continuous) or break down by (categorical): <select name=target>
             <option value="">(none)</option>
             {% for cat in metadata.columns -%}
                 <option value="{{ cat }}"{{ ' selected' if form.get('target') == cat }}>{{ cat }}</option>
@@ -200,8 +179,8 @@ div.barplot span {
     <br><a href="metadata">view metadata</a>
     </td><td></td></tr>
     {% endif %}
-	</tbody>
-	<tbody>
+    </tbody>
+    <tbody>
     <tr id=labelrow>
     <td>Options</td><td>
     <label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
@@ -212,8 +191,38 @@ div.barplot span {
         Breakdown</label>
     <br>
     </td><td></td></tr>
-	</tbody>
+    <tr>
+        <td></td><td><input type=submit value=Submit></td>
+    </tr>
+    </tbody></table>
+    <td>
+        <a href="javascript: togglelink('selecttexts'); " id="linkselecttexts">hide selection</a>;
+        <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
+        (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
+        <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)
+        {% if metadata is not none %}
+        <label>Select subset from metadata:
+            <select name=subset>
+                <option value="">(none)</option>
+                {% for cat in categoricalcolumns -%}
+                    {% for val in metadata[cat].unique() -%}
+                        <option value="{{ cat }}={{ val }}">{{ cat }}={{ val }}</option>
+                    {% endfor -%}
+                {% endfor -%}
+        </select></label>
+        {% endif %}
+        <br>
+        <input type=hidden name=texts value="">
+        {% for text in texts -%}
+        <label><input type=checkbox name=textcheck value={{ loop.index0 }}{{
+            ' checked' if loop.index0 in selectedtexts }} onChange="numchecked(); ">{{ text }}</label><br>
+        {% endfor -%}
+        </div>
+        <br>
+    </td>
+</tr></tbody>
 </table></form>
+
 <div id=tgrephelp style="display: none; "><pre>{{ """TGrep2 operators:
   A < B       A is the parent of (immediately dominates) B.
   A > B       A is the child of B.
