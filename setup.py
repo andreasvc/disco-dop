@@ -19,8 +19,6 @@ if USE_CYTHON:
 		from Cython.Build import cythonize
 		from Cython.Distutils import build_ext
 		from Cython.Compiler import Options
-		Options.fast_fail = True
-		Options.auto_pickle = False
 	except ImportError as err:
 		raise RuntimeError('could not import Cython.')
 	cmdclass = dict(build_ext=build_ext)
@@ -85,6 +83,9 @@ directives = {
 		'warn.unused_arg': False,
 		'warn.unused_result': False,
 		}
+Options.fast_fail = True
+if 'auto_pickle' in Options.get_directive_defaults():
+	directives.update(auto_pickle=False)
 
 if __name__ == '__main__':
 	if sys.version_info[:2] < (3, 3):
