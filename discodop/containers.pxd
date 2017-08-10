@@ -3,7 +3,7 @@ from libc.stdlib cimport malloc, calloc, realloc, free, abort, \
 		qsort, atol, strtod
 from libc.math cimport fabs, log, exp
 from libc.string cimport memcmp, memset, memcpy
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int16_t, int32_t
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
 from libcpp.string cimport string
@@ -635,15 +635,15 @@ cdef FatChartItem CFGtoFatChartItem(Label label, Idx start, Idx end)
 
 # start fragments stuff
 
-cdef struct Node:  # a node of a binary tree
-	int prod  # non-negative, ID of a phrasal or lexical production
-	short left  # >= 0: array idx to child Node; <0: idx sent[-left - 1];
-	short right  # >=0: array idx to child Node; -1: empty (unary Node)
+cdef packed struct Node:  # a node of a binary tree
+	int32_t prod # >= 0: production ID; -1: unseen production
+	int16_t left  # >= 0: array idx to child Node; <0: idx sent[-left - 1];
+	int16_t right  # >=0: array idx to child Node; -1: empty (unary Node)
 
 
-cdef struct NodeArray:  # a tree as an array of Node structs
-	unsigned int offset  # index to Node array where this tree starts
-	short len, root  # number of nodes, index to root node
+cdef packed struct NodeArray:  # a tree as an array of Node structs
+	uint32_t offset  # index to Node array where this tree starts
+	int16_t len, root  # number of nodes, index to root node
 
 
 @cython.final
