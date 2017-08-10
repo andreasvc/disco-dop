@@ -410,15 +410,13 @@ class Tree(object):
 
 	# === Parsing ===============================================
 	@classmethod
-	def parse(cls, s, brackets='()', parse_label=None, parse_leaf=int,
+	def parse(cls, s, parse_label=None, parse_leaf=int,
 			label_pattern=None, leaf_pattern=None):
 		"""Parse a bracketed tree string and return the resulting tree.
 		Trees are represented as nested bracketings, such as:
 		``(S (NP (NNP John)) (VP (V runs)))``
 
 		:param s: The string to parse
-		:param brackets: The two bracket characters used to mark the
-			beginning and end of trees and subtrees.
 		:param parse_label, parse_leaf: If specified, these functions are
 			applied to the substrings of s corresponding to labels and leaves
 			(respectively) to obtain the values for those labels and leaves.
@@ -430,12 +428,8 @@ class Tree(object):
 		:returns: A tree corresponding to the string representation s.
 			If this class method is called using a subclass of Tree, then it
 			will return a tree of that type."""
-		if not isinstance(brackets, str) or len(brackets) != 2:
-			raise TypeError('brackets must be a length-2 string')
-		if re.search(r'\s', brackets):
-			raise TypeError('whitespace brackets not allowed')
 		# Construct a regexp that will tokenize the string.
-		open_b, close_b = brackets[:1], brackets[1:]
+		open_b, close_b = '()'
 		open_pattern, close_pattern = (re.escape(open_b), re.escape(close_b))
 		if label_pattern is None:
 			label_pattern = r'[^\s%s%s]+' % (open_pattern, close_pattern)
