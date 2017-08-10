@@ -5,13 +5,10 @@ Expects one or more supported treebanks in the directory corpus/"""
 import io
 import os
 import re
-import csv
 import sys
 import json
 import glob
-import base64
 import logging
-import tempfile
 import subprocess
 from heapq import nlargest
 from datetime import datetime, timedelta
@@ -584,6 +581,7 @@ def fragmentsinresults(form, doexport=False):
 		yield "No matches."
 		return
 	# TODO: get counts from whole text (preload)
+	import tempfile
 	with tempfile.NamedTemporaryFile(delete=True) as tmp:
 		tmp.writelines(uniquetrees)
 		tmp.flush()
@@ -667,6 +665,7 @@ def style():
 
 	def generatecsv():
 		"""Generate CSV file."""
+		import csv
 		tmp = io.BytesIO()
 		keys = sorted(next(iter(STYLETABLE.values()))) if STYLETABLE else []
 		writer = csv.writer(tmp)
@@ -909,6 +908,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 		# Convert to PNG
 		figfile = io.BytesIO()
 		plt.savefig(figfile, format='png')
+		import base64
 		result = '<div><img src="data:image/png;base64, %s"/></div>' % (
 				base64.b64encode(figfile.getvalue()).decode('utf8'))
 		plt.close()

@@ -576,7 +576,7 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 		short maxnodes, bint disc=False, start=None, end=None, tostring=True):
 	"""Generate bitsets corresponding to whole trees in the input.
 
-	:param tostring: do not create list of trees as strings
+	:param tostring: when False, do not create list of trees as strings
 	:returns: a pair of lists with trees as strings and their bitsets,
 		respectively.
 
