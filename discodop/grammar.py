@@ -1,6 +1,4 @@
 """Assorted functions to read off grammars from treebanks."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import re
 import gzip

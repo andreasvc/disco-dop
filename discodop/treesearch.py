@@ -4,8 +4,6 @@
 # - cache raw results from _query() before conversion?
 # - return/cache trees as strings?
 
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import os
 import re

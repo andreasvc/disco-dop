@@ -7,8 +7,6 @@ you want to abort, kill the program manually (e.g., press Ctrl-Z and issue
 'kill %1'). If the program seems stuck, re-run without multiprocessing
 (pass --numproc 1) to see if there might be a bug."""
 
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import os
 import re

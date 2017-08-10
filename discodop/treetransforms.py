@@ -17,8 +17,6 @@ This file contains three main transformations:
 # Author: Nathan Bodenstab <bodenstab@cslu.ogi.edu>
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import re
 from operator import attrgetter
 from itertools import islice

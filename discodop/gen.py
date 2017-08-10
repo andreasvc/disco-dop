@@ -1,7 +1,6 @@
 """Generate random sentences with an LCFRS.
 
 Reads grammar from a text file."""
-from __future__ import division, print_function, absolute_import
 import sys
 import gzip
 import codecs

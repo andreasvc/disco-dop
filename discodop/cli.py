@@ -1,6 +1,4 @@
 """Command-line interfaces to modules."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 from sys import argv, stdout, stderr, version_info
 from sys import exit as sysexit
 

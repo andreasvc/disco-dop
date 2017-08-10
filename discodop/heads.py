@@ -1,6 +1,4 @@
 """Functions related to finding the linguistic head of a constituent."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import re
 from collections import defaultdict, Counter

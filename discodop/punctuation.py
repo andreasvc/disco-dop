@@ -1,6 +1,4 @@
 """Punctuation related functions."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 from .tree import Tree, ParentedTree
 from .treetransforms import removeterminals
 

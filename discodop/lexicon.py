@@ -27,8 +27,6 @@ signatures from words, the flow is as follows:
 
 """
 # pylint: disable=abstract-class-instantiated
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import os
 import re
 import logging

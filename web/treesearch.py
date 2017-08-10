@@ -2,7 +2,6 @@
 
 Expects one or more supported treebanks in the directory corpus/"""
 # stdlib
-from __future__ import print_function, absolute_import
 import io
 import os
 import re

@@ -1,6 +1,5 @@
 """Web interface to browse a corpus with various visualizations."""
 # stdlib
-from __future__ import print_function, absolute_import
 import os
 import re
 import sys

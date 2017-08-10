@@ -4,8 +4,6 @@
 - Transforms (primarily state splits) listed by name
 - Relational-realizational transform
 """
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import re
 from itertools import islice
 from .tree import Tree, ParentedTree, escape, unescape, ptbescape

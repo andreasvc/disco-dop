@@ -1,8 +1,6 @@
 """Parser object that performs coarse-to-fine and postprocessing.
 
 Additionally, a simple command line interface similar to bitpar."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import os
 import re

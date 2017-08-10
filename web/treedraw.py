@@ -1,7 +1,6 @@
 """Web interface to draw trees. Requires Flask.
 Optional: pdflatex, tikz, imagemagick."""
 # stdlib
-from __future__ import absolute_import
 import io
 import os
 from subprocess import Popen, PIPE

@@ -1,6 +1,4 @@
 """Function tags classifier."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 from .tree import Tree
 from .treebanktransforms import base, functions, FUNC
 from .heads import getheadpos

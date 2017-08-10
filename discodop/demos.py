@@ -1,5 +1,4 @@
 """Examples of various formalisms encoded in LCFRS grammars."""
-from __future__ import print_function, absolute_import
 from math import exp
 from . import treetransforms, plcfrs, kbest
 from .tree import Tree

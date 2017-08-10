@@ -37,7 +37,6 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import division, print_function, absolute_import
 from collections import deque
 from .tree import Tree
 

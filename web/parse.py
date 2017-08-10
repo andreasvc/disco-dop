@@ -6,7 +6,6 @@ subdirectories of ``grammar/``
 Also usable from the command line:
 $ curl http://localhost:5000/parser/parse -G --data-urlencode "sent=What's up?"
 """
-from __future__ import absolute_import
 import os
 import re
 import glob

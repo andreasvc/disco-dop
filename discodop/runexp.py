@@ -1,8 +1,6 @@
 """Run an experiment given a parameter file.
 
 Does grammar extraction, parsing, and evaluation."""
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import os
 import re

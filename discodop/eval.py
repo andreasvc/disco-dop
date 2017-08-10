@@ -7,8 +7,6 @@ distance, unlabeled dependencies), as well as facilities for error analysis.
 
 [1] http://nlp.cs.nyu.edu/evalb/"""
 # pylint: disable=cell-var-from-loop
-from __future__ import division, print_function, absolute_import, \
-		unicode_literals
 import io
 import sys
 from getopt import gnu_getopt, GetoptError
