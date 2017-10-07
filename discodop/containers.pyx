@@ -831,5 +831,4 @@ cdef inline int getbufptr(
 	return result
 
 
-__all__ = ['Grammar', 'Chart', 'Ctrees', 'SmallChartItem', 'FatChartItem',
-		'Edges', 'RankedEdge', 'Vocabulary', 'FixedVocabulary']
+__all__ = ['Grammar', 'Chart', 'Ctrees', 'Vocabulary', 'FixedVocabulary']

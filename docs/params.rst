@@ -78,16 +78,16 @@ Binarization
     :labelfun: specify a function from nodes to labels; can be used to change
         how labels appear in markovization, e.g., to strip of annotations.
     :dot: if ``True``, horizontal context will include all siblings not yet
-		generated, separated with a dot from the siblings that have been.
+        generated, separated with a dot from the siblings that have been.
         This option overrules ``h`` and ``revh``.
     :filterlabels: filter any labels matching this sequence from the
-		horizontal markovization context. If labels are of the form ``A/B``,
-		only A is used to match against this sequence. Also, ``labelfun`` is
-		first applied to the label, if given. Can be used to filter out
-		modifiers, s.t. the context contains only required elements.
-	:param direction: if True, mark the the direction of the binarization with
-		l, r, or m; l is everything before the head, r to the right, and m
-		just before introducing the head.
+        horizontal markovization context. If labels are of the form ``A/B``,
+        only A is used to match against this sequence. Also, ``labelfun`` is
+        first applied to the label, if given. Can be used to filter out
+        modifiers, s.t. the context contains only required elements.
+    :param direction: if True, mark the the direction of the binarization with
+        l, r, or m; l is everything before the head, r to the right, and m
+        just before introducing the head.
 
 
 Stages

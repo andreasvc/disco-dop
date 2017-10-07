@@ -252,4 +252,4 @@ def lazykbest(Chart chart, int k, bint derivs=True):
 				entry.second) for entry in chart.rankededges[root]]
 	return None
 
-__all__ = ['getderiv', 'lazykbest']
+__all__ = ['lazykbest']
