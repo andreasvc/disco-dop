@@ -139,6 +139,8 @@ function ajaxFunction() {
 			+ "&lang=" + encodeURIComponent(lang.options[lang.selectedIndex].value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
 			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
+			+ "&require=" + encodeURIComponent(document.queryform.require.value)
+			+ "&block=" + encodeURIComponent(document.queryform.block.value)
 			// + "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
 			// + "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			;

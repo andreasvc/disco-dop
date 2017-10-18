@@ -168,25 +168,28 @@ cdef class DenseCFGChart(CFGChart):
 	cdef ItemNo getitemidx(self, uint64_t n):
 		"""Get itemidx of n'th item.
 
+		:param n: an index in range(0, self.items.size())
+		:returns: the ItemNo that is the n'th item in the chart.
+
 		With the other charts the n'th item simply has itemidx n,
-		but for this chart with need a level of indirection because
+		but for this chart we need a level of indirection because
 		itemidx is the item itself."""
 		return self.items[n]
 
-	def hasnode(self, node, Whitelist whitelist=None):
-		cdef short left = min(node.leaves())
-		cdef short right = max(node.leaves()) + 1
-		cdef Label label
+	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
+		cdef Label labelid
 		try:
-			label = self.grammar.toid[node.label]
+			labelid = self.grammar.toid[label]
 		except KeyError:
-			return False
+			return 0
+		item = cellidx(left, right, self.lensent, self.grammar.nonterminals
+				) + labelid
 		if whitelist is not None:
 			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
-					].count(whitelist.mapping[label]) != 0
-		return self.parseforest[
-				cellidx(left, right, self.lensent, self.grammar.nonterminals)
-				+ label].size() != 0
+					].count(whitelist.mapping[labelid]) != 0 and item
+		return self.parseforest[item].size() != 0 and item
 
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		cdef CFGItem item
@@ -332,19 +335,19 @@ cdef class SparseCFGChart(CFGChart):
 				self.grammar.tolabel[item.st.label],
 				item.st.start, item.st.end)
 
-	def hasnode(self, node, Whitelist whitelist=None):
-		cdef short left = min(node.leaves())
-		cdef short right = max(node.leaves()) + 1
-		cdef Label label
+	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
+		cdef Label labelid
 		try:
-			label = self.grammar.toid[node.label]
+			labelid = self.grammar.toid[label]
 		except KeyError:
-			return False
+			return 0
+		item = cellstruct(left, right) + labelid
 		if whitelist is not None:
 			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
-					].count(whitelist.mapping[label]) != 0
-		return self.itemindex.find(
-				cellstruct(left, right) + label) != self.itemindex.end()
+					].count(whitelist.mapping[labelid]) != 0 and item
+		return self.itemindex.find(item) != self.itemindex.end() and item
 
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		cdef CFGItem item

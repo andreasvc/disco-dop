@@ -8,6 +8,7 @@ $ curl http://localhost:5000/parser/parse -G --data-urlencode "sent=What's up?"
 """
 import os
 import re
+import json
 import glob
 import heapq
 import string  # pylint: disable=W0402
@@ -57,6 +58,8 @@ def parse():
 	coarse = request.args.get('coarse', 'pcfg')
 	html = 'html' in request.args
 	lang = request.args.get('lang', 'detect')
+	require = request.args.get('require', None)
+	block = request.args.get('block', None)
 	if not sent:
 		return ''
 	nbest = None
@@ -67,7 +70,13 @@ def parse():
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
 		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
-	key = (senttok, est, marg, objfun, coarse, lang)
+	if require:
+		require = tuple((label, tuple(indices))
+				for label, indices in sorted(json.loads(require)))
+	if block:
+		block = tuple((label, tuple(indices))
+				for label, indices in sorted(json.loads(block)))
+	key = (senttok, est, marg, objfun, coarse, lang, require, block)
 	resp = CACHE.get(key)
 	if resp is None:
 		link = 'parse?' + url_encode(dict(sent=sent, est=est, marg=marg,
@@ -82,8 +91,8 @@ def parse():
 			if len(PARSERS[lang].stages) > 1:
 				PARSERS[lang].stages[1].k = (1e-5
 						if coarse == 'pcfg-posterior' else 50)
-
-		results = list(PARSERS[lang].parse(senttok))
+		results = list(PARSERS[lang].parse(
+				senttok, require=require, block=block))
 		if results[-1].noparse:
 			parsetrees = []
 			result = 'no parse!'

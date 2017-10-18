@@ -179,7 +179,7 @@ class Parser(object):
 				print(stage.name)
 				print(stage.grammar)
 
-	def parse(self, sent, tags=None, goldtree=None):
+	def parse(self, sent, tags=None, goldtree=None, require=None, block=None):
 		"""Parse a sentence and perform postprocessing.
 
 		Yields a dictionary from parse trees to probabilities for each stage.
@@ -257,7 +257,8 @@ class Parser(object):
 					whitelist, msg1 = prunechart(
 							charts[stage.prune], stage.grammar, stage.k,
 							splitprune, self.stages[prevn].markorigin,
-							stage.mode.startswith('pcfg'))
+							stage.mode.startswith('pcfg'),
+							require, block)
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
@@ -304,7 +305,7 @@ class Parser(object):
 					# count number of gold bracketings in pruned chart.
 					for node in tree.subtrees():
 						# test whether node is part of *whitelist*
-						if chart.hasnode(node, whitelist):
+						if chart.itemid(node.label, node.leaves(), whitelist):
 							fanout = re.search('_([0-9]+)$',
 									node.label)
 							golditems += (int(fanout.group(1))
@@ -371,7 +372,7 @@ class Parser(object):
 					totalgolditems = sum(1 for node in tree.subtrees())
 					golditems = sum(
 							1 for node in tree.subtrees()
-							if chart.hasnode(node))
+							if chart.itemid(node.label, node.leaves()))
 					msg += ('%d/%d gold items in derivations\n\t' % (
 							golditems, totalgolditems))
 			if stage.name in (stage.prune for stage in self.stages):

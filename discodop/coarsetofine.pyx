@@ -12,6 +12,8 @@ from .bit cimport nextset, nextunset, anextset, anextunset
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart, CFGItem
 from .plcfrs cimport SmallLCFRSChart, FatLCFRSChart
 from .kbest import lazykbest
+from .kbest cimport derivhasitem, collectitems, getderiv
+from roaringbitmap import RoaringBitmap
 import numpy as np
 
 include "constants.pxi"
@@ -29,7 +31,8 @@ ctypedef fused ChartItem_fused:
 
 
 def prunechart(Chart coarsechart, Grammar fine, k,
-		bint splitprune, bint markorigin, bint finecfg):
+		bint splitprune, bint markorigin, bint finecfg,
+		require=None, block=None):
 	"""Produce a white list of selected chart items.
 
 	The criterion is that they occur in the `k`-best derivations of ``chart``,
@@ -52,6 +55,11 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	:param markorigin: in combination with splitprune, coarse labels include an
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2.
+	:param require: optionally, a list of tuples ``(label, indices)``; only
+		k-best derivations containing these labeled spans will be selected.
+		For example. ``('NP', [0, 1, 2])``; expects ``k > 1``.
+	:param block: optionally, a list of tuples ``(label, indices)``;
+		these labeled spans will be pruned.
 	:returns: ``(whitelist, msg)``
 
 	For LCFRS, the white list is indexed as follows:
@@ -76,24 +84,55 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 			and (fine.splitmapping is NULL or fine.splitmapping[0] is NULL))):
 		raise ValueError('need to call fine.getmapping(coarse, ...).')
 	# prune coarse chart and collect items
-	if 0 < k < 1:  # threshold on posterior probabilities
+	if require is not None:
+		lazykbest(coarsechart, k, derivs=False)
+		root = coarsechart.root()
+		queue = RoaringBitmap(range(coarsechart.rankededges[root].size()))
+		nextqueue = RoaringBitmap()
+		for strlabel, indices in require:
+			item = coarsechart.itemid(strlabel, indices)
+			# print(strlabel, indices, item, coarsechart.itemstr(item))
+			if item == 0:
+				raise ValueError('could not fulfill constraint: %r %r' % (
+						strlabel, indices))
+			nextqueue = RoaringBitmap()
+			for n in queue:
+				if derivhasitem(
+						root, coarsechart.rankededges[root][n].first,
+						coarsechart, item):
+					nextqueue.add(n)
+			queue, nextqueue = nextqueue, RoaringBitmap()
+		itemset = RoaringBitmap()
+		for n in queue:
+			collectitems(
+					root, coarsechart.rankededges[root][n].first,
+					coarsechart, itemset)
+		items = [n for n in itemset]
+		msg = 'applied constraints; %d of %d derivations left' % (
+				len(queue), coarsechart.rankededges[root].size())
+	elif 0 < k < 1:  # threshold on posterior probabilities
 		items, msg = posteriorthreshold(coarsechart, k)
-	else:  # construct a list of the k-best nonterminals to prune with
-		if k == 0:
-			coarsechart.filter()
-			items = [n for n in range(coarsechart.parseforest.size())
-					if coarsechart.parseforest[n].size() != 0]
-			msg = ('coarse items before pruning: %d; after filter: %d'
-					% (coarsechart.parseforest.size(), len(items)))
-		else:
-			lazykbest(coarsechart, k, derivs=False)
-			items = [n for n in range(coarsechart.rankededges.size())
-					if coarsechart.rankededges[n].size() != 0]
-			msg = ('coarse items before pruning: %d; after: %d, '
-					'based on %d/%d derivations' % (
-					coarsechart.parseforest.size(), len(items),
-					min(coarsechart.rankededges[coarsechart.root()].size(),
-					k), k))
+	elif k == 0:  # only drop items not part of a full derivation
+		coarsechart.filter()
+		items = [n for n in range(coarsechart.parseforest.size())
+				if coarsechart.parseforest[n].size() != 0]
+		msg = ('coarse items before pruning: %d; after filter: %d'
+				% (coarsechart.parseforest.size(), len(items)))
+	elif k >= 1:  # construct a list of the k-best chart items to prune with
+		lazykbest(coarsechart, k, derivs=False)
+		items = [n for n in range(coarsechart.rankededges.size())
+				if coarsechart.rankededges[n].size() != 0]
+		msg = ('coarse items before pruning: %d; after: %d, '
+				'based on %d/%d derivations' % (
+				coarsechart.parseforest.size(), len(items),
+				min(coarsechart.rankededges[coarsechart.root()].size(), k), k))
+	else:
+		raise ValueError('invalid value for k parameter.')
+	if block is not None:
+		filteritems = RoaringBitmap()
+		for strlabel, indices in block:
+			filteritems.add(coarsechart.itemid(strlabel, indices))
+		items = [n for n in items if n not in filteritems]
 	if finecfg:  # index items by cell
 		whitelist.cfg.clear()
 		whitelist.cfg.resize(compactcellidx(

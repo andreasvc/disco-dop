@@ -124,8 +124,8 @@ cdef class Chart:
 		"""Number of items in chart; NB: this includes 1 sentinel item."""
 		return self.parseforest.size()
 
-	def hasnode(self, node, Whitelist whitelist=None):
-		"""Check if Tree node with integer indices is in the chart."""
+	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+		"""Get integer ID for labeled span in the chart (0 if non-existent)."""
 		raise NotImplementedError
 
 	def __bool__(self):

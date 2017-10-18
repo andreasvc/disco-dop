@@ -122,18 +122,19 @@ cdef class SmallLCFRSChart(LCFRSChart):
 				self.grammar.tolabel[self._label(itemidx)],
 				bin(self.items[itemidx].vec)[2:].zfill(self.lensent)[::-1])
 
-	def hasnode(self, node, Whitelist whitelist=None):
+	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
 		cdef SmallChartItem tmp
 		try:
-			label = self.grammar.toid[node.label]
+			labelid = self.grammar.toid[label]
 		except KeyError:
-			return False
-		vec = sum(1 << n for n in node.leaves())
-		tmp = SmallChartItem(label, vec)
+			return 0
+		vec = sum(1 << n for n in indices)
+		tmp = SmallChartItem(labelid, vec)
 		if whitelist is not None:
-			tmp.label = whitelist.mapping[label]
-			return whitelist.small[tmp.label].count(tmp) != 0
-		return self.itemindex[tmp] != 0
+			tmp.label = whitelist.mapping[labelid]
+			return (whitelist.small[tmp.label].count(tmp)
+					and self.itemindex[tmp])
+		return self.itemindex[tmp]
 
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		return self.items[itemidx]
@@ -225,22 +226,23 @@ cdef class FatLCFRSChart(LCFRSChart):
 		return '%s[%s]' % (self.grammar.tolabel[self._label(itemidx)],
 				result)
 
-	def hasnode(self, node, Whitelist whitelist=None):
+	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
 		cdef FatChartItem tmp
 		cdef uint64_t n
 		try:
-			label = self.grammar.toid[node.label]
+			labelid = self.grammar.toid[label]
 		except KeyError:
-			return False
-		tmp = FatChartItem(label)
-		for n in node.leaves():
+			return 0
+		tmp = FatChartItem(labelid)
+		for n in indices:
 			if n >= SLOTS * sizeof(unsigned long) * 8:
-				return False
+				return 0
 			SETBIT(tmp.vec, n)
 		if whitelist is not None:
-			tmp.label = whitelist.mapping[label]
-			return whitelist.fat[tmp.label].count(tmp) != 0
-		return self.itemindex[tmp] != 0
+			tmp.label = whitelist.mapping[labelid]
+			return (whitelist.fat[tmp.label].count(tmp) != 0
+					and self.itemindex[tmp])
+		return self.itemindex[tmp]
 
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		raise ValueError
