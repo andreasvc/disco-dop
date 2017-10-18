@@ -595,11 +595,11 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		uint32_t n
 		short left, right, lensent = len(sent)
 	for left, word in enumerate(sent):
-		tag = tags[left] if tags else None
+		tag = tags[left] if tags and tags[left] else None
 		# if we are given gold tags, make sure we only allow matching
 		# tags - after removing addresses introduced by the DOP reduction
 		# and other state splits.
-		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tags else None
+		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tag else None
 		right = left + 1
 		if CFGChart_fused is DenseCFGChart:
 			cell = cellidx(left, right, lensent, nts)

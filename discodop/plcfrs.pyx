@@ -653,11 +653,11 @@ cdef populatepos(Grammar grammar,
 		elif LCFRSItem_fused is FatChartItem:
 			item = FatChartItem(0)
 			item.vec[0] = wordidx
-		tag = tags[wordidx] if tags else None
+		tag = tags[wordidx] if tags and tags[wordidx] else None
 		# if we are given gold tags, make sure we only allow matching
 		# tags - after removing addresses introduced by the DOP reduction
 		# and other state splits.
-		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tags else None
+		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tag else None
 		if estimates is not None:
 			left = wordidx
 			gaps = 0
@@ -667,7 +667,7 @@ cdef populatepos(Grammar grammar,
 		if it != grammar.lexicalbyword.end():
 			for n in dereference(it).second:
 				lexrule = grammar.lexical[n]
-				if not tags or tagre.match(grammar.tolabel[lexrule.lhs]):
+				if not tag or tagre.match(grammar.tolabel[lexrule.lhs]):
 					score = lexrule.prob
 					if estimatetype == SX:
 						score += outside[lexrule.lhs, left, right, 0]

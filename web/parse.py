@@ -31,7 +31,9 @@ CACHE = SimpleCache()
 PARSERS = {}
 SHOWFUNC = True  # show function tags in results
 SHOWMORPH = True  # show morphological features in results
-
+# POS tagged input is tokenized, and every token is of the form "word/POS"
+# POS may be empty.
+POSTAGS = re.compile('^\s*(?:\S+/\S*)(?:\s+\S+/\S*)*\s*$')
 
 @APP.route('/')
 def main():
@@ -63,7 +65,10 @@ def parse():
 	if not sent:
 		return ''
 	nbest = None
-	senttok = tokenize(sent)
+	if POSTAGS.match(sent):
+		senttok, tags = zip(*(a.rsplit('/', 1) for a in sent.split()))
+	else:
+		senttok, tags = tokenize(sent), None
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
 	if lang == 'detect':
@@ -76,11 +81,16 @@ def parse():
 	if block:
 		block = tuple((label, tuple(indices))
 				for label, indices in sorted(json.loads(block)))
-	key = (senttok, est, marg, objfun, coarse, lang, require, block)
+	key = (senttok, tags, est, marg, objfun, coarse, lang, require, block)
 	resp = CACHE.get(key)
 	if resp is None:
-		link = 'parse?' + url_encode(dict(sent=sent, est=est, marg=marg,
-				objfun=objfun, coarse=coarse, html=html))
+		urlparams = dict(sent=sent, est=est, marg=marg, objfun=objfun,
+				coarse=coarse, html=html)
+		if require:
+			urlparams['require'] = json.dumps(require)
+		if block:
+			urlparams['block'] = json.dumps(block)
+		link = 'parse?' + url_encode(urlparams)
 		PARSERS[lang].stages[-1].estimator = est
 		PARSERS[lang].stages[-1].objective = objfun
 		PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
@@ -92,7 +102,7 @@ def parse():
 				PARSERS[lang].stages[1].k = (1e-5
 						if coarse == 'pcfg-posterior' else 50)
 		results = list(PARSERS[lang].parse(
-				senttok, require=require, block=block))
+				senttok, tags=tags, require=require, block=block))
 		if results[-1].noparse:
 			parsetrees = []
 			result = 'no parse!'
