@@ -298,7 +298,7 @@ class Tree(object):
 			(part-of-speech tags). The order reflects the order of the tree's
 			hierarchical structure. A preterminal that dominates multiple
 			terminals generates a tuple for each terminal."""
-		agenda = list(self[::-1])
+		agenda = [self]
 		result = []
 		while agenda:
 			node = agenda.pop()
