@@ -187,7 +187,7 @@ class Evaluator(object):
 			else:
 				print('%s  %s  %s  %s  %s' % (
 					cat.rjust(7),
-					nozerodiv(lambda: 100 * sum(acc.goldbfunc[cat].values())
+					nozerodiv(lambda: sum(acc.goldbfunc[cat].values())
 							/ len(acc.goldfun)),
 					nozerodiv(lambda: recall(
 							acc.goldbfunc[cat], acc.candbfunc[cat])),
