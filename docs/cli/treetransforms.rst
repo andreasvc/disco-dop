@@ -12,7 +12,9 @@ Main transformation options
 The following transforms are applied in the order given on the command line.
 
 --introducepreterminals
-                Add preterminals to terminals without a dedicated preterminal.
+                Add preterminals to terminals without a dedicated preterminal;
+                labels will be of the form ``PARENT/terminal``.
+
 --transforms=<NAME1,NAME2...>
                 Apply specific treebank transforms; available presets:
                 ``negra, wsj, alpino, green2013ftb, km2003wsj,
@@ -22,15 +24,18 @@ The following transforms are applied in the order given on the command line.
 --reversetransforms=<NAME1,NAME2,...>
                 Undo specified transforms; specify transforms in original order.
 
---binarize [-h x] [-v x] [--factor=<left|right>] [...]
+--binarize
+                Related options: [-h x] [-v x] [--factor=<left|right>] [...]
                 Markovized binarization; also see --headrules and other options below.
 
---optimalbinarize [-h x] [-v x]
+--optimalbinarize
+                Related options: [-h x] [-v x]
                 Binarization that minimizes LCFRS fan-out/complexity.
 
 --unbinarize    Restore original n-ary trees.
 
---splitdisc [--markorigin]
+--splitdisc
+                Related options: [--markorigin]
                 Split discontinuous nodes into several continuous nodes.
 
 --mergedisc     Reverse the node splitting operation.
