@@ -9,7 +9,6 @@ from itertools import count
 import numpy as np
 from .tree import Tree
 from .util import which
-from .treebank import TERMINALSRE
 
 cimport cython
 from cython.operator cimport postincrement, dereference

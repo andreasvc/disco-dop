@@ -1301,7 +1301,7 @@ def merge(filenames, outfilename, sumfunc, key):
 def addindices(frag):
 	"""Convert fragment in bracket to discbracket format."""
 	cnt = count()
-	return LEAVESRE.sub(lambda m: ' %d=%s)' % (next(cnt), m.group(1)), frag)
+	return LEAVESRE.sub(lambda m: ' %d=%s' % (next(cnt), m.group(1)), frag)
 
 
 __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',

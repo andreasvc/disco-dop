@@ -19,8 +19,9 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 EXPORTHEADER = '%% word\tlemma\ttag\tmorph\tedge\tparent\tsecedge\n'
 EXPORTNONTERMINAL = re.compile(r'^#([5-9][0-9][0-9])$')
 POSRE = re.compile(r'\(([^() ]+)\s+[^ ()]+\s*\)')
-TERMINALSRE = re.compile(r' ([^ ()]+)\s*\)')
-LEAVESRE = re.compile(r' ([^ ()]*)\s*\)')
+# leaf itself can be empty; leaf ends with closing paren or whitespace
+# Assumes there is no whitespace between open paren and non-terminal: "(  NP "
+LEAVESRE = re.compile(r' (?=\))| ([^ ()]+)\s*(?=[\s)])')
 
 
 class Item(object):
@@ -207,7 +208,7 @@ class BracketCorpusReader(CorpusReader):
 	def _parse(self, block):
 		c = count()
 		block = SUPERFLUOUSSPACERE.sub(')', block)
-		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d)' % next(c), block))
+		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d' % next(c), block))
 		for node in tree.subtrees():
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
 				x = node.label.find(char)
