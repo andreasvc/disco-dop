@@ -122,7 +122,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 				self.grammar.tolabel[self._label(itemidx)],
 				bin(self.items[itemidx].vec)[2:].zfill(self.lensent)[::-1])
 
-	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+	def itemid(self, str label, indices, Whitelist whitelist=None):
 		cdef SmallChartItem tmp
 		try:
 			labelid = self.grammar.toid[label]
@@ -226,7 +226,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 		return '%s[%s]' % (self.grammar.tolabel[self._label(itemidx)],
 				result)
 
-	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+	def itemid(self, str label, indices, Whitelist whitelist=None):
 		cdef FatChartItem tmp
 		cdef uint64_t n
 		try:

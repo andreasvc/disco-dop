@@ -176,7 +176,7 @@ cdef class DenseCFGChart(CFGChart):
 		itemidx is the item itself."""
 		return self.items[n]
 
-	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+	def itemid(self, str label, indices, Whitelist whitelist=None):
 		cdef short left = min(indices)
 		cdef short right = max(indices) + 1
 		cdef Label labelid
@@ -335,7 +335,7 @@ cdef class SparseCFGChart(CFGChart):
 				self.grammar.tolabel[item.st.label],
 				item.st.start, item.st.end)
 
-	def itemid(self, str label, tuple indices, Whitelist whitelist=None):
+	def itemid(self, str label, indices, Whitelist whitelist=None):
 		cdef short left = min(indices)
 		cdef short right = max(indices) + 1
 		cdef Label labelid
