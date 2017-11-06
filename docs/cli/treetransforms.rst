@@ -25,17 +25,17 @@ The following transforms are applied in the order given on the command line.
                 Undo specified transforms; specify transforms in original order.
 
 --binarize
-                Related options: [-h x] [-v x] [--factor=<left|right>] [...]
+                Related options: ``[-h x] [-v x] [--factor=<left|right>] [...]``
                 Markovized binarization; also see --headrules and other options below.
 
 --optimalbinarize
-                Related options: [-h x] [-v x]
+                Related options: ``[-h x] [-v x]``
                 Binarization that minimizes LCFRS fan-out/complexity.
 
 --unbinarize    Restore original n-ary trees.
 
 --splitdisc
-                Related options: [--markorigin]
+                Related options: ``[--markorigin]``
                 Split discontinuous nodes into several continuous nodes.
 
 --mergedisc     Reverse the node splitting operation.

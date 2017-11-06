@@ -139,11 +139,12 @@ function ajaxFunction() {
 			+ "&lang=" + encodeURIComponent(lang.options[lang.selectedIndex].value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
 			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
-			+ "&require=" + encodeURIComponent(document.queryform.require.value)
-			+ "&block=" + encodeURIComponent(document.queryform.block.value)
 			// + "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
 			// + "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			;
+	if (require.length > 0 || block.length > 0)
+			url += "&require=" + encodeURIComponent('[' + require.join() + ']')
+				+ "&block=" + encodeURIComponent('[' + block.join() + ']');
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
 	document.queryform.sent.value = '';
@@ -224,4 +225,27 @@ function nohighlightdep() {
 			elements[i].style = '';
 		}
 	});
+}
+
+var require = [];
+var block = [];
+function togglespan(labeledspan, array1, array2, elem) {
+	/* toggle membership of item in array1; remove item from array2. */
+	var item = JSON.stringify(labeledspan);
+	var i = array2.indexOf(item);
+	if (i != -1) {
+		array2.splice(i, 1);  // remove array2[i]
+	}
+	i = array1.indexOf(item);
+	if (i != -1) {
+		array1.splice(i, 1);  // remove array1[i]
+		elem.style.backgroundColor = 'white';
+		return false;
+	}
+	if (array1 == require)
+		elem.style.backgroundColor = 'lightgreen';
+	else
+		elem.style.backgroundColor = 'lightcoral';
+	array1.push(item); 	// append item to array1
+	return false;
 }

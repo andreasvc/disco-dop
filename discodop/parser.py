@@ -258,7 +258,7 @@ class Parser(object):
 							charts[stage.prune], stage.grammar, stage.k,
 							splitprune, self.stages[prevn].markorigin,
 							stage.mode.startswith('pcfg'),
-							require, block)
+							set(require or ()), set(block or ()))
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
@@ -357,7 +357,8 @@ class Parser(object):
 						backtransform=stage.backtransform,
 						k=stage.m, sldop_n=stage.sldop_n,
 						mcplambda=stage.mcplambda, mcplabels=stage.mcplabels,
-						ostag=stage.dop == 'ostag')
+						ostag=stage.dop == 'ostag',
+						require=require, block=block)
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 				if self.verbosity >= 3:

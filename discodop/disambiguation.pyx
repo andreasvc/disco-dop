@@ -17,7 +17,8 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import Tree, ParentedTree, writediscbrackettree, brackettree
+from .tree import Tree, ParentedTree, ImmutableTree, writediscbrackettree, \
+		brackettree
 from .kbest import lazykbest
 from .kbest cimport getderiv
 from .grammar import lcfrsproductions, spinal, REMOVEDEC
@@ -72,7 +73,7 @@ cpdef getderivations(Chart chart, int k, derivstrings=True):
 cpdef marginalize(method, Chart chart,
 		list backtransform=None, list sent=None, list tags=None,
 		int k=1000, int sldop_n=7, double mcplambda=1.0, set mcplabels=None,
-		bint ostag=False):
+		bint ostag=False, set require=None, set block=None):
 	"""Take a list of derivations and optimizes a given objective function.
 
 	1. Rewrites derivations into the intended parse trees.
@@ -100,6 +101,11 @@ cpdef marginalize(method, Chart chart,
 			substituting fragments in this list for flattened rules in
 			derivations.
 	:param k: when ``method='sl-dop``, number of derivations to consider.
+	:param require: optionally, a list of tuples ``(label, indices)``; only
+		parse trees containing these labeled spans will be kept.
+		For example. ``('NP', [0, 1, 2])``.
+	:param block: optionally, a list of tuples ``(label, indices)``;
+		parse trees with these labeled spans will be pruned.
 	:returns:
 		``(parses, msg)``.
 
@@ -253,7 +259,19 @@ cpdef marginalize(method, Chart chart,
 			len(chart.derivations) if dopreduction
 				else chart.rankededges[chart.root()].size(),
 			len(mpdtrees) or len(derivlen) or mpptrees.size())
+	if require or block:
+		results = [(treestr, score, frags) for treestr, score, frags in results
+				if testconstraints(treestr, require, block)]
+		msg += '; %d parsetrees match constraints' % len(results)
 	return results, msg
+
+
+def testconstraints(treestr, require, block):
+	"""Test whether tree satisfies constraints of required/blocked sets of
+	labeled spans."""
+	spans = {(node.label, tuple(node.leaves()))
+			for node in ImmutableTree(treestr).subtrees()}
+	return spans.issuperset(require) and spans.isdisjoint(block)
 
 
 cdef maxconstituentsparse(Chart chart,
