@@ -32,7 +32,7 @@ ctypedef fused ChartItem_fused:
 
 def prunechart(Chart coarsechart, Grammar fine, k,
 		bint splitprune, bint markorigin, bint finecfg,
-		require=None, block=None):
+		set require=None, set block=None):
 	"""Produce a white list of selected chart items.
 
 	The criterion is that they occur in the `k`-best derivations of ``chart``,
@@ -91,7 +91,6 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		nextqueue = RoaringBitmap()
 		for strlabel, indices in require:
 			item = coarsechart.itemid(strlabel, indices)
-			# print(strlabel, indices, item, coarsechart.itemstr(item))
 			if item == 0:
 				raise ValueError('could not fulfill constraint: %r %r' % (
 						strlabel, indices))
