@@ -171,8 +171,11 @@ class CorpusReader(object):
 			return item
 		if self.removeempty:
 			removeemptynodes(item.tree, item.sent)
-		if self.ensureroot and item.tree.label != self.ensureroot:
-			item.tree = ParentedTree(self.ensureroot, [item.tree])
+		if self.ensureroot:
+			if item.tree.label == '':
+				item.tree.label = self.ensureroot
+			elif item.tree.label != self.ensureroot:
+				item.tree = ParentedTree(self.ensureroot, [item.tree])
 		if not isinstance(self, BracketCorpusReader):
 			# roughly order constituents by order in sentence
 			for a in reversed(list(item.tree.subtrees(lambda x: len(x) > 1))):
