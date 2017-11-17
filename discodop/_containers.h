@@ -13,6 +13,13 @@
 // so we need the safe version which supports this
 #include "../cpp-btree/safe_btree_map.h"
 
+// C++11 version of gheap is preferrable
+#if __cplusplus >= 201103L
+#define GHEAP_CPP11
+#endif
+#include "../gheap/gheap.hpp"
+#include "../gheap/gpriority_queue.hpp"
+
 /* The number of uint64_t elements in a FatChartItem bit vector. */
 /* FIXME: check for 64 bits; also defined in constants.pxi */
 #define SLOTS 2
@@ -31,9 +38,17 @@ template <typename Key,
 		typename KeyHasher = spp::spp_hash<Key> >
 class Agenda {
 public:
-	// FIXME: use proper templated class instead of nested pairs
+	struct Entry {
+		Key key;
+		Value value;
+		uint32_t count;
+		Entry() { };
+		Entry(Key _key, Value _value, uint32_t _count):
+			key(_key), value(_value), count(_count) { };
+	};
+	typedef Entry entry_type;
 	typedef typename std::pair<Key, Value> item_type;
-	typedef typename std::pair<item_type, uint32_t> entry_type;
+
 	Agenda() { counter = 0; }
 	// The following three functions should be thought of as constructors
 	// but more convenient in Cython to only use default constructor
@@ -42,47 +57,50 @@ public:
 		map.reserve(n);
 		heap.reserve(n);
 	}
-	// replace agenda with all items from vector (assumes no duplicates!)
+	// replace agenda with all items from vector
+	// (does not consider priorities for duplicate keys)
 	void replace_entries(typename std::vector<item_type> entries) {
-		std::vector<entry_type> tmp;
-		tmp.reserve(entries.size());
-		map = spp::sparse_hash_map<Key, entry_type, KeyHasher>(entries.size());
+		map = map_type(entries.size());
 		counter = 0;
 		for (typename std::vector<item_type>::iterator it=entries.begin();
 				it != entries.end(); it++) {
-			entry_type e(*it, ++counter);
-			map[it->first] = e;
-			tmp.push_back(e);
+			entry_type entry(it->first, it->second, ++counter);
+			map[it->first] = entry;
+		}
+		// collect all non-duplicate items
+		std::vector<entry_type> tmp;
+		tmp.reserve(map.size());
+		for (typename map_type::iterator it=map.begin();
+				it != map.end(); it++) {
+			tmp.push_back(it->second);
 		}
 		// heapify tmp vector
-		heap = std::priority_queue<entry_type,
-				std::vector<entry_type>,
-				CmpRev<entry_type> >(CmpRev<entry_type>(), tmp);
+		heap = heap_type(tmp.begin(), tmp.end());
 	}
-	// replace agenda with up to k best items from vector (duplictes removed)
+	// replace agenda with up to k best items from vector
+	// (only best priority kept in case of duplicates)
 	void kbest_entries(
 			typename std::vector<item_type> entries,
 			size_t k) {
-		map = spp::sparse_hash_map<Key, entry_type, KeyHasher>(k);
+		map = map_type(k);
 		counter = 0;
 		// collect items, filtering out duplicates, adding counters
 		for (typename std::vector<item_type>::iterator it=entries.begin();
 				it != entries.end(); it++) {
-			typename spp::sparse_hash_map<Key, entry_type>::iterator
-					x = map.find(it->first);
+			typename map_type::iterator x = map.find(it->first);
 			if (x == map.end()) {
-				entry_type e(*it, ++counter);
-				map[it->first] = e;
-			} else if (it->second < x->second.first.second) {
-				entry_type e(*it, x->second.second);
-				x->second = e;
+				entry_type entry(it->first, it->second, ++counter);
+				map[it->first] = entry;
+			} else if (it->second < x->second.value) {
+				entry_type entry(it->first, it->second, x->second.count);
+				x->second = entry;
 			} // else: ignore duplicate item with lower/equal priority
 		}
 		// collect all non-duplicate items
 		std::vector<entry_type> tmp;
 		tmp.reserve(map.size());
-		for(typename spp::sparse_hash_map<Key, entry_type>::iterator
-				it=map.begin(); it != map.end(); it++) {
+		for (typename map_type::iterator it=map.begin();
+				it != map.end(); it++) {
 			tmp.push_back(it->second);
 		}
 		// select k-best items
@@ -99,88 +117,86 @@ public:
 			map.clear();
 			for (typename std::vector<entry_type>::iterator it=tmp.begin();
 					it != tmp.end(); it++) {
-				map[it->first.first] = *it;
+				map[it->key] = *it;
 			}
 		}
 		// heapify tmp vector
-		heap = std::priority_queue<entry_type,
-				std::vector<entry_type>,
-				CmpRev<entry_type> >(CmpRev<entry_type>(), tmp);
+		heap = heap_type(tmp.begin(), tmp.end());
 	}
 	bool member(Key k) { return map.find(k) != map.end(); }
 	bool empty() { return map.empty(); }
 	size_t size() { return map.size(); }
 	void setitem(Key k, Value v) {
-		typename spp::sparse_hash_map<Key, entry_type>::iterator x = map.find(k);
-		if (x == map.end()) {
-			entry_type e(item_type(k, v), ++counter);
-			map[k] = e;
-			heap.push(e);
-		} else { // NB: unconditional set, even worse priority.
-			entry_type e(item_type(k, v), x->second.second);
-			x->second = e;
-			heap.push(e);
-		}
+		// NB: unconditional set, three situations:
+		// 1. the priority is better; better item will pop from heap first
+		// 2. priority is equal: heap will have a duplicate, but map only
+		//             has one, so other one is ignored.
+		// 3. priority is worse: the better one will pop from heap first,
+		//             so this item will be ignored.
+		entry_type entry(k, v, ++counter);
+		map[k] = entry;
+		heap.push(entry);
 	}
 	void setifbetter(Key k, Value v) {
-		typename spp::sparse_hash_map<Key, entry_type>::iterator x = map.find(k);
+		// insert only when key is new or priority is better; worse or equal
+		// priority is ignored, avoids polluting heap with bogus values.
+		typename map_type::iterator x = map.find(k);
 		if (x == map.end()) {
-			entry_type e(item_type(k, v), ++counter);
-			map[k] = e;
-			heap.push(e);
-		} else if (v < x->second.first.second) {
-			entry_type e(item_type(k, v), x->second.second);
-			x->second = e;
-			heap.push(e);
-		} // else: ignore duplicate item with lower priority.
+			entry_type entry(k, v, ++counter);
+			map[k] = entry;
+			heap.push(entry);
+		} else if (v < x->second.value) {
+			entry_type entry(k, v, x->second.count);
+			x->second = entry;
+			heap.push(entry);
+		} // else: ignore duplicate item with lower/equal priority.
 	}
 	item_type pop() {
-		entry_type e;
-		item_type item;
-		if(map.empty() || heap.empty()) {
-			return item;
+		item_type noitem;
+		if (map.empty()) {
+			return noitem;
 		}
-		e = heap.top();
-		item = e.first;
-		// skip entries which are no longer in the map
-		// or which had their priority updated.
-		while (map.find(item.first) == map.end()) {
+		typename map_type::iterator it;
+		entry_type entry = heap.top();
+		// skip entries which are no longer in the map; (could verify that
+		// priority matches w/map, but heap gives us the best priority so we
+		// are not interested in other priorities for this key)
+		while (it = map.find(entry.key), it == map.end()
+				// || it->second.value != entry.value
+				) {
 			heap.pop();
-			if(heap.empty()) {
-				return item;
+			if (heap.empty()) {
+				return noitem;
 			}
-			e = heap.top();
-			item = e.first;
+			entry = heap.top();
 		}
 		heap.pop();
-		map.erase(item.first);
-		return item;
+		map.erase(entry.key);
+		return item_type(entry.key, entry.value);
 	}
 private:
 	// a comparison function that considers the priority and count, not the key.
 	template <typename entry_type> class Cmp {
 		public:
 		size_t operator()(const entry_type& k1, const entry_type& k2) const {
-			return k1.first.second < k2.first.second || (
-					k1.first.second == k2.first.second && (
-					k1.second < k2.second));
+			return k1.value < k2.value || (
+					k1.value == k2.value && k1.count < k2.count);
 		}
 	};
 	// a reversed version, because priority_queue is a max-heap by default.
 	template <typename entry_type> class CmpRev {
 		public:
 		size_t operator()(const entry_type& k1, const entry_type& k2) const {
-			return k1.first.second > k2.first.second || (
-					k1.first.second == k2.first.second && (
-					k1.second > k2.second));
+			return k1.value > k2.value || (
+					k1.value == k2.value && k1.count > k2.count);
 		}
 	};
+	typedef spp::sparse_hash_map<Key, entry_type, KeyHasher> map_type;
+	typedef gpriority_queue<gheap<4, 1>, entry_type,
+			std::vector<entry_type>, CmpRev<entry_type> > heap_type;
+	map_type map;
+	heap_type heap;
 	size_t counter;
-	spp::sparse_hash_map<Key, entry_type, KeyHasher> map;
-	// FIXME: use D-ary heap;
-	std::priority_queue<entry_type,
-		std::vector<entry_type>,
-		CmpRev<entry_type> > heap;
 };
 
 

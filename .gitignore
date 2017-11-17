@@ -27,6 +27,7 @@
 
 !cpp-btree/
 !sparsepp/
+!gheap
 
 !discodop/
 discodop/*

@@ -4,3 +4,6 @@
 [submodule "cpp-btree"]
 	path = cpp-btree
 	url = https://github.com/andreasvc/cpp-btree
+[submodule "gheap"]
+	path = gheap
+	url = https://github.com/valyala/gheap.git
