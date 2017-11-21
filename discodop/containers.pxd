@@ -542,6 +542,7 @@ cdef class Grammar:
 	cdef StringList tolabel
 	cdef StringIntDict toid
 	cdef readonly list rulemapping, selfrulemapping
+	cdef readonly dict tblabelmapping
 	cdef readonly str currentmodel
 	cdef vector[Prob] defaultmodel
 	cdef readonly object models  # serialized numpy arrays

@@ -136,6 +136,16 @@ cdef class SmallLCFRSChart(LCFRSChart):
 					and self.itemindex[tmp])
 		return self.itemindex[tmp]
 
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef SmallChartItem tmp
+		vec = sum(1 << n for n in indices)
+		tmp = SmallChartItem(labelid, vec)
+		if whitelist is not None:
+			tmp.label = whitelist.mapping[labelid]
+			return (whitelist.small[tmp.label].count(tmp)
+					and self.itemindex[tmp])
+		return self.itemindex[tmp]
+
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		return self.items[itemidx]
 
@@ -233,6 +243,20 @@ cdef class FatLCFRSChart(LCFRSChart):
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		tmp = FatChartItem(labelid)
+		for n in indices:
+			if n >= SLOTS * sizeof(unsigned long) * 8:
+				return 0
+			SETBIT(tmp.vec, n)
+		if whitelist is not None:
+			tmp.label = whitelist.mapping[labelid]
+			return (whitelist.fat[tmp.label].count(tmp) != 0
+					and self.itemindex[tmp])
+		return self.itemindex[tmp]
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef FatChartItem tmp
+		cdef uint64_t n
 		tmp = FatChartItem(labelid)
 		for n in indices:
 			if n >= SLOTS * sizeof(unsigned long) * 8:

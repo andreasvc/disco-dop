@@ -190,6 +190,16 @@ cdef class DenseCFGChart(CFGChart):
 					].count(whitelist.mapping[labelid]) != 0 and item
 		return self.parseforest[item].size() != 0 and item
 
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
+		item = cellidx(left, right, self.lensent, self.grammar.nonterminals
+				) + labelid
+		if whitelist is not None:
+			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
+					].count(whitelist.mapping[labelid]) != 0 and item
+		return self.parseforest[item].size() != 0 and item
+
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		cdef CFGItem item
 		item.dt = itemidx
@@ -342,6 +352,15 @@ cdef class SparseCFGChart(CFGChart):
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		item = cellstruct(left, right) + labelid
+		if whitelist is not None:
+			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
+					].count(whitelist.mapping[labelid]) != 0 and item
+		return self.itemindex.find(item) != self.itemindex.end() and item
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
 		item = cellstruct(left, right) + labelid
 		if whitelist is not None:
 			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)

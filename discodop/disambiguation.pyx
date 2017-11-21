@@ -50,6 +50,8 @@ include "constants.pxi"
 
 REMOVEIDS = re.compile('@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
+REMOVESTATESPLITS = re.compile(r'(\([^^\s()]+?)\^[^\s|]* ')
+
 cdef str NONCONSTLABEL = ''
 cdef str NEGATIVECONSTLABEL = '-#-'
 
@@ -270,7 +272,8 @@ def testconstraints(treestr, require, block):
 	"""Test whether tree satisfies constraints of required/blocked sets of
 	labeled spans."""
 	spans = {(node.label, tuple(node.leaves()))
-			for node in ImmutableTree(treestr).subtrees()}
+			for node in ImmutableTree(
+				REMOVESTATESPLITS.sub(r'\1', treestr)).subtrees()}
 	return spans.issuperset(require) and spans.isdisjoint(block)
 
 

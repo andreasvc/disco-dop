@@ -12,4 +12,3 @@ ctypedef sparse_hash_map[ItemNo, RankedEdgeAgenda[Prob]] agendas_type
 
 cdef string getderiv(ItemNo v, RankedEdge ej, Chart chart)
 cdef collectitems(ItemNo v, RankedEdge& ej, Chart chart, itemset)
-cdef bint derivhasitem(ItemNo v, RankedEdge& ej, Chart chart, ItemNo u)

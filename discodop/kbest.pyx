@@ -218,31 +218,6 @@ cdef string getderiv(ItemNo v, RankedEdge ej, Chart chart):
 	return result  # result.decode('utf8')
 
 
-cdef bint derivhasitem(ItemNo v, RankedEdge& ej, Chart chart, ItemNo u):
-	"""Traverse derivation and return whether item u is part of it."""
-	# NB: this could be smarter by only following nodes compatible with u.
-	cdef RankedEdge ej1
-	if ej.edge.rule is NULL:
-		return False
-	if ej.left != -1:
-		leftitem = chart.left(ej)
-		if leftitem == u:
-			return True
-	if ej.right != -1:
-		rightitem = chart.right(ej)
-		if rightitem == u:
-			return True
-	if ej.left != -1:
-		ej1 = chart.rankededges[leftitem][ej.left].first
-		if derivhasitem(leftitem, ej1, chart, u):
-			return True
-	if ej.right != -1:
-		ej1 = chart.rankededges[rightitem][ej.right].first
-		if derivhasitem(rightitem, ej1, chart, u):
-			return True
-	return False
-
-
 cdef collectitems(ItemNo v, RankedEdge& ej, Chart chart, itemset):
 	"""Traverse derivation and add all item IDs to itemset."""
 	cdef RankedEdge ej1

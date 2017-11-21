@@ -11,6 +11,7 @@ BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile(b'[ \t][0-9]+[./][0-9]+[ \t\n]')
 # Detect rule format of bitpar
 BITPARRE = re.compile(rb'^[-.e0-9]+\b')
+REMOVESTATESPLITS = re.compile(r'^(\S+?)(?:\^[^\s|]*)?$')
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
@@ -129,6 +130,13 @@ cdef class Grammar:
 		if nonint.search(rules) is None:
 			self._normalize()
 		del rules, lexicon
+
+		# treebank label (NP) to list of matching grammar label IDs (NP^...)
+		self.tblabelmapping = {}
+		for n, strlabel in enumerate(self.tolabel):
+			match = REMOVESTATESPLITS.match(strlabel)
+			if match is not None:
+				self.tblabelmapping.setdefault(match.group(1), []).append(n)
 
 	def _convertrules(self, bytes rules):
 		"""Count unary & binary rules; make a canonical list of all

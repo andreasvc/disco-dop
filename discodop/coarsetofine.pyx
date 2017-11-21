@@ -3,8 +3,10 @@ from __future__ import print_function
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.algorithm cimport sort
+import re
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
+from .containers import REMOVESTATESPLITS
 from .containers cimport Grammar, Chart, Edge, RankedEdge, LexicalRule, \
 		Label, ItemNo, compactcellidx, CFGtoSmallChartItem, \
 		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist
@@ -12,7 +14,7 @@ from .bit cimport nextset, nextunset, anextset, anextunset
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart, CFGItem
 from .plcfrs cimport SmallLCFRSChart, FatLCFRSChart
 from .kbest import lazykbest
-from .kbest cimport derivhasitem, collectitems, getderiv
+from .kbest cimport collectitems, getderiv
 from roaringbitmap import RoaringBitmap
 import numpy as np
 
@@ -87,28 +89,30 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	if require is not None:
 		lazykbest(coarsechart, k, derivs=False)
 		root = coarsechart.root()
-		queue = RoaringBitmap(range(coarsechart.rankededges[root].size()))
-		nextqueue = RoaringBitmap()
+		require1 = []
 		for strlabel, indices in require:
-			item = coarsechart.itemid(strlabel, indices)
-			if item == 0:
-				raise ValueError('could not fulfill constraint: %r %r' % (
-						strlabel, indices))
-			nextqueue = RoaringBitmap()
-			for n in queue:
-				if derivhasitem(
-						root, coarsechart.rankededges[root][n].first,
-						coarsechart, item):
-					nextqueue.add(n)
-			queue, nextqueue = nextqueue, RoaringBitmap()
+			matchingitems = getmatchingitems(coarsechart, strlabel, indices)
+			if not matchingitems:
+				raise ValueError('could not fulfill constraint '
+						'(item not in chart): %r %r' % (strlabel, indices))
+			require1.append(set(matchingitems))
+		derivs = RoaringBitmap()
+		for n in range(coarsechart.rankededges[root].size()):
+			itemset = set()
+			collectitems(
+					root, coarsechart.rankededges[root][n].first,
+					coarsechart, itemset)
+			if not any(itemset.isdisjoint(matchingitems)
+					for matchingitems in require1):
+				derivs.add(n)
 		itemset = RoaringBitmap()
-		for n in queue:
+		for n in derivs:
 			collectitems(
 					root, coarsechart.rankededges[root][n].first,
 					coarsechart, itemset)
 		items = [n for n in itemset]
-		msg = 'applied constraints; %d of %d derivations left' % (
-				len(queue), coarsechart.rankededges[root].size())
+		msg = 'applied \'required\' constraints; %d of %d derivations left' % (
+				len(derivs), coarsechart.rankededges[root].size())
 	elif 0 < k < 1:  # threshold on posterior probabilities
 		items, msg = posteriorthreshold(coarsechart, k)
 	elif k == 0:  # only drop items not part of a full derivation
@@ -127,11 +131,14 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 				min(coarsechart.rankededges[coarsechart.root()].size(), k), k))
 	else:
 		raise ValueError('invalid value for k parameter.')
-	if block is not None:
-		filteritems = RoaringBitmap()
-		for strlabel, indices in block:
-			filteritems.add(coarsechart.itemid(strlabel, indices))
-		items = [n for n in items if n not in filteritems]
+	if block:
+		itemset = set(items).difference([item
+				for strlabel, indices in block
+					for item in getmatchingitems(coarsechart, strlabel, indices)
+				])
+		msg += '; applied \'block\' constraints; %d of %d items left' % (
+				len(itemset), items.size())
+		items = [n for n in itemset]
 	if finecfg:  # index items by cell
 		whitelist.cfg.clear()
 		whitelist.cfg.resize(compactcellidx(
@@ -161,6 +168,15 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	whitelist.mapping = fine.mapping
 	whitelist.splitmapping = fine.splitmapping
 	return whitelist, msg
+
+
+def getmatchingitems(Chart chart, str strlabel, indices):
+	matchingitems = []
+	for n in chart.grammar.tblabelmapping.get(strlabel, []):
+		item = chart.itemid1(n, indices)
+		if item != 0:
+			matchingitems.append(item)
+	return matchingitems
 
 
 def posteriorthreshold(Chart chart, double threshold):
