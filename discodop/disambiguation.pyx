@@ -273,7 +273,7 @@ def testconstraints(treestr, require, block):
 	labeled spans."""
 	spans = {(node.label, tuple(node.leaves()))
 			for node in ImmutableTree(
-				REMOVESTATESPLITS.sub(r'\1', treestr)).subtrees()}
+				REMOVESTATESPLITS.sub(r'\1 ', treestr)).subtrees()}
 	return spans.issuperset(require) and spans.isdisjoint(block)
 
 
