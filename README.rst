@@ -117,8 +117,11 @@ Mac OS X
 
 Windows 10
 ----------
-Install the
-[Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/about) (you may need to [install a Windows update](https://support.microsoft.com/en-us/help/4028685/windows-10-get-the-fall-creators-update) first),
+Install the `Windows subsystem for Linux
+<https://docs.microsoft.com/en-us/windows/wsl/about>`_ (you may need to
+`install a Windows update
+<https://support.microsoft.com/en-us/help/4028685/windows-10-get-the-fall-creators-update>`_
+first),
 install Ubuntu from the Windows Store,
 and proceed with the steps above for Ubuntu-based systems.
 
