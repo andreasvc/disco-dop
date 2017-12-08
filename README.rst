@@ -37,8 +37,8 @@ DOP specific (parsing with tree fragments):
 - estimators: relative frequency estimate (RFE), equal weights estimate (EWE).
 - objective functions: most probable parse (MPP),
   most probable derivation (MPD), most probable shortest derivation (MPSD),
-  most likely tree with shortest derivation (SL-DOP).
-- marginalization: n-best derivations, sampled derivations.
+  most likely tree with shortest derivation (SL-DOP),
+  most constituents correct (MCC).
 
 .. image:: docs/images/runexp.png
    :alt: screenshot of parse tree produced by parser
@@ -50,14 +50,14 @@ Requirements:
 
 - Python 3.3+     http://www.python.org (headers required, e.g. python3-dev package)
 - Cython 0.21+    http://www.cython.org
-- Numpy 1.5+      http://numpy.org/
+- Numpy 1.6+      http://numpy.org/
 
 Debian, Ubuntu based systems
 ----------------------------
 To compile the latest development version on an `Ubuntu <http://www.ubuntu.com>`_ system,
 run the following sequence of commands::
 
-    sudo apt-get install build-essential python3-dev python3-numpy python3-pip git
+    sudo apt-get install build-essential python3-dev python3-pip git
     git clone --recursive git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip3 install --user -r requirements.txt
@@ -65,7 +65,7 @@ run the following sequence of commands::
 
 The ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges. Make sure that
-``~/.local/bin`` directory is in your PATH, or add it as follows::
+``~/.local/bin`` is in your PATH, or add it as follows::
 
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
 
@@ -115,12 +115,19 @@ Mac OS X
     sudo pip3 install -r requirements.txt
     env CC=gcc sudo python3 setup.py install
 
+Windows 10
+----------
+Install the
+[Windows subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/about) (you may need to [install a Windows update](https://support.microsoft.com/en-us/help/4028685/windows-10-get-the-fall-creators-update) first),
+install Ubuntu from the Windows Store,
+and proceed with the steps above for Ubuntu-based systems.
+
 Other systems
 -------------
 If you do not run Linux, it is possible to run the code inside a virtual machine.
-To do that, install `Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_
-and download the virtual machine imagine with disco-dop pre-installed:
-http://lang.science.uva.nl/VMs/discodop-vboximage.zip
+To do that, install `Docker <https://www.docker.com/products/docker-toolbox>`_ or
+`Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_ and download a
+minimal Ubuntu image and follow the above installation instructions.
 
 
 Usage, documentation
