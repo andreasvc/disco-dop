@@ -811,3 +811,14 @@ def test_runexp():
 			os.remove('sample/' + path)
 		os.rmdir('sample/')
 	cli.runexp(['sample.prm'])
+
+
+def test_issue51():
+	from discodop.containers import Grammar
+	from discodop.plcfrs import parse
+	g = Grammar(
+			[((('S', 'A'), ((0,),)), 1.0),
+			((('A', 'Epsilon'), ('a',)), 1.0)],
+			start='S')
+	chart, msg = parse(["b"], g)
+	chart.filter()

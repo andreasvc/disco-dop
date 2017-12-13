@@ -144,6 +144,8 @@ cdef class Chart:
 		"""Drop edges not part of a derivation headed by root of chart."""
 		cdef set itemstokeep = set()
 		cdef ItemNo item
+		if self.parseforest.size() == 0:
+			return
 		_filtersubtree(self, self.root(), itemstokeep)
 		for item in {self.getitemidx(n) for n in range(1, self.numitems())
 				} - itemstokeep:
