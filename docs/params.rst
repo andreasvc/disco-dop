@@ -27,10 +27,11 @@ Corpora
 
     :``'export'``: Negra export format
     :``'bracket'``: Penn treebank style bracketed trees.
-    :``'discbracket'``: Bracketed parse trees with numeric indices and words of
-        sentence specified separately.
+    :``'discbracket'``: Bracketed parse trees with numeric indices and tokens
+        specified as ``0=token``.
     :``'alpino'``: Alpino XML format
     :``'tiger'``: Tiger XML format
+    :``'ftb'``: FTB XML format
 :traincorpus: a dictionary with the following keys:
 
     :path: filename of training corpus; may include wildcards / globbing

@@ -427,6 +427,39 @@ class AlpinoCorpusReader(CorpusReader):
 				xmlblock, self.functions, self.morphology, self.lemmas)
 
 
+class FTBXMLCorpusReader(CorpusReader):
+	"""Corpus reader for the French treebank (FTB) in XML format."""
+
+	def blocks(self):
+		"""
+		:returns: a list of strings containing the raw representation of
+			trees in the treebank."""
+		if self._block_cache is None:
+			self._block_cache = OrderedDict(self._read_blocks())
+		return OrderedDict((n, ElementTree.tostring(a))
+				for n, a in self._block_cache.items())
+
+	def _read_blocks(self):
+		if self._encoding not in (None, 'utf8', 'utf-8'):
+			raise ValueError('Encoding specified in XML files, '
+					'cannot be overriden.')
+		for filename in self._filenames:
+			# iterator over elements in XML file
+			context = ElementTree.iterparse(filename,
+					events=('start', 'end'))
+			_event, root = next(context)  # event == 'start' of root element
+			for event, elem in context:
+				if event == 'end' and elem.tag == 'SENT':
+					sentid = '%s_%s' % (elem.get('textID'), elem.get('nb'))
+					yield sentid, elem
+				root.clear()
+
+	def _parse(self, block):
+		""":returns: a parse tree given a string."""
+		return ftbtree(
+				block, self.functions, self.morphology, self.lemmas)
+
+
 def exporttree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sentence from tree in export format given as list of lines.
 
@@ -530,6 +563,51 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	comment = block.find('comments/comment')  # NB: only use first comment
 	if comment is not None:
 		comment = comment.text
+	handlefunctions(functions, tree, morphology=morphology)
+	return Item(tree, sent, comment, ElementTree.tostring(block))
+
+
+def ftbtree(block, functions=None, morphology=None, lemmas=None):
+	"""Get tree, sent from tree in FTB format given as etree XML object."""
+	def getsubtree(node, parentid):
+		"""Parse a subtree of an FTB tree."""
+		source = [''] * len(FIELDS)
+		nodeid = next(nodeids)
+		source[WORD] = node.text or ("#%s" % nodeid)
+		source[LEMMA] = node.get('lemma') or ''
+		source[MORPH] = node.get('ee') or ''
+		source[FUNC] = node.get('fct') or ''
+		if node.tag == 'w':
+			if node.get('compound') == 'yes':
+				source[TAG] = label = 'MW' + node.get('cat')
+				result = ParentedTree(label, [])
+				for child in node:
+					subtree = getsubtree(child, nodeid)
+					subtree.source[PARENT] = nodeid
+					result.append(subtree)
+			else:  # regular word token
+				source[TAG] = node.get('cat') or node.get('catint')
+				result = ParentedTree(source[TAG], [len(sent)])
+				sent.append(node.text)
+				handlemorphology(morphology, lemmas, result, source, sent)
+		else:
+			source[TAG] = label = node.tag
+			result = ParentedTree(label, [])
+			for child in node:
+				subtree = getsubtree(child, nodeid)
+				subtree.source[PARENT] = nodeid
+				result.append(subtree)
+			if not result:
+				return None
+		source[:] = [a.replace(' ', '_') if a else a for a in source]
+		result.source = source
+		return result
+
+	sent = []
+	nodeids = count(500)
+	tree = getsubtree(block, 0)
+	comment = ' '.join('%s=%r' % (a, block.get(a))
+			for a in ('argument', 'author', 'date'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
@@ -697,7 +775,7 @@ def writealpinotree(tree, sent, key, commentstr):
 
 
 def writedependencies(tree, sent, fmt):
-	"""Convert tree to unlabeled dependencies in `mst` or `conll` format."""
+	"""Convert tree to dependencies in `mst` or `conll` format."""
 	deps = dependencies(tree)
 	if fmt == 'mst':  # MST parser can read this format
 		# fourth line with function tags is left empty.
@@ -1035,18 +1113,21 @@ def numbase(key):
 	return [path] + components
 
 
-READERS = OrderedDict((('export', NegraCorpusReader),
+READERS = OrderedDict((
+		('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
-		('alpino', AlpinoCorpusReader)))
+		('alpino', AlpinoCorpusReader),
+		('ftb', FTBXMLCorpusReader)))
 WRITERS = ('export', 'bracket', 'discbracket',
 		'conll', 'mst', 'tokens', 'wordpos')
 
 __all__ = ['Item', 'CorpusReader', 'BracketCorpusReader',
 		'DiscBracketCorpusReader', 'NegraCorpusReader', 'AlpinoCorpusReader',
-		'TigerXMLCorpusReader', 'exporttree',
-		'exportsplit', 'alpinotree', 'writetree', 'writeexporttree',
-		'writealpinotree', 'writedependencies', 'dependencies', 'deplen',
-		'handlefunctions', 'handlemorphology', 'incrementaltreereader',
-		'segmentbrackets', 'segmentexport', 'segmentalpino', 'numbase']
+		'TigerXMLCorpusReader', 'FTBXMLCorpusReader',
+		'exporttree', 'exportsplit', 'alpinotree', 'ftbtree',
+		'writetree', 'writeexporttree', 'writealpinotree', 'writedependencies',
+		'dependencies', 'deplen', 'handlefunctions', 'handlemorphology',
+		'incrementaltreereader', 'segmentbrackets', 'segmentexport',
+		'segmentalpino', 'numbase']

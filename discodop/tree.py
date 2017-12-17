@@ -74,8 +74,13 @@ class Tree(object):
 
 	# NB: _parent is only used by ParentedTree subclass, but __slots__
 	# does not work with multiple inheritance.
-	# pylint believes unicode strings in slots attributes are illegal
-	__slots__ = ('label', 'children', 'source', 'head', '_parent')
+	__slots__ = (
+			'label',  # a string with the label of this constituent
+			'children',  # a list of Tree instances or terminals
+			'source',  # a list/tuple with extra treebank attributes
+			'head',  # a bool: is this constituent the head of its parent?
+			'_parent',  # if this is a ParentedTree, the parent node, or None.
+			)
 
 	def __new__(cls, label_or_str=None, children=None):
 		if label_or_str is None:
@@ -1044,7 +1049,7 @@ class DrawTree(object):
 
 	def _repr_svg_(self):
 		"""Return a rich representation for IPython notebook."""
-		return self.svg()
+		return self.svg(funcsep='-')
 
 	def nodecoords(self, tree, sent, highlight, highlightfunc, secedge):
 		"""Produce coordinates of nodes on a grid.

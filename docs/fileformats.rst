@@ -48,6 +48,8 @@ any non-terminal, e.g.::
     (VP (VB is) (JJ ))
     (S (NP John) (VP )) (. .))
 
+This format does not support discontinuous constituents.
+
 discbracket
 ^^^^^^^^^^^
 A corpus format for discontinuous trees in bracket notation, where the
@@ -91,17 +93,20 @@ to process, so the recommended approach is to convert to another format.
 
 Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
 
-
 Read-only formats
 ^^^^^^^^^^^^^^^^^
 :``tiger``: Tiger XML format.
     Cf. http://www.ims.uni-stuttgart.de/forschung/ressourcen/werkzeuge/TIGERSearch/doc/html/TigerXML.html
+:``ftb``: FTB XML format (does not support discontinuous constituents).
+    Cf. http://www.llf.cnrs.fr/Gens/Abeille/French-Treebank-fr.php
 
 Write-only formats
 ^^^^^^^^^^^^^^^^^^
-:``connl``, ``mst``: unlabeled dependencies; relies on head identification.
-:``tokens``: one sentence per line, tokens separated by spaces.
-:``wordpos``: similar to ``tokens`` but of the form ``token/POS``.
+:``connl``, ``mst``: Dependency conversion. Relies on head identification.
+                     Labels based on function tags (if any). A discontinuous
+                     tree may produce a non-projective dependency structure.
+:``tokens``: Tokens separated by spaces, one sentence per line.
+:``wordpos``: Similar to ``tokens`` but of the form ``token/POS``.
 
 
 .. _grammar-formats:

@@ -1,7 +1,8 @@
 
 treetransforms
 --------------
-Treebank binarization and conversion
+A command line interface to perform transformations on
+treebanks such as binarization.
 
 Usage: ``discodop treetransforms [input [output]] [options]``
 
@@ -42,17 +43,15 @@ The following transforms are applied in the order given on the command line.
 
 Other options
 ^^^^^^^^^^^^^
---inputfmt=<export|bracket|discbracket|tiger|alpino>
+--inputfmt=<export|bracket|discbracket|alpino|tiger|ftb>
                 Input treebank format [default: export].
 
 --outputfmt=<export|bracket|discbracket|conll|mst|tokens|wordpos>
                 Output treebank format [default: export].
-                Selecting the formats ``conll`` or ``mst`` results in an
-                unlabeled dependency conversion and requires the use of
-                heuristic head rules (``--headrules``), to ensure that all
-                constituents have a child marked as head. A command line
-                interface to perform transformations on treebanks such as
-                binarization.
+                Selecting the formats ``conll`` or ``mst`` invokes a dependency
+                conversion and requires the use of heuristic head rules
+                (``--headrules``), to ensure that all constituents have a child
+                marked as head; labels are based on function tags (if any).
 
 --fmt=x         Shortcut to specify both input and output format.
 

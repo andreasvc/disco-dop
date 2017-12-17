@@ -44,7 +44,7 @@ debugvalgrind: debug35
 valgrind: discodop
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python tests.py
+		python3 tests.py
 
 test: discodop
 	python3 `which py.test` --doctest-modules discodop/ tests/unittests.py \
