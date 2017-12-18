@@ -430,6 +430,17 @@ class AlpinoCorpusReader(CorpusReader):
 class FTBXMLCorpusReader(CorpusReader):
 	"""Corpus reader for the French treebank (FTB) in XML format."""
 
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# hack to ensure test/dev set as the first 1235 + 1235 sentences
+		order = {'flmf7aa1ep.cat.xml': 0,
+				'flmf7aa2ep.cat.xml': 1,
+				'flmf7ab2ep.xml': 2,
+				'flmf7ae1ep.cat.xml': 3,
+				'flmf7af2ep.cat.xml': 4,
+				'flmf7ag1exp.cat.xml': 5}
+		self._filenames.sort(key=lambda x: order.get(x, 99))
+
 	def blocks(self):
 		"""
 		:returns: a list of strings containing the raw representation of
@@ -448,9 +459,10 @@ class FTBXMLCorpusReader(CorpusReader):
 			context = ElementTree.iterparse(filename,
 					events=('start', 'end'))
 			_event, root = next(context)  # event == 'start' of root element
+			filename1 = filename.split('.')[0]
 			for event, elem in context:
 				if event == 'end' and elem.tag == 'SENT':
-					sentid = '%s_%s' % (elem.get('textID'), elem.get('nb'))
+					sentid = '%s-%s' % (filename1, elem.get('nb'))
 					yield sentid, elem
 				root.clear()
 
@@ -588,7 +600,7 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 			else:  # regular word token
 				source[TAG] = node.get('cat') or node.get('catint')
 				result = ParentedTree(source[TAG], [len(sent)])
-				sent.append(node.text)
+				sent.append((node.text or '').strip())
 				handlemorphology(morphology, lemmas, result, source, sent)
 		else:
 			source[TAG] = label = node.tag
@@ -607,7 +619,7 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	nodeids = count(500)
 	tree = getsubtree(block, 0)
 	comment = ' '.join('%s=%r' % (a, block.get(a))
-			for a in ('argument', 'author', 'date'))
+			for a in ('argument', 'author', 'date', 'textID', 'nb'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
