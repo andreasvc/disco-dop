@@ -761,6 +761,75 @@ def ftbtransforms(name, tree, sent):
 				and sent[n[1][0]] == "-"
 				and strip(n[2].label) == "N"):
 			t.label += STATESPLIT + "mwn3"
+	# Candito et al (LREC 2010). Statistical French dependency parsing:
+	# treebank conversion and first results.
+	elif name == 'ftbraisecompl':
+		vp_labels = ['VPinf', 'VPinf-OBJ', 'VPinf-ATO', 'VPinf-ATS',
+				'VPinf-A_OBJ', 'VPinf-DE_OBJ', 'VPinf-MOD', 'VPinf-OBJ',
+				'VPinf-P_OBJ', 'VPinf-SUJ', 'VPpart', 'VPpart-ATO',
+				'VPpart-ATS','VPpart-MOD']
+		p_labels = ['P', 'P+D', 'MWP']
+		ssub_labels = ['Ssub', 'Ssub-ATO', 'Ssub-ATS', 'Ssub-A_OBJ',
+				'Ssub-DE_OBJ', 'Ssub-MOD', 'Ssub-OBJ', 'Ssub-P_OBJ',
+				'Ssub-SUJ']
+		cs_labels = ['C-S', 'CS', 'MWC-S', 'CC', 'CS', 'MWC--', 'MWC-C',
+				'MWC-S']
+		for sbtree in tree.subtrees():
+			if (sbtree.label in vp_labels and sbtree.children[0].label
+					in p_labels):
+				# raising the PPs of the VPinf constituents:
+				# (VPinf (P pour) (VN (VINF manger)))
+				# ==> (PP (P pour) (VPinf (VN (VINF manger))))
+				sbtree_label_origin = sbtree.label
+				sbtree.label = 'PP' # relabel the VPinf tree to PP
+				# store children to the right from the P node, then remove them
+				vpinf_children = sbtree.children[1:]
+				sbtree[1:] = []
+				new_tree = ParentedTree(sbtree_label_origin,
+						[ch for ch in vpinf_children if ch is not sbtree])
+				sbtree.append(new_tree)
+			if (sbtree.label in ssub_labels
+					and sbtree.children[0].label in cs_labels):
+				# raising the complements (CS or C-S) of the Ssub constituents:
+				# (Ssub (C-S si) (NP (NPP Paul)) (VN (V dort)))
+				# ==> (Ssub (C-S si) (Sint (NP (NPP Paul) (VN (V dort)) )))
+				if len(sbtree.children[1:]) !=  0:
+					# store children to the right of C node, then remove them
+					ssub_children = sbtree.children[1:]
+					sbtree[1:] = []
+					new_tree = ParentedTree('Sint',
+							[ch for ch in ssub_children if ch is not sbtree])
+					sbtree.append(new_tree)
+	elif name == 'ftbraisecoord':
+		coord_labels = ['COORD', 'COORD-ATS', 'COORD-A_OBJ', 'COORD-DE_OBJ',
+				'COORD-MOD', 'COORD-OBJ', 'COORD-P_OBJ', 'COORD-SUJ']
+		cc_labels = ['C', 'C-C', 'C-S', 'CC', 'CS', 'MWC--C', 'MWC-C', 'MWC-S']
+		for sbtree in tree.subtrees():
+			if (sbtree.label in coord_labels
+					and sbtree.children[0].label in cc_labels
+					and len(sbtree.parent.children) == 3):
+				if sbtree.parent.children[1].label not in coord_labels:
+					# the simplest case
+					cc_branch = sbtree.children[0]
+					right_sibling = sbtree.children[1:]
+					left_sibling = sbtree.parent.children[:-1]
+					parent = sbtree.parent
+					parent[:] = []
+					sbtree[:] = []
+					left_sibling_tree = ParentedTree(parent.label,
+							[ch for ch in left_sibling if ch is not sbtree])
+					right_sibling_tree = ParentedTree(parent.label,
+							[ch for ch in right_sibling if ch is not sbtree])
+					if not right_sibling_tree:
+						sbtree[:] = [left_sibling_tree, cc_branch]
+						sbtree_new = sbtree
+						parent[:] = [sbtree_new]
+					else:
+						right_sibling_tree_new = right_sibling_tree.pop(0)
+						sbtree[:] = [left_sibling_tree, cc_branch,
+								right_sibling_tree_new]
+						sbtree_new = sbtree
+						parent[:] = [sbtree_new]
 	else:
 		return False
 	return True
