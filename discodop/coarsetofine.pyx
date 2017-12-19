@@ -82,11 +82,11 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	cdef Label label
 	cdef ItemNo item
 	cdef size_t span
-	if (fine.mapping is NULL or (splitprune and markorigin
-			and (fine.splitmapping is NULL or fine.splitmapping[0] is NULL))):
+	if (fine.mapping.size() == 0 or (splitprune and markorigin
+			and fine.splitmapping.size() == 0)):
 		raise ValueError('need to call fine.getmapping(coarse, ...).')
 	# prune coarse chart and collect items
-	if require is not None:
+	if require and k >= 1:
 		lazykbest(coarsechart, k, derivs=False)
 		root = coarsechart.root()
 		require1 = []
@@ -165,8 +165,8 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 				label = coarsechart.label(item)
 				sitem = coarsechart.asSmallChartItem(item)
 				whitelist.small[label].insert(sitem)
-	whitelist.mapping = fine.mapping
-	whitelist.splitmapping = fine.splitmapping
+	whitelist.mapping = &(fine.mapping[0])
+	whitelist.splitmapping = &(fine.splitmapping[0])
 	return whitelist, msg
 
 

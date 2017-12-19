@@ -1,6 +1,5 @@
 cimport cython
 from libc.string cimport memcmp, memset, memcpy
-from libc.stdlib cimport malloc, calloc, free, abort
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair

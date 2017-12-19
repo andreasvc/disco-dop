@@ -123,11 +123,14 @@ cdef class SmallLCFRSChart(LCFRSChart):
 				bin(self.items[itemidx].vec)[2:].zfill(self.lensent)[::-1])
 
 	def itemid(self, str label, indices, Whitelist whitelist=None):
-		cdef SmallChartItem tmp
 		try:
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		return self.itemid1(labelid, indices, whitelist)
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef SmallChartItem tmp
 		vec = sum(1 << n for n in indices)
 		tmp = SmallChartItem(labelid, vec)
 		if whitelist is not None:
@@ -237,12 +240,15 @@ cdef class FatLCFRSChart(LCFRSChart):
 				result)
 
 	def itemid(self, str label, indices, Whitelist whitelist=None):
-		cdef FatChartItem tmp
-		cdef uint64_t n
 		try:
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		return self.itemid1(labelid, indices, whitelist)
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef FatChartItem tmp
+		cdef uint64_t n
 		tmp = FatChartItem(labelid)
 		for n in indices:
 			if n >= SLOTS * sizeof(unsigned long) * 8:
@@ -351,6 +357,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		int length = 1, left = 0, right = 0, gaps = 0
 		ItemNo itemidx, sibidx
 		size_t blocked = 0, maxA = 0, n
+		bint usemask = grammar.mask.size() != 0
 	# avoid generating code for spurious fused type combinations
 	if ((LCFRSItem_fused is SmallChartItem
 			and LCFRSChart_fused is FatLCFRSChart)
@@ -366,6 +373,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = FatChartItem(0)
 		tmpitem = FatChartItem(0)
+	agenda.reserve(1024)
 
 	# assign POS tags
 	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
@@ -408,7 +416,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.unary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
-				elif TESTBIT(grammar.mask, rule.no):
+				elif usemask and TESTBIT(&(grammar.mask[0]), rule.no):
 					continue
 				score = newprob = prob + rule.prob
 				if estimatetype == SX:
@@ -444,7 +452,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					break
 				# elif chart.probs[rule.rhs1] is None:
 				# 	continue
-				elif TESTBIT(grammar.mask, rule.no):
+				elif usemask and TESTBIT(&(grammar.mask[0]), rule.no):
 					continue
 				tmpitem.label = rule.rhs1
 				itemidxit = chart.itemindex.lower_bound(tmpitem)
@@ -508,7 +516,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					break
 				# elif chart.probs[rule.rhs2] is None:
 				# 	continue
-				elif TESTBIT(grammar.mask, rule.no):
+				elif usemask and TESTBIT(&(grammar.mask[0]), rule.no):
 					continue
 				tmpitem.label = rule.rhs2
 				itemidxit = chart.itemindex.lower_bound(tmpitem)
@@ -821,7 +829,7 @@ cdef inline bint checkwhitelist(LCFRSItem_fused newitem, Whitelist whitelist,
 	elif splitprune:  # disc. item to be treated as several split items?
 		b = cnt = 0
 		if markorigin:
-			if whitelist.splitmapping[newitem.label] is NULL:
+			if whitelist.splitmapping[newitem.label].size() == 0:
 				return True
 		else:
 			if whitelist.mapping[newitem.label] != 0:

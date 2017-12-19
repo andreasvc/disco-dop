@@ -38,9 +38,9 @@ def main():
 	else:
 		cmd = argv[1]
 		# use the CLI defined here, or default to the module's main function.
-		try:
+		if cmd in globals():
 			globals()[cmd]()
-		except KeyError:
+		else:
 			getattr(__import__('discodop.%s' % cmd,
 					fromlist=['main']), 'main')()
 
@@ -249,6 +249,7 @@ where input and output are treebanks; standard in/output is used if not given.
 			lemmas=opts.get('--lemmas'))
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
+	# FIXME: support negative indices
 	trees = corpus.itertrees(start, end)
 	if '--maxlen' in opts:
 		maxlen = int(opts['--maxlen'])

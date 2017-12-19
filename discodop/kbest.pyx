@@ -43,7 +43,8 @@ cdef RankedEdgeAgenda[Prob] getcandidates(Chart chart, ItemNo v, int k):
 				prob += chart.subtreeprob(chart._right(v, e))
 			else:
 				right = -1
-		re = RankedEdge(v, e, left, right)
+		re = RankedEdge(  # v,
+				e, left, right)
 		entry.first = re
 		entry.second = prob
 		entries.push_back(entry)
@@ -79,11 +80,13 @@ cdef lazykthbest(ItemNo v, int k, int k1, agendas_type& cand, Chart chart,
 			# start of inlined lazynext(v, ej, k1, cand, chart, explored)
 			for i in range(2):  # add the |e| neighbors
 				if i == 0 and ej.left >= 0:
-					ei = chart.left(ej)
-					ej1 = RankedEdge(v, ej.edge, ej.left + 1, ej.right)
+					ei = chart.left(v, ej)
+					ej1 = RankedEdge(  # v,
+							ej.edge, ej.left + 1, ej.right)
 				elif i == 1 and ej.right >= 0:
-					ei = chart.right(ej)
-					ej1 = RankedEdge(v, ej.edge, ej.left, ej.right + 1)
+					ei = chart.right(v, ej)
+					ej1 = RankedEdge(  # v,
+							ej.edge, ej.left, ej.right + 1)
 				else:
 					break
 				ji = ej1.left if i == 0 else ej1.right
@@ -96,7 +99,7 @@ cdef lazykthbest(ItemNo v, int k, int k1, agendas_type& cand, Chart chart,
 					if (chart.rankededges[ei].size() != 0
 							and ji < <int>chart.rankededges[ei].size()
 							and explored.count(ej1) == 0):
-						# 	and cand[ej1.head]): gives duplicates
+						# 	and cand[v]): gives duplicates
 						# add it to the heap
 						cand[v].setitem(ej1, getprob(chart, v, ej1))
 						explored.insert(ej1)
@@ -113,7 +116,7 @@ cdef inline Prob getprob(Chart chart, ItemNo v, RankedEdge& ej) except -1:
 
 	Try looking in ``chart.rankededges``, or else use viterbi probability."""
 	cdef Prob prob = ej.edge.rule.prob
-	ei = chart.left(ej)
+	ei = chart.left(v, ej)
 	if ej.left == 0:
 		prob += chart.subtreeprob(ei)
 	elif chart.rankededges[ei].size():
@@ -123,7 +126,7 @@ cdef inline Prob getprob(Chart chart, ItemNo v, RankedEdge& ej) except -1:
 				'derivations for %s' % (ej.right, chart.itemstr(v)))
 	if ej.right == -1:
 		return prob
-	ei = chart.right(ej)
+	ei = chart.right(v, ej)
 	if ej.right == 0:
 		prob += chart.subtreeprob(ei)
 	elif chart.rankededges[ei].size():
@@ -146,7 +149,7 @@ cdef int explorederivation(ItemNo v, RankedEdge& ej, Chart chart,
 	if ej.edge.rule is NULL:
 		return True
 	if ej.left != -1:
-		leftitem = chart.left(ej)
+		leftitem = chart.left(v, ej)
 		if not chart.rankededges[leftitem].size():
 			assert ej.left == 0, '%d-best edge for %s of left item missing' % (
 						ej.left, chart.itemstr(v))
@@ -161,7 +164,7 @@ cdef int explorederivation(ItemNo v, RankedEdge& ej, Chart chart,
 				chart, explored, depthlimit - 1):
 			return False
 	if ej.right != -1:
-		rightitem = chart.right(ej)
+		rightitem = chart.right(v, ej)
 		if not chart.rankededges[rightitem].size():
 			assert ej.right == 0, (('%d-best edge for right child '
 					'of %s missing') % (ej.right, chart.itemstr(v)))
@@ -195,11 +198,11 @@ cdef inline _getderiv(string &result, ItemNo v, RankedEdge& ej, Chart chart):
 		result.append(buf)
 	else:
 		result.append(b' ')
-		item = chart.left(ej)
+		item = chart.left(v, ej)
 		rankededge = chart.rankededges[item][ej.left].first
 		_getderiv(result, item, rankededge, chart)
 		if ej.right != -1:
-			item = chart.right(ej)
+			item = chart.right(v, ej)
 			result.append(b' ')
 			rankededge = chart.rankededges[item][ej.right].first
 			_getderiv(result, item, rankededge, chart)
@@ -225,11 +228,11 @@ cdef collectitems(ItemNo v, RankedEdge& ej, Chart chart, itemset):
 	if ej.edge.rule is NULL:
 		return
 	if ej.left != -1:
-		leftitem = chart.left(ej)
+		leftitem = chart.left(v, ej)
 		ej1 = chart.rankededges[leftitem][ej.left].first
 		collectitems(leftitem, ej1, chart, itemset)
 	if ej.right != -1:
-		rightitem = chart.right(ej)
+		rightitem = chart.right(v, ej)
 		ej1 = chart.rankededges[rightitem][ej.right].first
 		collectitems(rightitem, ej1, chart, itemset)
 

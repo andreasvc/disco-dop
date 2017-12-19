@@ -16,7 +16,6 @@ import re
 import io
 import os
 import sys
-from collections import Counter
 from functools import partial
 from itertools import islice
 from array import array
@@ -109,7 +108,8 @@ cdef inline void setrootid(uint64_t *data, short root, uint32_t id,
 cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		Ctrees trees2=None, int start2=0, int end2=0,
 		bint approx=True, bint debug=False,
-		bint disc=False, str twoterms=None, bint adjacent=False):
+		bint disc=False, str twoterms=None, bint adjacent=False,
+		maxnodes=None):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use::
@@ -129,6 +129,10 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		one of which has a POS tag matching the given regex.
 	:param adjacent: only extract fragments from sentences with adjacent
 		indices.
+	:param maxnodes: the maximum number of nodes in a single tree to fix the
+		bitset size. Set this manually when combining results from different
+		sets of trees to ensure a consistent bitset size. By default it is the
+		maximum value across both treebanks.
 	:returns: a dictionary; keys are fragments as strings; values are
 		either counts (if approx=True), or bitsets describing fragments of
 		``trees1``.
@@ -153,7 +157,10 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 				if vocab.islexical(n)}
 	if trees2 is None:
 		trees2 = trees1
-	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
+	if maxnodes:
+		SLOTS = BITNSLOTS(maxnodes + 1)
+	else:
+		SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 	matrix = <uint64_t *>malloc(trees2.maxnodes * SLOTS * sizeof(uint64_t))
 	scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 	if matrix is NULL or scratch is NULL:
@@ -235,9 +242,9 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 			fragments[frag] += 1
 		elif indices:
 			if frag not in fragments:
-				fragments[frag] = Counter()
-			fragments[frag][getid(bitset, SLOTS)] += 1
-		elif frag not in fragments:  # FIXME: is this condition useful?
+				fragments[frag] = clone(uintarray, 0, False)
+			fragments[frag].append(getid(bitset, SLOTS))
+		elif frag not in fragments:  # FIXME: profile effect of this condition
 			fragments[frag] = wrapper
 	inter.clear()
 
@@ -319,14 +326,14 @@ cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 	return terms
 
 
-cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
+cpdef exactcounts(list bitsets, Ctrees trees1, Ctrees trees2,
 		int indices=False, maxnodes=None):
 	"""Get exact counts or indices of occurrence for fragments.
 
-	:param trees1, bitsets: ``bitsets`` defines fragments of trees in
+	:param bitsets, trees1: ``bitsets`` defines fragments of trees in
 		``trees1`` to search for (the needles).
 	:param trees2: the trees to search in (haystack); may be equal
-		to ``trees2``.
+		to ``trees1``. The returned counts are occurrences in these trees.
 	:param indices: whether to collect indices or counts of fragments.
 
 		:0: return a single count per fragment.
@@ -345,6 +352,8 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 			the same tree are reflected as multiple occurrences of the same
 			index.
 		:2: a list of pairs of arrays, tree indices paired with node numbers.
+			The node number is the index in the tree of the root of the
+			matching fragment.
 	"""
 	cdef:
 		array counts = None
@@ -404,7 +413,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	return theindices if indices else counts
 
 
-cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
+cpdef exactcountsslice(list bitsets, Ctrees trees1, Ctrees trees2,
 		int indices=0, maxnodes=None, start=None, end=None, maxresults=None):
 	"""Get counts of fragments in a slice of the treebank.
 
@@ -660,7 +669,7 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 		sites) in fragments; a limit of 0 only gives fragments that bottom out
 		in terminals; 999 is unlimited for practical purposes.
 	:returns: dictionary fragments with tree strings as keys and integer counts
-		as values."""
+		as values (or arrays if indices is True)."""
 	cdef NodeArray tree
 	cdef Node *nodes
 	cdef int n, SLOTS = BITNSLOTS(trees.maxnodes)
@@ -1113,11 +1122,10 @@ def getctrees(items1, items2=None, Vocabulary vocab=None, bint index=True):
 
 	:param items1: an iterable with tuples of the form ``(tree, sent)``.
 	:param items2: optionally, a second iterable of trees.
-	:param update: if False, do not update ``vocab``; unseen productions are
-		assigned a sentinel that never matches.
 	:param index: whether to create production index of trees.
-	:returns: dictionary with same keys as arguments, where trees1 and
-		trees2 are Ctrees objects for disc. binary trees and sentences."""
+	:returns: dictionary with keys 'trees1', 'trees2', and 'vocab',
+		where trees1 and trees2 are Ctrees objects for disc. binary trees and
+		sentences."""
 	cdef Ctrees ctrees, ctrees1, ctrees2 = None
 	cdef Node *scratch
 	cdef int cnt

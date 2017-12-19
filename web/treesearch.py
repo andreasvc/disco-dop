@@ -77,7 +77,7 @@ COLORS = dict(enumerate('''\
 def check_auth(username, password):
 	"""This function is called to check if a username / password
 	combination is valid."""
-	return  username in PASSWD and password == PASSWD[username]
+	return username in PASSWD and password == PASSWD[username]
 
 
 def authenticate():
@@ -1239,7 +1239,7 @@ try:
 	log.info('password protection enabled.')
 except Exception as err:
 	PASSWD = None
-	log.info('no password protection: %s' % err)
+	log.info('no password protection: %s', err)
 if __name__ == '__main__':
 	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),

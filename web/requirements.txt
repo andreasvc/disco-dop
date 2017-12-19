@@ -2,3 +2,5 @@ Flask
 readability
 pandas
 seaborn
+matplotlib
+scipy

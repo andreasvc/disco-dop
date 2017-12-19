@@ -606,7 +606,7 @@ class FragmentSearcher(CorpusSearcher):
 			for matches in future.result():
 				for sentno, treestr, match in matches:
 					treestr = filterlabels(treestr, nofunc, nomorph)
-					# NB: this highlights the whole subtree, of which
+					# FIXME: this highlights the whole subtree, of which
 					# frag may be a subgraph.
 					treestr = treestr.replace(
 							match,
@@ -740,8 +740,9 @@ def _frag_query(queries, bitsets, maxnodes, filename, vocabpath,
 	corpus = Ctrees.fromfile('%s.ct' % filename)
 	if start:
 		start -= 1
-	results = _fragments.exactcountsslice(queries['trees1'], corpus,
-			bitsets, indices=indices + trees if indices else 0,
+	results = _fragments.exactcountsslice(
+			bitsets, queries['trees1'], corpus,
+			indices=indices + trees if indices else 0,
 			maxnodes=maxnodes, start=start, end=end,
 			maxresults=maxresults)
 	if indices and trees:
@@ -1292,6 +1293,7 @@ def main():
 		numproc = 1
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
+	# FIXME: support negative indices? why 1-based indices?
 	ignorecase = '--ignore-case' in opts or '-i' in opts
 	if ignorecase and engine != 'regex':
 		raise ValueError('--ignore-case is only supported with --engine=regex')

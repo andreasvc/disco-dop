@@ -55,7 +55,7 @@ public:
 	// (stack allocation).
 	void reserve(size_t n) {
 		map.reserve(n);
-		heap.reserve(n);
+		// heap.reserve(n);  // FIXME: not supported
 	}
 	// replace agenda with all items from vector
 	// (does not consider priorities for duplicate keys)
@@ -67,7 +67,7 @@ public:
 			entry_type entry(it->first, it->second, ++counter);
 			map[it->first] = entry;
 		}
-		// collect all non-duplicate items
+		// collect depuplicated items
 		std::vector<entry_type> tmp;
 		tmp.reserve(map.size());
 		for (typename map_type::iterator it=map.begin();
@@ -201,19 +201,41 @@ private:
 
 
 struct ProbRule {  // total: 32 bytes.
-    Prob prob;  // 8 bytes
-    Label lhs;  // 4 bytes
-    Label rhs1;  // 4 bytes
-    Label rhs2;  // 4 bytes
-    uint32_t args;  // 4 bytes => 32 max vars per rule
-    uint32_t lengths;  // 4 bytes => same
-    uint32_t no;  // 4 bytes
+	Prob prob;  // 8 bytes
+	Label lhs;  // 4 bytes
+	Label rhs1;  // 4 bytes
+	Label rhs2;  // 4 bytes
+	uint32_t args;  // 4 bytes => 32 max vars per rule
+	uint32_t lengths;  // 4 bytes => same
+	uint32_t no;  // 4 bytes
 };
 
-union Position {  // 8 bytes
-	short mid;  // CFG, end index of left child
-	uint64_t lvec;  // LCFRS, bit vector of left child
-	size_t lidx;  // idx to FatLCFRSChartItem in chart.items[]
+// NB: a version of ProbRule without probability, rule number.
+class Rule {  // total: 20 bytes.
+public:
+	Label lhs;  // 4 bytes
+	Label rhs1;  // 4 bytes
+	Label rhs2;  // 4 bytes
+	uint32_t args;  // 4 bytes => 32 max vars per rule
+	uint32_t lengths;  // 4 bytes => same
+	bool operator == (const Rule& k2) const {
+		return (lhs == k2.lhs
+				&& rhs1 == k2.rhs1
+				&& rhs2 == k2.rhs2
+				&& args == k2.args
+				&& lengths == k2.lengths);
+	}
+};
+struct RuleHasher {
+	size_t operator()(const Rule& k) const {
+		size_t _hash = 0;
+		spp::hash_combine(_hash, k.lhs);
+		spp::hash_combine(_hash, k.rhs1);
+		spp::hash_combine(_hash, k.rhs2);
+		spp::hash_combine(_hash, k.args);
+		spp::hash_combine(_hash, k.lengths);
+		return _hash;
+	}
 };
 
 struct LexicalRule {
@@ -222,10 +244,20 @@ struct LexicalRule {
 	Label lhs;
 };
 
-struct Edge {  // 16 bytes
-    ProbRule *rule;  // ruleno takes less space than pointer, but not convenient
-    Position pos;
+// Given an edge in a particular cell, the left child position is enough to
+// define the right child as well. Dependending on the type of chart, this is
+// represented in different ways.
+union Position {  // 8 bytes
+	short mid;  // CFG, end index of left child
+	uint64_t lvec;  // LCFRS, bit vector of left child
+	size_t lidx;  // idx to FatLCFRSChartItem in chart.items[]
 };
+
+struct Edge {  // 16 bytes
+	ProbRule *rule;  // ruleno takes less space than pointer, but not convenient
+	Position pos;
+};
+
 class SmallChartItem {  // 96 bits
 public:
 	Label label;
@@ -244,14 +276,14 @@ public:
 	}
 };
 struct SmallChartItemHasher {
-	/* Juxtapose bits of label and vec, rotating vec if > 33 words.
-
-	64              32            0
-	|               ..........label
-	|vec[0] 1st half
-	|               vec[0] 2nd half
-	------------------------------- XOR */
 	size_t operator()(const SmallChartItem& k) const {
+		/* Juxtapose bits of label and vec, rotating vec if > 33 words.
+
+		64              32            0
+		|               ..........label
+		|vec[0] 1st half
+		|               vec[0] 2nd half
+		------------------------------- XOR */
 		// return (uint64_t)k.label ^ (k.vec << 31) ^ (k.vec >> 31);
 		size_t _hash = 0;
 		spp::hash_combine(_hash, k.label);
@@ -285,16 +317,16 @@ public:
 	}
 };
 struct FatChartItemHasher {
-	/* Juxtapose bits of label and vec.
-
-	64              32            0
-	|               ..........label
-	|vec[0] 1st half
-	|               vec[0] 2nd half
-	|........ rest of vec .........
-	------------------------------- XOR */
 	size_t operator()(const FatChartItem& k) const {
 		size_t _hash = 0, n;
+		/* Juxtapose bits of label and vec.
+
+		64              32            0
+		|               ..........label
+		|vec[0] 1st half
+		|               vec[0] 2nd half
+		|........ rest of vec .........
+		------------------------------- XOR */
 		// _hash = k.label ^ k.vec[0] << 31 ^ k.vec[0] >> 31;
 		// /* add remaining bits, byte for byte */
 		// for (n=sizeof(k.vec[0]); n < SLOTS * 8; n++) {
@@ -308,50 +340,19 @@ struct FatChartItemHasher {
 	}
 };
 
-
-// NB: a version of ProbRule without probability, rule number.
-class Rule {  // total: 20 bytes.
-public:
-    Label lhs;  // 4 bytes
-    Label rhs1;  // 4 bytes
-    Label rhs2;  // 4 bytes
-    uint32_t args;  // 4 bytes => 32 max vars per rule
-    uint32_t lengths;  // 4 bytes => same
-	bool operator == (const Rule& k2) const {
-		return (lhs == k2.lhs
-				&& rhs1 == k2.rhs1
-				&& rhs2 == k2.rhs2
-				&& args == k2.args
-				&& lengths == k2.lengths);
-	}
-};
-struct RuleHasher {
-	size_t operator()(const Rule& k) const {
-		size_t _hash = 0;
-		spp::hash_combine(_hash, k.lhs);
-		spp::hash_combine(_hash, k.rhs1);
-		spp::hash_combine(_hash, k.rhs2);
-		spp::hash_combine(_hash, k.args);
-		spp::hash_combine(_hash, k.lengths);
-		return _hash;
-	}
-};
-
 class RankedEdge {
 public:
 	Edge edge;  // rule / spans of children
-	ItemNo head;  // chart item of this node
 	int left, right;  // rank of left / right child
 	RankedEdge() { };
-	RankedEdge(ItemNo _head, Edge _edge, int _left, int _right):
-		edge(_edge), head(_head), left(_left), right(_right) { };
+	RankedEdge(Edge _edge, int _left, int _right):
+		edge(_edge), left(_left), right(_right) { };
 	bool operator == (const RankedEdge& k2) const {
-		return (head == k2.head
+		return (left == k2.left && right == k2.right
+				&& edge.pos.lvec == k2.edge.pos.lvec
 				&& (edge.rule != NULL && k2.edge.rule != NULL
 					? edge.rule->no == k2.edge.rule->no
-					: edge.rule == k2.edge.rule)
-				&& edge.pos.lvec == k2.edge.pos.lvec
-				&& left == k2.left && right == k2.right);
+					: edge.rule == k2.edge.rule));
 	}
 	bool operator < (__attribute__((unused)) const RankedEdge& other) const {
 		return false;
@@ -363,7 +364,6 @@ public:
 struct RankedEdgeHasher {
 	size_t operator()(const RankedEdge& k) const {
 		size_t _hash = 0;
-		spp::hash_combine(_hash, k.head);
 		spp::hash_combine(_hash, k.edge.rule == NULL ? -1 : k.edge.rule->no);
 		spp::hash_combine(_hash, k.edge.pos.lvec);
 		spp::hash_combine(_hash, k.left);

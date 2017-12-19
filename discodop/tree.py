@@ -1251,7 +1251,7 @@ class DrawTree(object):
 		# handle secondary edges
 		labels = {}
 		for a in nodes:
-			label = labels.setdefault(a,
+			labels.setdefault(a,
 					(nodes[a].label
 							if isinstance(nodes[a], Tree)
 							else nodes[a]))
@@ -1366,7 +1366,7 @@ class DrawTree(object):
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red', funccolor='green',
-				funcsep=None, maxwidth=16):
+				funcsep=None, maxwidth=16, nodeprops=None):
 		""":returns: ASCII art for a discontinuous tree.
 
 		:param nodedist: minimum number of horiziontal spaces between nodes
@@ -1384,7 +1384,9 @@ class DrawTree(object):
 			and labels; e.g., an NP with a object primary edge: NP-OBJ;
 			the same NP with a secondary edge: NP-OBJ[SBJ:1] and S=1.
 		:param maxwidth: maximum number of characters before a label starts to
-			wrap across multiple lines; pass None to disable."""
+			wrap across multiple lines; pass None to disable.
+		:param nodeprops: if not None, pass an ID; adds several javascript
+			properties to each node."""
 		if unicodelines:
 			horzline = '\u2500'
 			leftcorner = '\u250c'
@@ -1488,8 +1490,20 @@ class DrawTree(object):
 							cat, func = line, None
 						if cat and (html or ansi) and n in self.highlight:
 							if html:
-								newtext.append('<font color=%s>%s</font>' % (
-										color, cat))
+								if nodeprops and isinstance(node, Tree):
+									labeledspan = '%s %s' % (
+											node.label,
+											','.join(str(a[0]) if len(a) == 1
+												else ('%d-%d' % (a[0], a[-1]))
+												for a in ranges(node.leaves())))
+									pos = isinstance(node[0], int)
+									newtext.append('<span id=%s_%d class=%s '
+											'data-s="%s">%s</span>' % (
+											nodeprops, n, 'p' if pos else 'n',
+											labeledspan, cat))
+								else:
+									newtext.append('<font color="%s">%s</font>' % (
+											color, cat))
 							elif ansi:
 								newtext.append('\x1b[%d;1m%s\x1b[0m' % (
 										ANSICOLOR[color], cat))
@@ -1777,7 +1791,9 @@ def frontier(tree, sent, nodecolor='blue', leafcolor='red'):
 
 
 def brackettree(treestr):
-	"""Parse a single tree presented in (disc)bracket format."""
+	"""Parse a single tree presented in (disc)bracket format (autodetected).
+
+	:returns: (tree, sent) tuple of ParentedTree and list of str."""
 	if STRTERMRE.search(treestr):  # bracket: terminals are not all indices
 		sent, cnt = [], count()
 
@@ -1806,6 +1822,26 @@ def brackettree(treestr):
 	return tree, sent
 
 
+def discbrackettree(treestr):
+	"""Parse a single tree presented in discbracket format.
+
+	:returns: (tree, sent) tuple of ParentedTree and list of str."""
+	sent = {}
+
+	def substleaf(x):
+		"""Collect word and return index."""
+		idx, word = x.split('=', 1)
+		idx = int(idx)
+		sent[idx] = unescape(word)
+		return idx
+
+	tree = ParentedTree.parse(
+			SUPERFLUOUSSPACERE.sub(')', treestr),
+			parse_leaf=substleaf)
+	sent = [sent.get(n, None) for n in range(max(sent) + 1)]
+	return tree, sent
+
+
 def writebrackettree(tree, sent):
 	"""Return a tree in bracket notation with words as leaves."""
 	return INDEXRE.sub(
@@ -1813,11 +1849,12 @@ def writebrackettree(tree, sent):
 			str(tree)) + '\n'
 
 
-def writediscbrackettree(tree, sent):
+def writediscbrackettree(tree, sent, pretty=False):
 	"""Return tree in bracket notation with leaves as ``index=word``."""
+	treestr = tree.pprint() if pretty else str(tree)
 	return INDEXRE.sub(
 			lambda x: ' %s=%s)' % (x.group(1), escape(sent[int(x.group(1))])),
-			str(tree)) + '\n'
+			treestr) + '\n'
 
 
 def isdisc(node):
@@ -1882,6 +1919,22 @@ def ptbunescape(token):
 		return ']'
 	return token.replace('-LRB-', '(').replace('-RRB-', ')').replace(
 			'#LRB#', '(').replace('#RRB#', ')')
+
+
+def ranges(seq):
+	"""Partition seq into a list of contiguous ranges.
+
+	>>> list(ranges( (0, 1, 3, 4, 6) ))
+	[[0, 1], [3, 4], [6]]"""
+	rng = []
+	for a in seq:
+		if not rng or a == rng[-1] + 1:
+			rng.append(a)
+		else:
+			yield rng
+			rng = [a]
+	if rng:
+		yield rng
 
 __all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
 		'DiscTree', 'DrawTree', 'latexlabel', 'frontier', 'brackettree',

@@ -66,7 +66,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	:param unknownthreshold: words with frequency lower than or equal to this
 			are replaced by their signature.
 	:param openclassthreshold: tags that rewrite to at least this much word
-			types are considered to be open class categories."""
+			types are considered to be open class categories, so that open
+			class words and tags can be identified."""
 	wordsfortag = defaultdict(set)
 	tags = Counter()
 	wordtags = Counter()
@@ -156,11 +157,12 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	"""Collect new lexical productions.
 
-	- unobserved combinations of tags with known open class words.
-	- unobserved signatures which are mapped to ``'_UNK'``.
+	- unobserved combinations of open class tags with known open class words.
+	- unobserved signatures are mapped to ``'_UNK'`` and associated with all
+      potential tags.
 
-	:param epsilon: 'frequency' of productions for unseen tag, word pair.
-	:returns: a dictionary of lexical rules, with pseudofrequencies as values.
+	:param epsilon: pseudo-frequency of unseen productions ``tag => word``.
+	:returns: a dictionary of lexical rules, with pseudo-frequencies as values.
 	"""
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
@@ -174,7 +176,7 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	for tag in openclasstags:  # open class tag-word pairs
 		for word in openclasswords - wordsfortag[tag] - {UNK}:
 			newrules[(tag, 'Epsilon'), (escape(word), )] = epsilon
-	for tag in tags:  # catch all unknown signature
+	for tag in tags:  # catch-all unknown signature
 		newrules[(tag, 'Epsilon'), (UNK, )] = epsilon
 	return newrules
 

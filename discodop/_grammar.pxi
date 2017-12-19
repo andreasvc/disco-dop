@@ -11,29 +11,17 @@ BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile(b'[ \t][0-9]+[./][0-9]+[ \t\n]')
 # Detect rule format of bitpar
 BITPARRE = re.compile(rb'^[-.e0-9]+\b')
-REMOVESTATESPLITS = re.compile(r'^(\S+?)(?:\^[^\s|]*)?$')
+REMOVESTATESPLITS = re.compile(r'^([^\s|]+?)(?:\^[^\s|]*)?$')
 
 # comparison functions for sorting rules on LHS/RHS labels.
-cdef int cmp0(const void *p1, const void *p2) nogil:
-	cdef ProbRule *a = <ProbRule *>p1
-	cdef ProbRule *b = <ProbRule *>p2
-	if a.lhs == b.lhs:
-		return (a.no > b.no) - (a.no < b.no)
-	return (a.lhs > b.lhs) - (a.lhs < b.lhs)
-cdef int cmp1(const void *p1, const void *p2) nogil:
-	cdef ProbRule *a = <ProbRule *>p1
-	cdef ProbRule *b = <ProbRule *>p2
-	if a.rhs1 == b.rhs1:
-		# sort unaries by rhs1 first, then by lhs, so that we can do
-		# incremental binary search for the unaries of a given rhs1.
-		return (a.lhs > b.lhs) - (a.lhs < b.lhs)
-	return (a.rhs1 > b.rhs1) - (a.rhs1 < b.rhs1)
-cdef int cmp2(const void *p1, const void *p2) nogil:
-	cdef ProbRule *a = <ProbRule *>p1
-	cdef ProbRule *b = <ProbRule *>p2
-	if a.rhs2 == b.rhs2:
-		return (a.prob < b.prob) - (a.prob > b.prob)
-	return (a.rhs2 > b.rhs2) - (a.rhs2 < b.rhs2)
+cdef bool lt0(const ProbRule &a, const ProbRule &b) nogil:
+	return a.no < b.no if a.lhs == b.lhs else a.lhs < b.lhs
+cdef bool lt1(const ProbRule &a, const ProbRule &b) nogil:
+	# sort unaries by rhs1 first, then by lhs, so that we can do
+	# incremental binary search for the unaries of a given rhs1.
+	return a.lhs < b.lhs if a.rhs1 == b.rhs1 else a.rhs1 < b.rhs1
+cdef bool lt2(const ProbRule &a, const ProbRule &b) nogil:
+	return a.prob < b.prob if a.rhs2 == b.rhs2 else a.rhs2 < b.rhs2
 
 
 @cython.final
@@ -55,19 +43,14 @@ cdef class Grammar:
 	If the grammar only contains integral weights (frequencies), they will
 	be normalized into relative frequencies; if the grammar contains any
 	non-integral weights, weights will be left unchanged."""
-	def __cinit__(self):
-		self.unary = self.mapping = self.splitmapping = NULL
-
 	def __init__(self, rule_tuples_or_filename, lexiconfile=None, start='ROOT',
-			altweights=None):
-		cdef int n
-		self.mapping = self.splitmapping = self.bylhs = NULL
+			altweights=None, backtransform=None):
 		self.start = start
-		self.numunary = self.numbinary = 0
+		self.numunary = self.numbinary = self.numrules = 0
+		self.maxfanout = 0
 		self.logprob = True
 		self.toid = StringIntDict()
 		self.tolabel = StringList()
-		self.currentmodel = 'default'
 		if isinstance(altweights, dict):
 			self.models = altweights
 			self.altweightsfile = None
@@ -77,6 +60,7 @@ cdef class Grammar:
 		else:
 			self.models = {}
 			self.altweightsfile = None
+		self.backtransform = backtransform
 
 		rules = lexicon = None
 		if rule_tuples_or_filename and isinstance(rule_tuples_or_filename, str):
@@ -103,45 +87,105 @@ cdef class Grammar:
 					'expected non-empty sequence of tuples or unicode string.'
 					'got: %r' % type(rule_tuples_or_filename))
 
-		# collect non-terminal labels; count number of rules in each category
-		# for allocation purposes.
-		self._convertrules(rules)
-		self._convertlexicon(lexicon)
+		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
+		Epsilon = b'Epsilon'
+		root = self.start.encode('utf8')
+		self.tblabelmapping = {self.start: [1]}
+		self.toid.ob[Epsilon] = 0
+		self.toid.ob[root] = 1
+		self.tolabel.ob.push_back(Epsilon)
+		self.tolabel.ob.push_back(root)
+		self.freqmass.push_back(0)
+		self.freqmass.push_back(0)
+		self.fanout.push_back(0)
+		self.fanout.push_back(1)
+		self.addrules(rules, lexicon, init=True)
+		del rules, lexicon
+
+	def addrules(self, bytes rules, bytes lexicon, backtransform=None,
+			init=False):
+		"""Update weights and add new rules."""
+		cdef int n
+		cdef int orignumrules = self.numrules
+		cdef int orignumbinary = self.numbinary
+		cdef int orignumunary = self.numunary
+		cdef int orignumlabels = self.tolabel.ob.size()
+		if self._bylhs.size():  # drop sentinel rules
+			self._bylhs.pop_back()
+			self._unary.pop_back()
+			self._lbinary.pop_back()
+			self._rbinary.pop_back()
+		self._convertrules(rules, backtransform)
+		self._convertlexicon(lexicon, checkdup=init)
 		self.nonterminals = self.toid.ob.size()
-		self._allocate()
+
+		if init:  # slightly faster way of normalizing than switch()
+			for n in range(self.numrules):
+				self._bylhs[n].prob = fabs(log(self._bylhs[n].prob
+						/ self.freqmass[self._bylhs[n].lhs]))
+			for n in range(self.numbinary):
+				self._lbinary[n].prob = fabs(log(self._lbinary[n].prob
+						/ self.freqmass[self._lbinary[n].lhs]))
+			for n in range(self.numbinary):
+				self._rbinary[n].prob = fabs(log(self._rbinary[n].prob
+						/ self.freqmass[self._rbinary[n].lhs]))
+			for n in range(self.numunary):
+				self._unary[n].prob = fabs(log(self._unary[n].prob
+						/ self.freqmass[self._unary[n].lhs]))
+			for n in range(self.lexical.size()):
+				self.lexical[n].prob = fabs(log(self.lexical[n].prob
+						/ self.freqmass[self.lexical[n].lhs]))
+			self.currentmodel = 'default'
+
+		# store all non-lexical rules in a contiguous array
+		# the other arrays will contain pointers to relevant parts thereof
+		# (indexed on lhs, rhs1, and rhs2 of rules)
+		self.bylhs.resize(self.nonterminals)
+		self.unary.resize(self.nonterminals)
+		self.lbinary.resize(self.nonterminals)
+		self.rbinary.resize(self.nonterminals)
+		self.bylhs[0] = &(self._bylhs[0])
+		self.unary[0] = &(self._unary[0])
+		self.lbinary[0] = &(self._lbinary[0])
+		self.rbinary[0] = &(self._rbinary[0])
+
 		# index & filter phrasal rules in different ways
-		self._indexrules(self.bylhs, 0, 0)
+		self._indexrules(self.bylhs, 0, 0, orignumrules)
 		# check whether RHS labels occur as LHS of phrasal and/or lexical rule
 		for lhs in range(1, self.nonterminals):
 			if (self.bylhs[lhs][0].lhs != lhs and
 					self.lexicalbylhs.find(lhs) == self.lexicalbylhs.end()):
 				raise ValueError('symbol %r has not been seen as LHS '
 					'in any rule.' % self.tolabel[lhs])
-		self._indexrules(self.unary, 1, 2)
-		self._indexrules(self.lbinary, 1, 3)
-		self._indexrules(self.rbinary, 2, 3)
+		self._indexrules(self.unary, 1, 2, orignumunary)
+		self._indexrules(self.lbinary, 1, 3, orignumbinary)
+		self._indexrules(self.rbinary, 2, 3, orignumbinary)
+
 		# indexing requires sorting; this map gives the new index
 		# given an original rule number (useful with the rulestr method).
+		self.revrulemap.resize(self.numrules)
 		for n in range(self.numrules):
-			self.revrulemap[self.bylhs[0][n].no] = n
-		# if the grammar only has integral weights (frequencies),
-		# normalize them into relative frequencies.
-		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
-		if nonint.search(rules) is None:
-			self._normalize()
-		del rules, lexicon
+			self.revrulemap[self._bylhs[n].no] = n
+
+		if not init:  # updating of these weights not supported
+			self.models = {}
+			self.altweightsfile = None
+			self.currentmodel = ''
+			# ALL weights need to be re-normalized
+			self.switch('default', self.logprob)
 
 		# treebank label (NP) to list of matching grammar label IDs (NP^...)
-		self.tblabelmapping = {}
-		for n, strlabel in enumerate(self.tolabel):
+		for n in range(orignumlabels, self.tolabel.ob.size()):
+			strlabel = self.tolabel.ob[n].decode('utf8')
 			match = REMOVESTATESPLITS.match(strlabel)
 			if match is not None:
 				self.tblabelmapping.setdefault(match.group(1), []).append(n)
 
-	def _convertrules(self, bytes rules):
+	def _convertrules(self, bytes rules, list backtransform=None):
 		"""Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs."""
-		cdef uint32_t n = 0, m
+		cdef uint32_t n = self.numrules, m
+		cdef uint32_t lineno = 0
 		cdef Prob w
 		cdef ProbRule cur
 		cdef Rule key
@@ -152,15 +196,6 @@ cdef class Grammar:
 		cdef const char *prev
 		cdef vector[string] fields
 		cdef vector[string] rule
-		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
-		Epsilon = b'Epsilon'
-		root = self.start.encode('utf8')
-		self.toid.ob[Epsilon] = 0
-		self.toid.ob[root] = 1
-		self.tolabel.ob.push_back(Epsilon)
-		self.tolabel.ob.push_back(root)
-		self.fanout.push_back(0)
-		self.fanout.push_back(1)
 		while True:
 			fields.clear()
 			prev = buf
@@ -199,14 +234,14 @@ cdef class Grammar:
 						rhs2fanout += 1
 					else:
 						raise ValueError('invalid symbol in yield function: %r'
-								' (not in set [01,])\n%s' % (
+								' (not in set [01,])\n%r' % (
 								a, prev[:buf - prev].decode('utf8')))
 					m += 1
 				cur.lengths |= 1 << (m - 1)
 				if m >= (8 * sizeof(cur.args)):
 					raise ValueError(
 							'Parsing complexity (%d) too high (max %d).\n'
-							'Rule: %s' % (m, (8 * sizeof(cur.args)),
+							'Rule: %r' % (m, (8 * sizeof(cur.args)),
 							prev[:buf - prev].decode('utf8')))
 				if rule.size() == 2:
 					# if not YFUNARYRE.match(yf):
@@ -220,12 +255,13 @@ cdef class Grammar:
 								'%r\t%r' % (yf, rule))
 					# if b'0' not in yf or b'1' not in yf:
 					# 	raise ValueError('mismatch between non-terminals and '
-					# 			'yield function: %s' %
+					# 			'yield function: %r' %
 					# 			prev[:buf - prev].decode('utf8'))
 			it = self.toid.ob.find(rule[0])
 			if it == self.toid.ob.end():
 				cur.lhs = self.toid.ob[rule[0]] = self.tolabel.ob.size()
 				self.tolabel.ob.push_back(rule[0])
+				self.freqmass.push_back(0)
 				self.fanout.push_back(fanout)
 				if fanout > self.maxfanout:
 					self.maxfanout = fanout
@@ -233,65 +269,98 @@ cdef class Grammar:
 				cur.lhs = dereference(it).second
 				if self.fanout[cur.lhs] != fanout:
 					raise ValueError("conflicting fanouts for symbol "
-						"%r.\nprevious: %d; this non-terminal: %d. rule:\n%s"
+						"%r.\nprevious: %d; this non-terminal: %d. rule:\n%r"
 						% (rule[0], self.fanout[cur.lhs], fanout,
 						prev[:buf - prev].decode('utf8')))
 			it = self.toid.ob.find(rule[1])
 			if it == self.toid.ob.end():
 				cur.rhs1 = self.toid.ob[rule[1]] = self.tolabel.ob.size()
 				self.tolabel.ob.push_back(rule[1])
+				self.freqmass.push_back(0)
 				self.fanout.push_back(rhs1fanout)
+				if rhs1fanout > self.maxfanout:
+					self.maxfanout = rhs1fanout
 			else:
 				cur.rhs1 = dereference(it).second
 			if cur.lhs == 0 or cur.rhs1 == 0:
 				raise ValueError('Epsilon symbol may only occur '
-						'in RHS of lexical rules:\n%s' %
+						'in RHS of lexical rules:\n%r' %
 						prev[:buf - prev].decode('utf8'))
 			if rule.size() == 2:
-				self.numunary += 1
 				cur.rhs2 = 0
 			elif rule.size() == 3:
-				self.numbinary += 1
 				it = self.toid.ob.find(rule[2])
 				if it == self.toid.ob.end():
 					cur.rhs2 = self.toid.ob[rule[2]] = self.tolabel.ob.size()
 					self.tolabel.ob.push_back(rule[2])
+					self.freqmass.push_back(0)
 					self.fanout.push_back(rhs2fanout)
+					if rhs2fanout > self.maxfanout:
+						self.maxfanout = rhs2fanout
 				else:
 					cur.rhs2 = dereference(it).second
 				if cur.rhs2 == 0:
 					raise ValueError('Epsilon symbol may only occur '
-							'in RHS of lexical rules:\n%s'
+							'in RHS of lexical rules:\n%r'
 						% prev[:buf - prev].decode('utf8'))
 			elif rule.size() < 2:
-				raise ValueError('Not enough nonterminals:\n%s'
+				raise ValueError('Not enough nonterminals:\n%r'
 						% prev[:buf - prev].decode('utf8'))
 			else:
-				raise ValueError('Grammar not binarized:\n%s'
-						% prev[:buf - prev].decode('utf8'))
+				raise ValueError('Grammar not binarized:\n%r\n%r'
+						% (list(rule), prev[:buf - prev].decode('utf8')))
 			if cur.rhs1 == 1 or cur.rhs2 == 1:
-				raise ValueError('Start symbol should only occur on LHS:\n%s'
+				raise ValueError('Start symbol should only occur on LHS:\n%r'
 						% prev[:buf - prev].decode('utf8'))
 			w = convertweight(weight.c_str())
 			if w <= 0:
-				raise ValueError('Expected positive non-zero weight\n%s'
+				raise ValueError('Expected positive non-zero weight\n%r'
 						% prev[:buf - prev].decode('utf8'))
-			cur.no = n
-			cur.prob = fabs(log(w))
-			self.buf.push_back(cur)
-			self.defaultmodel.push_back(w)
 			key.lhs, key.rhs1, key.rhs2 = cur.lhs, cur.rhs1, cur.rhs2
 			key.args, key.lengths = cur.args, cur.lengths
-			self.rulenos[key] = n
-			n += 1
+			it1 = self.rulenos.find(key)
+			if it1 == self.rulenos.end():  # add new rule
+				self.rulenos[key] = n
+				cur.no = n
+				cur.prob = w  # fabs(log(w))
+				self.rulecounts.push_back(w)
+				self._bylhs.push_back(cur)
+				if backtransform is not None and lineno < len(backtransform):
+					# new fragments come AFTER rules without fragments,
+					# so a gap is created; either fill gap [below],
+					# or re-order previous rules,
+					# FIXME: or use hashtable / sparsetable for backtransform.
+					if len(self.backtransform) != n:
+						self.backtransform.extend(
+								[None] * (n - len(self.backtransform)))
+					self.backtransform.append(backtransform[lineno])
+				if rule.size() == 2:
+					self.numunary += 1
+					self._unary.push_back(cur)
+				elif rule.size() == 3:
+					self.numbinary += 1
+					self._lbinary.push_back(cur)
+					self._rbinary.push_back(cur)
+				n += 1
+			else:  # update weight of existing rule
+				m = dereference(it1).second
+				self.rulecounts[m] += w
+			self.freqmass[cur.lhs] += w
+			lineno += 1
 
 		self.numrules = self.numunary + self.numbinary
 		self.phrasalnonterminals = self.toid.ob.size()
+		# sentinel rules
+		cur.lhs = cur.rhs1 = cur.rhs2 = cur.prob = cur.lengths = cur.args = 0
+		self._bylhs.push_back(cur)
+		self._unary.push_back(cur)
+		self._lbinary.push_back(cur)
+		self._rbinary.push_back(cur)
 		if not self.numrules:
 			raise ValueError('No rules found')
 
-	def _convertlexicon(self, bytes lexicon):
-		""" Make objects for lexical rules. """
+	def _convertlexicon(self, bytes lexicon, bint checkdup=True):
+		"""Make objects for lexical rules."""
 		cdef int x
 		cdef Prob w
 		cdef const char *buf = <const char*>lexicon
@@ -314,7 +383,8 @@ cdef class Grammar:
 				raise ValueError('Expected: word<TAB>tag1<SPACE>weight1...'
 						'Got: %r' % prev[:buf - prev].decode('utf8'))
 			word = fields[0]
-			if self.lexicalbyword.find(word) != self.lexicalbyword.end():
+			if (checkdup and self.lexicalbyword.find(word)
+					!= self.lexicalbyword.end()):
 				raise ValueError('word %r appears more than once '
 						'in lexicon file' % unescape(word.decode('utf8')))
 			for n in range(1, fields.size()):
@@ -327,94 +397,41 @@ cdef class Grammar:
 				weight = string(fields[n].c_str() + x + 1)
 				it = self.toid.ob.find(tag)
 				if it == self.toid.ob.end():
-					self.toid.ob[tag] = self.tolabel.ob.size()
+					lexrule.lhs = self.toid.ob[tag] = self.tolabel.ob.size()
 					self.tolabel.ob.push_back(tag)
+					self.freqmass.push_back(0)
 					self.fanout.push_back(1)
 					# disabled because we add ids for labels on the fly:
 					# logging.warning('POS tag %r for word %r not used in any '
 					# 		'phrasal rule', tag, word.decode('utf8'))
 					# continue
 				else:
-					if self.fanout[dereference(it).second] != 1:
-						raise ValueError('POS tag %r has fan-out %d, '
-								'may only be 1.' % (
-								self.fanout[dereference(it).second], tag))
+					lexrule.lhs = dereference(it).second
+					if self.fanout[lexrule.lhs] != 1:
+						raise ValueError('POS tag %r has fan-out %d, may only'
+								' be 1.' % (self.fanout[lexrule.lhs], tag))
 				w = convertweight(weight.c_str())
 				if w <= 0:
 					raise ValueError('weights should be positive '
-							'and non-zero:\n%s'
+							'and non-zero:\n%r'
 							% prev[:buf - prev].decode('utf8'))
-				lexrule.prob = fabs(log(w))
-				lexrule.lhs = self.toid.ob[tag]
-				lexruleno = self.lexical.size()
-				self.defaultmodel.push_back(w)
-				self.lexical.push_back(lexrule)
-				self.lexicalbyword[word].push_back(lexruleno)
-				self.lexicalbylhs[lexrule.lhs][word] = lexruleno
+				it1 = self.lexicalbylhs[lexrule.lhs].find(word)
+				if it1 == self.lexicalbylhs[lexrule.lhs].end():  # new rule
+					lexruleno = self.lexical.size()
+					lexrule.prob = w  # fabs(log(w))
+					self.lexcounts.push_back(w)
+					self.lexical.push_back(lexrule)
+					self.lexicalbyword[word].push_back(lexruleno)
+					self.lexicalbylhs[lexrule.lhs][word] = lexruleno
+				else:  # update weight
+					lexruleno = dereference(it1).second
+					self.lexcounts[lexruleno] += w
+				self.freqmass[lexrule.lhs] += w
 			if self.lexical.size() == 0:
 				raise ValueError('no lexical rules found.')
 
-	def _allocate(self):
-		"""Allocate memory to store rules."""
-		# store all non-lexical rules in a contiguous array
-		# the other arrays will contain pointers to relevant parts thereof
-		# (indexed on lhs, rhs1, and rhs2 of rules)
-		self.bylhs = <ProbRule **>malloc(sizeof(ProbRule *)
-				* self.nonterminals * 4)
-		if self.bylhs is NULL:
-			raise MemoryError('allocation error')
-		self.bylhs[0] = NULL
-		self.unary = &(self.bylhs[1 * self.nonterminals])
-		self.lbinary = &(self.bylhs[2 * self.nonterminals])
-		self.rbinary = &(self.bylhs[3 * self.nonterminals])
-		# allocate the actual contiguous array that will contain the rules
-		# (plus sentinels)
-		# self.bylhs[0] = <ProbRule *>malloc(sizeof(ProbRule) *
-		# 	(self.numrules + (2 * self.numbinary) + self.numunary + 4))
-		# if self.bylhs[0] is NULL:
-		# 	raise MemoryError('allocation error')
-		self.buf.resize(self.numrules + (2 * self.numbinary) + self.numunary + 4)
-		self.bylhs[0] = &(self.buf[0])
-		self.unary[0] = &(self.bylhs[0][self.numrules + 1])
-		self.lbinary[0] = &(self.unary[0][self.numunary + 1])
-		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
-		self.mask = <uint64_t *>malloc(
-				BITNSLOTS(self.numrules) * sizeof(uint64_t))
-		if self.mask is NULL:
-			raise MemoryError('allocation error')
-		self.setmask(None)
-		self.revrulemap = <uint32_t *>malloc(self.numrules * sizeof(uint32_t))
-		if self.revrulemap is NULL:
-			raise MemoryError('allocation error')
-
-	def _normalize(self):
-		"""Optionally normalize frequencies to relative frequencies.
-		Should be run during initialization."""
-		cdef double mass = 0
-		cdef uint32_t n = 0, lhs
-		logging.warning('normalizing weights.')
-		for lhs in range(self.nonterminals):
-			mass = 0
-			n = 0
-			while self.bylhs[lhs][n].lhs == lhs:
-				mass += self.defaultmodel[self.bylhs[lhs][n].no]
-				n += 1
-			it = self.lexicalbylhs.find(lhs)
-			if it != self.lexicalbylhs.end():
-				for x in dereference(it).second:
-					mass += self.defaultmodel[self.numrules + x.second]
-			n = 0
-			while self.bylhs[lhs][n].lhs == lhs:
-				self.defaultmodel[self.bylhs[lhs][n].no] /= mass
-				n += 1
-			it = self.lexicalbylhs.find(lhs)
-			if it != self.lexicalbylhs.end():
-				for x in dereference(it).second:
-					self.defaultmodel[self.numrules + x.second] /= mass
-		self.currentmodel = None
-		self.switch('default', self.logprob)
-
-	cdef _indexrules(Grammar self, ProbRule **dest, int idx, int filterlen):
+	cdef _indexrules(Grammar self, vector[ProbRule *]& dest, int idx,
+			int filterlen, int orignumrules):
 		"""Auxiliary function to create Grammar objects. Copies certain
 		grammar rules and sorts them on the given index.
 		Resulting array is ordered by lhs, rhs1, or rhs2 depending on the value
@@ -424,31 +441,31 @@ cdef class Grammar:
 		e.g.: dest[NP][0] == the first rule with an NP in the idx position."""
 		cdef uint32_t prev = self.nonterminals, idxlabel = 0, n, m = 0
 		cdef ProbRule *cur
+		cdef vector[ProbRule].iterator first
 		# need to set dest even when there are no rules for that idx
 		for n in range(1, self.nonterminals):
 			dest[n] = dest[0]
-		if dest is self.bylhs:
-			m = self.numrules
-		else:
-			for n in range(self.numrules):
-				if ((filterlen == 2 and self.bylhs[0][n].rhs2 == 0)
-						or (filterlen == 3 and self.bylhs[0][n].rhs1
-						and self.bylhs[0][n].rhs2)):
-					# copy this rule
-					dest[0][m] = self.bylhs[0][n]
-					assert dest[0][m].no < self.numrules
-					m += 1
-		if filterlen == 2:
-			assert m == self.numunary, (m, self.numunary)
-		elif filterlen == 3:
-			assert m == self.numbinary, (m, self.numbinary)
-		# sort rules by idx (NB: qsort is not stable, use appropriate cmp func)
+		# sort rules by idx (NB: ensure stable sort w/appropriate cmp func)
 		if idx == 0:
-			qsort(dest[0], m, sizeof(ProbRule), &cmp0)
+			cmpfun = lt0
+			m = self.numrules
+			first = self._bylhs.begin()
 		elif idx == 1:
-			qsort(dest[0], m, sizeof(ProbRule), &cmp1)
-		elif idx == 2:
-			qsort(dest[0], m, sizeof(ProbRule), &cmp2)
+			cmpfun = lt1
+			if filterlen == 2:
+				m = self.numunary
+				first = self._unary.begin()
+			else:
+				m = self.numbinary
+				first = self._lbinary.begin()
+		else:  # idx == 2:
+			cmpfun = lt2
+			m = self.numbinary
+			first = self._rbinary.begin()
+		# sort the new rules
+		stdsort(first + orignumrules, first + m, cmpfun)
+		# merge sorted old rules with sorted new rules
+		inplace_merge(first, first + orignumrules, first + m, cmpfun)
 		# make index: dest[NP] points to first rule with NP in index position
 		for n in range(m):
 			cur = &(dest[0][n])
@@ -472,15 +489,34 @@ cdef class Grammar:
 		cdef size_t numweights = self.numrules + self.lexical.size()
 		if self.currentmodel == name and self.logprob == logprob:
 			return
-		if name == 'default':
+		if name == 'default':  # normalize
 			if logprob:
-				# cannot take typed memoryview of vector<Prob>
-				ob = clone(dblarray, numweights, False)
-				for n in range(numweights):
-					ob[n] = fabs(log(self.defaultmodel[n]))
-				tmp = &(ob[0])
+				for n in range(self.numrules):
+					self._bylhs[n].prob = fabs(log(
+							self.rulecounts[self._bylhs[n].no]
+							/ self.freqmass[self._bylhs[n].lhs]))
+				for n in range(self.lexical.size()):
+					self.lexical[n].prob = fabs(log(self.lexcounts[n]
+							/ self.freqmass[self.lexical[n].lhs]))
 			else:
-				tmp = &(self.defaultmodel[0])
+				for n in range(self.numrules):
+					self._bylhs[n].prob = (
+							self.rulecounts[self._bylhs[n].no]
+							/ self.freqmass[self._bylhs[n].lhs])
+				for n in range(self.lexical.size()):
+					self.lexical[n].prob = (self.lexcounts[n]
+							/ self.freqmass[self.lexical[n].lhs])
+			# instead of copying weights from bylhs, could compute them
+			# again, but number of lookups is the same.
+			for n in range(self.numbinary):
+				self._lbinary[n].prob = self._bylhs[
+						self.revrulemap[self._lbinary[n].no]].prob
+			for n in range(self.numbinary):
+				self._rbinary[n].prob = self._bylhs[
+						self.revrulemap[self._rbinary[n].no]].prob
+			for n in range(self.numunary):
+				self._unary[n].prob = self._bylhs[
+						self.revrulemap[self._unary[n].no]].prob
 		else:
 			if self.models is None and self.altweightsfile:
 				self.models = np.load(self.altweightsfile)  # FIXME: keep open?
@@ -491,34 +527,31 @@ cdef class Grammar:
 						self.numrules + self.lexical.size(), len(model)))
 			ob = np.abs(np.log(model)) if logprob else model
 			tmp = &(ob[0])
-		for n in range(self.numrules):
-			self.bylhs[0][n].prob = tmp[self.bylhs[0][n].no]
-		for n in range(self.numbinary):
-			self.lbinary[0][n].prob = tmp[self.lbinary[0][n].no]
-			self.rbinary[0][n].prob = tmp[self.rbinary[0][n].no]
-		for n in range(self.numunary):
-			self.unary[0][n].prob = tmp[self.unary[0][n].no]
-		for n in range(self.lexical.size()):
-			self.lexical[n].prob = tmp[self.numrules + n]
+			for n in range(self.numrules):
+				self._bylhs[n].prob = tmp[self._bylhs[n].no]
+			for n in range(self.numbinary):
+				self._lbinary[n].prob = tmp[self._lbinary[n].no]
+			for n in range(self.numbinary):
+				self._rbinary[n].prob = tmp[self._rbinary[n].no]
+			for n in range(self.numunary):
+				self._unary[n].prob = tmp[self._unary[n].no]
+			for n in range(self.lexical.size()):
+				self.lexical[n].prob = tmp[self.numrules + n]
 		self.logprob = logprob
 		self.currentmodel = name
 
 	def setmask(self, seq):
 		"""Given a sequence of rule numbers, store a mask so that any phrasal
 		rules not in the sequence are deactivated. If sequence is None, the
-		mask is cleared."""
+		mask is cleared (all rules are active)."""
 		cdef int n
+		self.mask.resize(0)
 		# zero-bit = not blocked or out of range; 1-bit = blocked.
 		if seq is None:
-			memset(<void *>self.mask, 0,
-					BITNSLOTS(self.numrules) * sizeof(uint64_t))
 			return
-		memset(<void *>self.mask, 255,
-				BITNSLOTS(self.numrules) * sizeof(uint64_t))
+		self.mask.resize(BITNSLOTS(self.numrules), ~(<uint64_t>0))
 		for n in seq:
-			CLEARBIT(self.mask, n)
-		# clear out-of-range bits: 000011111 <-- 1-bits up to numrules.
-		self.mask[BITSLOT(self.numrules)] = BITMASK(self.numrules) - 1UL
+			CLEARBIT(&(self.mask[0]), n)
 
 	def testgrammar(self, epsilon=1e-16):
 		"""Test whether all left-hand sides sum to 1 +/-epsilon for the
@@ -526,16 +559,23 @@ cdef class Grammar:
 		cdef ProbRule *rule
 		cdef LexicalRule lexrule
 		cdef uint32_t n, maxlabel = 0
+		cdef size_t numweights = self.numrules + self.lexical.size()
 		cdef list weights = [[] for _ in range(self.nonterminals)]
 		cdef Prob [:] tmp
 		if self.currentmodel == 'default':
-			tmp = array('d', self.defaultmodel)
+			tmp = clone(dblarray, numweights, False)
+			for n in range(self.numrules):
+				tmp[n] = (self.rulecounts[n]
+						/ self.freqmass[self._bylhs[self.revrulemap[n]].lhs])
+			for n in range(self.lexical.size()):
+				tmp[self.numrules + n] = (self.lexcounts[n]
+						/ self.freqmass[self.lexical[n].lhs])
 		else:
 			tmp = self.models[self.currentmodel]
 		# We could be strict about separating POS tags and phrasal categories,
 		# but Negra contains at least one tag (--) used for both.
 		for n in range(self.numrules):
-			rule = &(self.bylhs[0][n])
+			rule = &(self._bylhs[n])
 			weights[rule.lhs].append(tmp[rule.no])
 		n = self.numrules
 		for lexrule in self.lexical:
@@ -558,7 +598,7 @@ cdef class Grammar:
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False,
-			dict mapping=None):
+			dict mapping=None, int startidx=0, bint debug=True):
 		"""Construct mapping of this grammar's non-terminal labels to another.
 
 		:param coarse: the grammar to which this grammar's labels will be
@@ -579,43 +619,31 @@ cdef class Grammar:
 
 		:param mapping: a dictionary with strings of fine labels mapped to
 			coarse labels. striplabelre, if given, is applied first.
+		:param startidx: when running getmapping after new rules have been
+			added, pass the value of grammar.nonterminals before they were
+			added to avoid rebuilding the mapping completely.
+		:param debug: whether to return a debug message.
 
 		The regexes should be compiled objects, i.e., ``re.compile(regex)``,
 		or ``None`` to leave labels unchanged.
 		"""
 		cdef bint selfmap = coarse is None
-		cdef int n, m, components = 0
+		cdef int n, m
 		cdef set seen = {0}
-		cdef uint32_t *result = <uint32_t *>malloc(
-				sizeof(uint32_t) * self.nonterminals)
-		if result is NULL:
-			raise MemoryError
+		cdef vector[Label] result
+		result.swap(self.selfmapping if selfmap else self.mapping)
+		result.resize(self.nonterminals)
 		if selfmap:
 			coarse = self
-			if self.selfmapping is not NULL:
-				free(self.selfmapping)
-			self.selfmapping = result
 		else:
-			if self.mapping is not NULL:
-				free(self.mapping)
-			self.mapping = result
 			# construct mapping from coarse label to fine labels
 			self.revmap.resize(coarse.nonterminals)
 		if splitprune and markorigin:
-			if self.splitmapping is not NULL:
-				if self.splitmapping[0] is not NULL:
-					free(self.splitmapping[0])
-				free(self.splitmapping)
-			self.splitmapping = <uint32_t **>malloc(sizeof(uint32_t *)
-					* self.nonterminals)
-			for n in range(self.nonterminals):
-				self.splitmapping[n] = NULL
-			self.splitmapping[0] = <uint32_t *>malloc(sizeof(uint32_t) *
-				sum([self.fanout[n] for n in range(self.nonterminals)
-					if self.fanout[n] > 1]))
-		for n in range(self.nonterminals):
-			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
-				strlabel = self.tolabel[n]
+			self.splitmapping.resize(0)
+			self.splitmapping.resize(self.nonterminals)
+		for n in range(startidx, self.nonterminals):
+			strlabel = self.tolabel.ob[n].decode('utf8')
+			if not neverblockre or neverblockre.search(strlabel) is None:
 				if striplabelre is not None:
 					strlabel = striplabelre.sub('', strlabel, 1)
 				if mapping is not None:
@@ -624,8 +652,7 @@ cdef class Grammar:
 					strlabel += '*'
 				if self.fanout[n] > 1 and splitprune and markorigin:
 					result[n] = self.nonterminals  # sentinel value
-					self.splitmapping[n] = &(self.splitmapping[0][components])
-					components += self.fanout[n]
+					self.splitmapping[n].resize(self.fanout[n])
 					for m in range(self.fanout[n]):
 						self.splitmapping[n][m] = coarse.toid[
 								strlabel + str(m)]
@@ -643,7 +670,9 @@ cdef class Grammar:
 								strlabel, self.tolabel[n]))
 			else:
 				result[n] = 0
-		if seen == set(range(coarse.nonterminals)):
+		if startidx != 0 or not debug:
+			msg = ''
+		elif seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
 		else:
 			# NB: ALL fine symbols are mapped to some coarse symbol;
@@ -659,6 +688,10 @@ cdef class Grammar:
 			else:
 				msg = ('equal number of nodes, but not equivalent:\n'
 						'coarse labels without mapping: { %s }' % diff)
+		if selfmap:
+			self.selfmapping.swap(result)
+		else:
+			self.mapping.swap(result)
 		return msg
 
 	def getrulemapping(Grammar self, Grammar coarse, striplabelre):
@@ -675,7 +708,7 @@ cdef class Grammar:
 		cdef Rule key
 		cdef list rulemapping = [array('L') for _ in range(coarse.numrules)]
 		for n in range(self.numrules):
-			rule = &(self.bylhs[0][n])
+			rule = &(self._bylhs[n])
 			# this could work, but only if mapping[..] is never 0.
 			# key.lhs = self.mapping[rule.lhs]
 			# key.rhs1 = self.mapping[rule.rhs1]
@@ -717,19 +750,25 @@ cdef class Grammar:
 		getyf(yf, &key.args, &key.lengths)
 		return self.rulenos[key]
 
+	def incrementrulecount(self, int ruleno, int freq):
+		"""Add freq to observed count of a rule.
+		NB: need to re-normalize after this; alternative weights not affected.
+		"""
+		self.rulecounts[ruleno] += freq
+
 	cpdef rulestr(self, int n):
 		"""Return a string representation of a specific rule in this grammar."""
 		cdef ProbRule rule
 		if not 0 <= n < self.numrules:
 			raise ValueError('Out of range: %s' % n)
-		rule = self.bylhs[0][n]
-		left = '%.2f %s => %s%s' % (
+		rule = self._bylhs[n]
+		left = '%.4f %s => %s%s' % (
 			exp(-rule.prob) if self.logprob else rule.prob,
-			self.tolabel[rule.lhs],
-			self.tolabel[rule.rhs1],
-			' %s' % self.tolabel[rule.rhs2]
-				if rule.rhs2 else '')
-		return '%s %s [%d]' % (left.ljust(40), self.yfstr(rule), rule.no)
+			self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
+			' %s' % self.tolabel[rule.rhs2] if rule.rhs2 else '')
+		return '%s %s %g/%g [%d]' % (
+				left.ljust(40), self.yfstr(rule).ljust(2),
+				self.rulecounts[rule.no], self.freqmass[rule.lhs], rule.no)
 
 	cdef yfstr(self, ProbRule rule):
 		cdef int n, m = 0
@@ -742,9 +781,14 @@ cdef class Grammar:
 					return result
 				else:
 					result += ','
-		raise ValueError('illegal yield function expected %d components.\n'
+		raise ValueError('illegal yield function; expected %d components.\n'
 				'args: %s; lengths: %s' % (self.fanout[rule.lhs],
 				bin(rule.args), bin(rule.lengths)))
+
+	def getpos(self):
+		"""Return POS tags in lexicon as list."""
+		return [self.tolabel.ob[it.first].decode('utf8')
+				for it in self.lexicalbylhs]
 
 	def getwords(self):
 		"""Return words in lexicon as list."""
@@ -768,7 +812,8 @@ cdef class Grammar:
 			for word in sorted([x.first for x in self.lexicalbyword])
 			for n in sorted([y for y in self.lexicalbyword[word]],
 			key=lambda n: self.lexical[n].lhs)])
-		labels = ', '.join(['%s=%d' % (a, self.toid[a])
+		labels = ', '.join(['%s=%d %d' % (
+				a, self.toid[a], self.fanout[self.toid[a]])
 				for a in sorted(self.toid)])
 		return 'rules:\n%s\nlexicon:\n%s\nlabels:\n%s' % (
 				rules, lexical, labels)
@@ -782,30 +827,15 @@ cdef class Grammar:
 		return (Grammar, (self.rulesfile or self.ruletuples, self.lexiconfile,
 				self.start, self.altweightsfile or self.models))
 
-	def __dealloc__(self):
-		if self.bylhs is NULL:
-			return
-		free(self.bylhs)
-		free(self.mask)
-		free(self.revrulemap)
-		if self.mapping is not NULL:
-			free(self.mapping)
-		if self.splitmapping is not NULL:
-			free(self.splitmapping[0])
-			free(self.splitmapping)
-		if self.selfmapping is not NULL:
-			free(self.selfmapping)
-		self.bylhs = self.mask = self.revrulemap = NULL
-		self.mapping = self.splitmapping = NULL
-
 
 cdef inline Prob convertweight(const char *weight):
-	"""Convert weight to float/double; weight may be a fraction '1/2',
-	decimal float '0.5' or hex float '0x1.0p-1'. Returns 0 on error."""
+	"""Convert weight to float/double; weight may be a fraction '1/2'
+	(returns only first part of fraction), decimal float '0.5',
+	or hex float '0x1.0p-1'. Returns 0 on error."""
 	cdef char *endptr = NULL
 	cdef Prob w = strtod(weight, &endptr)
-	if endptr[0] == b'/':
-		w /= strtod(&endptr[1], NULL)
+	if endptr[0] == b'/':  # allow for compatibility
+		pass  # w /= strtod(&endptr[1], NULL)
 	elif endptr[0]:
 		return 0
 	return w

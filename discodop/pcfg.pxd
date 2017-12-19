@@ -1,5 +1,4 @@
 cimport cython
-from libc.stdlib cimport malloc, calloc, free, abort
 from libc.math cimport isinf, isfinite
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libcpp.vector cimport vector

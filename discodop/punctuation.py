@@ -8,7 +8,7 @@ PUNCTTAGS = {'.', ',', ':', "'", "''", '`', '``', '"',  # General
 		'-LRB-', '-RRB-', '-LSB-', '-RSB-', '-LCB-', '-RCB-',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]',  # Alpino/Lassy
-		'COMMA', 'PUNCT', 'PAREN'}  # Grammatical Framework
+		'PONCT', 'PUNCT', 'COMMA', 'PAREN'}  # FTB/Grammatical Framework
 
 # NB: ' is not in this list of tokens, because if it occurs as a possesive
 # marker it should be left alone; occurrences of ' as quotation marker may

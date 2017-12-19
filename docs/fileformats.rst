@@ -139,8 +139,8 @@ Fields are separated by tabs. The fields are::
 The yield function defines how the spans of the RHS nonterminals
 are combined to form the spans of the LHS nonterminal. Components of the yield
 function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as rational
-fractions.
+nonterminal, and 1 from the second.
+Weights are treated as (pseudo)counts and normalized when the grammar is loaded.
 The lexicon is defined in a separate file. Lines start with a single word,
 followed by pairs of possible tags and their probabilities::
 
@@ -198,6 +198,7 @@ stored in a NumPy array::
 
 In this case, we see the model for shortest derivation parsing, where
 every fragment is assigned a uniform weight of 0.5.
+These weights are not normalized when the grammar is loaded.
 
 Miscellaneous
 -------------

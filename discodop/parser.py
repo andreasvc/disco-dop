@@ -19,7 +19,7 @@ import pickle
 import numpy as np
 from . import plcfrs, pcfg, disambiguation
 from . import grammar, treetransforms, treebanktransforms
-from .containers import Grammar
+from .containers import Grammar, Vocabulary, Ctrees
 from .coarsetofine import prunechart
 from .tree import ParentedTree, escape, ptbescape
 from .eval import alignsent
@@ -42,7 +42,8 @@ DEFAULTS = dict(
 		path='alpinosample.export',
 		encoding='utf8',
 		maxwords=40,  # limit on train set sentences
-		numsents=2),  # size of train set (before applying maxwords)
+		numsents=2,  # size of train set (before applying maxwords)
+		skip=0),  # number of sentences to skip from train corpus
 	testcorpus=dict(
 		path='alpinosample.export',
 		encoding='utf8',
@@ -152,7 +153,7 @@ class Parser(object):
 		:py:func:`functiontags.trainfunctionclassifier`.
 	"""
 
-	def __init__(self, prm, funcclassifier=None):
+	def __init__(self, prm, funcclassifier=None, loadtrees=False):
 		self.prm = prm
 		self.stages = prm.stages
 		self.transformations = prm.transformations
@@ -178,6 +179,47 @@ class Parser(object):
 			if prm.verbosity >= 3:
 				print(stage.name)
 				print(stage.grammar)
+		self.ctrees = self.vocab = self.phrasallabels = self.poslabels = None
+		if loadtrees:
+			self._loadtrees()
+
+	def _loadtrees(self):
+		from .runexp import loadtraincorpus, getposmodel, dobinarization
+		from .containers import REMOVESTATESPLITS
+		from . import _fragments
+		prm = self.prm
+		if os.path.exists('%s/train.ct' % prm.resultdir):
+			self.vocab = Vocabulary.fromfile(
+					'%s/vocab.idx' % prm.resultdir)
+			self.ctrees = Ctrees.fromfile('%s/train.ct' % prm.resultdir)
+		else:
+			trees, sents, train_tagged_sents = loadtraincorpus(
+						prm.corpusfmt, prm.traincorpus, prm.binarization,
+						prm.punct, prm.functions, prm.morphology,
+						prm.removeempty, prm.ensureroot,
+						prm.transformations, prm.relationalrealizational)
+			if prm.postagging and prm.postagging.method == 'unknownword':
+				sents, _ = getposmodel(prm.postagging, train_tagged_sents)
+			trees = dobinarization(trees, sents, prm.binarization,
+					prm.relationalrealizational)
+			result = _fragments.getctrees(zip(trees, sents))
+			self.ctrees, self.vocab = result['trees1'], result['vocab']
+			self.ctrees.tofile('%s/train.ct' % prm.resultdir)
+			self.vocab.tofile('%s/vocab.idx' % prm.resultdir)
+		matches = (REMOVESTATESPLITS.match(a)
+				for a in prm.stages[0].grammar.getpos())
+		self.poslabels = {match.group(1) for match in matches if match}
+		# NB: assumes labels of first stage have not been collapsed
+		self.phrasallabels = set(prm.stages[0].grammar.tblabelmapping
+				) - self.poslabels
+		for stage in prm.stages:
+			if stage.dop == 'doubledop':
+				# map of fragments to line numbers
+				stage.fragments = {line[:line.rindex('\t')]: n
+						for n, line in enumerate(gzip.open(
+							'%s/%s.fragments.gz' % (prm.resultdir,
+							stage.name), 'rt', encoding='utf8'))}
+		self.cnt = 0
 
 	def parse(self, sent, tags=None, goldtree=None, require=None, block=None):
 		"""Parse a sentence and perform postprocessing.
@@ -354,7 +396,6 @@ class Parser(object):
 				parsetrees, msg1 = disambiguation.marginalize(
 						stage.objective if stage.dop else 'mpd',
 						chart, sent=sent, tags=tags,
-						backtransform=stage.backtransform,
 						k=stage.m, sldop_n=stage.sldop_n,
 						mcplambda=stage.mcplambda, mcplabels=stage.mcplabels,
 						ostag=stage.dop == 'ostag',
@@ -453,6 +494,135 @@ class Parser(object):
 		prob = 1.0
 		return parsetree, prob, noparse
 
+	def augmentgrammar(self, newtrees, newsents):
+		"""Extract grammar rules from trees and merge with current grammar."""
+		from .runexp import dobinarization
+		from . import _fragments
+		prm = self.prm
+		newtrees = [a.copy(True) for a in newtrees]  # will modify in-place
+		for tree, sent in zip(newtrees, newsents):
+			treebanktransforms.transform(tree, sent, prm.transformations)
+		# FIXME: re-estimate unknown word model?
+		if self.postagging and self.postagging.method == 'unknownword':
+			for sent in newsents:  # add new known words
+				self.postagging.lexicon.update(sent)
+		newtrees = dobinarization(newtrees, newsents, prm.binarization,
+				prm.relationalrealizational)
+		for n, stage in enumerate(prm.stages):
+			prevn = 0
+			backtransform = None
+			if n and stage.prune:
+				prevn = [a.name for a in prm.stages].index(stage.prune)
+			if stage.split:
+				raise NotImplementedError
+			if stage.dop:
+				if stage.dop == 'doubledop':
+					if self.ctrees is None:
+						raise ValueError('original treebank required')
+					# get fragments
+					trees2 = _fragments.getctrees(
+							zip(newtrees, newsents), vocab=self.vocab,
+							index=True)['trees1']
+					fragments = _fragments.extractfragments(
+							trees2, 0, 0, self.vocab, self.ctrees,
+							approx=False, disc=True,
+							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
+					fragments.update(_fragments.extractfragments(
+							trees2, 0, 0, self.vocab, trees2,
+							approx=False, disc=True,
+							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes)))
+					# for fragments already part of the grammar, increment
+					# existing rules with occurrences in the new trees.
+					fragmentkeysold = [a for a in fragments
+							if a in stage.fragments]
+					bitsetsold = [fragments[a] for a in fragmentkeysold]
+					counts0 = _fragments.exactcounts(
+							bitsetsold, trees2, trees2, indices=1,
+							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
+					for a, b in zip(fragmentkeysold, counts0):
+						stage.grammar.incrementrulecount(
+								stage.fragments[a], len(b))
+					# for the subset of new fragments, create new grammar rules
+					fragmentkeysnew = [a for a in fragments
+							if a not in stage.fragments]
+					bitsetsnew = [fragments[a] for a in fragmentkeysnew]
+					counts1 = _fragments.exactcounts(
+							bitsetsnew, trees2, self.ctrees, indices=1,
+							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
+					counts2 = _fragments.exactcounts(
+							bitsetsnew, trees2, trees2, indices=1,
+							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
+					# merge counts
+					combined = dict(zip(fragmentkeysnew, counts1))
+					for a, b in zip(fragmentkeysnew, counts2):
+						# offset indices of new trees after original trees
+						for c, _ in enumerate(b):
+							b[c] += self.ctrees.len
+						combined[a].extend(b)
+					# cover fragments
+					if stage.maxdepth:
+						cover = _fragments.allfragments(
+								trees2, self.vocab, stage.maxdepth,
+								maxfrontier=stage.maxfrontier, disc=True,
+								indices=True)
+						for a, b in cover.items():
+							for x, _ in enumerate(b):
+								# offset indices
+								b[x] += self.ctrees.len
+							if a in stage.fragments:
+								if a not in fragments:
+									stage.grammar.incrementrulecount(
+											stage.fragments[a], len(b))
+							else:
+								combined[a] = b
+					# it is crucial that auxiliary binarization symbols are
+					# unique, so include a sequence number
+					ids = grammar.UniqueIDs(prefix='%d_' % self.cnt)
+					self.cnt += 1
+					# get grammar
+					(xgrammar, backtransform, _altweights, _newfragments
+							) = grammar.dopgrammar(newtrees, combined, ids=ids)
+				else:
+					raise NotImplementedError
+			else:
+				xgrammar = grammar.treebankgrammar(
+						newtrees, newsents, extrarules=None)
+			rules, lex = grammar.writegrammar(
+					xgrammar, bitpar=stage.grammar.bitpar)
+			orignumlabels = stage.grammar.nonterminals
+			stage.grammar.addrules(
+					rules.encode('utf8'), lex.encode('utf8'), backtransform)
+			if stage.dop:
+				if stage.dop in ('doubledop', 'dop1'):
+					# recoverfragments() relies on this mapping to identify
+					# binarization nodes. treeparsing() relies on this as well.
+					stage.grammar.getmapping(
+							None, neverblockre=re.compile('.+}<'),
+							startidx=orignumlabels)
+					if n and stage.prune:
+						stage.grammar.getmapping(
+								prm.stages[prevn].grammar,
+								striplabelre=None if prm.stages[prevn].dop
+									else re.compile('@.+$'),
+								neverblockre=re.compile('.+}<'),
+								splitprune=not stage.split
+									and prm.stages[prevn].split,
+								markorigin=prm.stages[prevn].markorigin,
+								mapping=stage.mapping,
+								startidx=orignumlabels)
+				else:
+					raise NotImplementedError
+			else:
+				if n and stage.prune:
+					stage.grammar.getmapping(prm.stages[prevn].grammar,
+						striplabelre=None,
+						neverblockre=re.compile(stage.neverblockre)
+							if stage.neverblockre else None,
+						splitprune=not stage.split and prm.stages[prevn].split,
+						markorigin=prm.stages[prevn].markorigin,
+						mapping=stage.mapping,
+						startidx=orignumlabels)
+
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	"""Read the grammars from a previous experiment.
@@ -468,67 +638,68 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			stage.mapping = None
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
+		backtransform = outside = None
+		prevn = 0
 		if stage.mode != 'mc-rerank':
 			rules = '%s/%s.rules.gz' % (resultdir, stage.name)
 			lexicon = '%s/%s.lex.gz' % (resultdir, stage.name)
 			probsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
 			if not os.path.exists(probsfile):
 				probsfile = None
-			xgrammar = Grammar(rules, lexicon,
-					start=top, altweights=probsfile)
-		backtransform = outside = None
-		prevn = 0
+			if stage.dop in ('doubledop', 'dop1'):
+				backtransform = openread('%s/%s.backtransform.gz' % (
+						resultdir, stage.name)).read().splitlines()
+			gram = Grammar(rules, lexicon, start=top, altweights=probsfile,
+					backtransform=backtransform)
 		if n and stage.prune:
 			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.mode == 'mc-rerank':
-			xgrammar = pickle.loads(gzip.open('%s/%s.train.pickle.gz' % (
+			gram = pickle.loads(gzip.open('%s/%s.train.pickle.gz' % (
 					resultdir, stage.name), 'rb').read())
 		elif stage.dop:
 			if stage.estimates is not None:
 				raise ValueError('not supported')
 			if stage.dop in ('doubledop', 'dop1'):
-				backtransform = openread('%s/%s.backtransform.gz' % (
-						resultdir, stage.name)).read().splitlines()
 				# recoverfragments() relies on this mapping to identify
 				# binarization nodes. treeparsing() relies on this as well.
-				_ = xgrammar.getmapping(
-						None, neverblockre=re.compile('.+}<'))
+				_ = gram.getmapping(
+						None, neverblockre=re.compile('.+}<'), debug=False)
 				if n and stage.prune:
-					_ = xgrammar.getmapping(stages[prevn].grammar,
+					_ = gram.getmapping(stages[prevn].grammar,
 						striplabelre=re.compile('@.+$'),
 						neverblockre=re.compile('^#[0-9]+|.+}<'),
 						splitprune=not stage.split and stages[prevn].split,
 						markorigin=stages[prevn].markorigin,
-						mapping=stage.mapping)
+						mapping=stage.mapping, debug=False)
 			else:  # dop reduction
 				if n and stage.prune:
-					_ = xgrammar.getmapping(stages[prevn].grammar,
+					_ = gram.getmapping(stages[prevn].grammar,
 						striplabelre=re.compile(r'@[-0-9]+(?:\$\[.*\])?$'),
 						neverblockre=re.compile(stage.neverblockre)
 							if stage.neverblockre else None,
 						splitprune=not stage.split and stages[prevn].split,
 						markorigin=stages[prevn].markorigin,
-						mapping=stage.mapping)
+						mapping=stage.mapping, debug=False)
 					if stage.mode == 'dop-rerank':
-						xgrammar.getrulemapping(stages[prevn].grammar,
+						gram.getrulemapping(stages[prevn].grammar,
 								re.compile(r'@[-0-9]+\b'))
 				if stage.objective == 'sl-dop':  # needed for treeparsing()
-					_ = xgrammar.getmapping(
-							None, striplabelre=re.compile(r'@[-0-9]+\b'))
+					_ = gram.getmapping(
+							None, striplabelre=re.compile(r'@[-0-9]+\b'),
+							debug=False)
 					# only need rulemapping for dop reduction,
 					# defaults to 1-1 mapping otherwise.
-					_ = xgrammar.getrulemapping, (xgrammar,
-							re.compile(r'@[-0-9]+\b'))
+					gram.getrulemapping(gram, re.compile(r'@[-0-9]+\b'))
 		else:  # not stage.dop
 			if n and stage.prune:
-				_ = xgrammar.getmapping(stages[prevn].grammar,
+				_ = gram.getmapping(stages[prevn].grammar,
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=not stage.split and stages[prevn].split,
 					markorigin=stages[prevn].markorigin,
-					mapping=stage.mapping)
+					mapping=stage.mapping, debug=False)
 			if stage.estimates in ('SX', 'SXlrgaps'):
-				if stage.estimates == 'SX' and xgrammar.maxfanout != 1:
+				if stage.estimates == 'SX' and gram.maxfanout != 1:
 					raise ValueError('SX estimate requires PCFG.')
 				if stage.mode != 'plcfrs':
 					raise ValueError('estimates require parser w/agenda.')
@@ -539,10 +710,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				raise ValueError('unrecognized value; specify SX or SXlrgaps.')
 
 		if stage.mode != 'mc-rerank':
-			_sumsto1, msg = xgrammar.testgrammar()
+			_sumsto1, msg = gram.testgrammar()
 		logging.info('%s: %s', stage.name, msg)
-		stage.update(grammar=xgrammar, backtransform=backtransform,
-				outside=outside)
+		stage.update(grammar=gram, outside=outside)
 	if postagging and postagging.method == 'unknownword':
 		postagging.unknownwordfun = UNKNOWNWORDFUNC[postagging.model]
 		postagging.lexicon = {w for w in stages[0].grammar.getwords()
@@ -639,6 +809,10 @@ def readparam(filename):
 	if params['transformations']:
 		params['transformations'] = treebanktransforms.expandpresets(
 				params['transformations'])
+	if (params['binarization'].headrules  # ensure absolute path
+			and os.path.split(params['binarization'].headrules)[0] == ''):
+		params['binarization'].headrules = os.path.join(
+				os.path.dirname(filename), params['binarization'].headrules)
 	return DictObj(params)
 
 
@@ -780,18 +954,17 @@ def main():
 			print(SHORTUSAGE)
 			sys.exit(2)
 		rules, lexicon = args[0], args[1]
-		xgrammar = Grammar(rules, lexicon, start=top)
-		mode = 'pcfg' if xgrammar.maxfanout == 1 else 'plcfrs'
-		stages = []
-		stage = DEFAULTSTAGE.copy()
 		backtransform = None
 		if opts.get('--bt'):
 			backtransform = openread(opts.get('--bt')).read().splitlines()
+		gram = Grammar(rules, lexicon, start=top, backtransform=backtransform)
+		mode = 'pcfg' if gram.maxfanout == 1 else 'plcfrs'
+		stages = []
+		stage = DEFAULTSTAGE.copy()
 		stage.update(
 				name='grammar',
 				mode=mode,
-				grammar=xgrammar,
-				backtransform=backtransform if len(args) < 4 else None,
+				grammar=gram,
 				m=numparses,
 				objective='mpd')
 		if '--obj' in opts:
@@ -802,7 +975,7 @@ def main():
 		stages.append(DictObj(stage))
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
-				neverblockre=re.compile('.+}<'))
+				neverblockre=re.compile('.+}<'), debug=False)
 		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)),
 				transformations=None, binarization=None, postagging=None,
 				relationalrealizational=None)

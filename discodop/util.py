@@ -1,6 +1,7 @@
 """Misc code to avoid cyclic imports."""
 import io
 import os
+import re
 import sys
 import gzip
 import codecs
@@ -8,6 +9,7 @@ import traceback
 from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections import Set, Iterable
+
 
 def ishead(tree):
 	"""Test whether this node is the head of the parent constituent."""
@@ -335,6 +337,49 @@ def merge(*iterables, key=None):
 		item, iterable = entry.key
 		yield item
 		yield from iterable
+
+
+FRENCHCONTRACTIONS = 'qu|jusqu|quelqu|quoiqu'
+# List of contractions adapted from Robert MacIntyre's tokenizer.
+CONTRACTIONS = [
+		r"(.)('ll|'re|'ve|n't|'s|'m|'d)",
+		r"\b(can)(not)",
+		r"\b(D)('ye)",
+		r"\b(Gim)(me)",
+		r"\b(Gon)(na)",
+		r"\b(Got)(ta)",
+		r"\b(Lem)(me)",
+		r"\b(Mor)('n)",
+		r"\b(T)(is)",
+		r"\b(T)(was)",
+		r"\b(Wan)(na)",
+		r"\b((?:[ldmntscj]|%s)')(\w+)" % FRENCHCONTRACTIONS,
+		]
+CONTRACTIONSRE = re.compile(
+		r"(?i)(?:%s)\b" % "|".join(CONTRACTIONS), flags=re.UNICODE)
+CONTRACTIONSREPL = ''.join(  # r'\1\3\5... \2\4\6...',
+		['\\%d' % n for n in range(1, 2 * len(CONTRACTIONS) + 1, 2)]
+		+ [' ']
+		+ ['\\%d' % n for n in range(2, 2 * len(CONTRACTIONS) + 1, 2)])
+
+
+def tokenize(text):
+	"""A basic tokenizer that splits English/French contractions.
+
+	Adapted from nltk.tokenize.TreebankTokenizer."""
+	text = CONTRACTIONSRE.sub(CONTRACTIONSREPL, text)
+	# Separate most punctuation
+	text = re.sub(r"([^\w\.\'\-\/,&])", r' \1 ', text, flags=re.UNICODE)
+	# Separate commas if they're followed by space; e.g., don't separate 2,500
+	# Separate single quotes if they're followed by a space.
+	text = re.sub(r"(\S\S+)([,'](?:\s|$))", r'\1 \2', text, flags=re.UNICODE)
+	# hack to revert "qu '" etc back to "qu'"
+	text = re.sub(r"\b(%s) ' " % FRENCHCONTRACTIONS,
+			r"\1' ", text, flags=re.IGNORECASE)
+	text = re.sub(r"^'", r"' ", text)
+	# Separate periods near end of string.
+	text = re.sub(r'\.(\W*$)', r' . \1', text)
+	return text.split()
 
 
 ANSICOLOR = {

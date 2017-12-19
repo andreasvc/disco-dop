@@ -98,14 +98,13 @@ class CorpusReader(object):
 			print('all sentence IDs must have the same type signature '
 					'(number, string)')
 			raise
-		for opts, opt in (
-				((None, 'leave', 'add', 'replace', 'remove', 'between'),
-					functions),
-				((None, 'no', 'add', 'replace', 'between'), morphology),
-				((None, 'no', 'move', 'moveall', 'remove', 'removeall',
-					'prune', 'root'), punct),
-				((None, 'no', 'add', 'replace', 'between'), lemmas),
-				):
+		for opt, opts in (
+				(functions, (None, 'leave', 'add', 'replace', 'remove',
+					'between')),
+				(morphology, (None, 'no', 'add', 'replace', 'between')),
+				(punct, (None, 'no', 'move', 'moveall', 'remove', 'removeall',
+					'prune', 'root')),
+				(lemmas, (None, 'no', 'add', 'replace', 'between'))):
 			if opt not in opts:
 				raise ValueError('Expected one of %r. Got: %r' % (opts, opt))
 		if not self._filenames:
@@ -211,7 +210,11 @@ class BracketCorpusReader(CorpusReader):
 	def _parse(self, block):
 		c = count()
 		block = SUPERFLUOUSSPACERE.sub(')', block)
-		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d' % next(c), block))
+		try:
+			tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d' % next(c), block))
+		except ValueError:
+			print(block)
+			raise
 		for node in tree.subtrees():
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
 				x = node.label.find(char)
@@ -325,8 +328,11 @@ class TigerXMLCorpusReader(CorpusReader):
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
+		if self._encoding not in (None, 'utf8', 'utf-8'):
+			raise ValueError('Encoding specified in XML files, '
+					'cannot be overriden.')
 		for filename in self._filenames:
-			# iterator over elements in XML  file
+			# iterator over elements in XML file
 			context = ElementTree.iterparse(filename,
 					events=('start', 'end'))
 			_, root = next(context)  # event == 'start' of root element

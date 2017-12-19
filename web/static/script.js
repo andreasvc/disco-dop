@@ -92,10 +92,10 @@ function entsub(e) {
 	 else
 		key = e.which;  // firefox
 	 if(key == 13)
-		ajaxFunction();
+		parse();
 }
 
-function ajaxFunction() {
+function parse() {
 	/* function to send request to parse a sentence and append the result to
 	 * the current document. */
 	var xmlhttp;
@@ -114,13 +114,12 @@ function ajaxFunction() {
 	document.getElementById('result').appendChild(div);
 	// scroll to bottom of page
 	window.scrollTo(0, document.body.scrollHeight);
-
 	xmlhttp.onreadystatechange=function() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
 			div.innerHTML = xmlhttp.responseText;
-			var id = div.innerHTML.match(/id=([^ ]+) /);
 			// collapse toggle-able items from here so that non-JS browsers
 			// may view the contents
+			var id = div.innerHTML.match(/id=([^ >]+) /);
 			if(id) {
 				toggle('n' + id[1]);
 				toggle('i' + id[1]);
@@ -133,18 +132,13 @@ function ajaxFunction() {
 	var objfun = document.queryform.objfun;
 	var est = document.queryform.est;
 	// var coarse = document.queryform.coarse;
-	// var marg = document.queryform.marg;
 	var lang = document.queryform.lang;
 	url = "parse?html=1&sent=" + encodeURIComponent(document.queryform.sent.value)
 			+ "&lang=" + encodeURIComponent(lang.options[lang.selectedIndex].value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
 			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
 			// + "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
-			// + "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			;
-	if (require.length > 0 || block.length > 0)
-			url += "&require=" + encodeURIComponent('[' + require.join() + ']')
-				+ "&block=" + encodeURIComponent('[' + block.join() + ']');
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
 	document.queryform.sent.value = '';
@@ -201,7 +195,7 @@ function mergecheckboxes() {
 	/* do not send empty query parameters to make URLs nicer. */
 	for (name in ['limit', 'subset', 'target', 'target2']) {
 		elem = document.getElementsByName(name);
-		if (!elem.value) elem.disabled = true;
+		if(!elem.value) elem.disabled = true;
 	}
 }
 

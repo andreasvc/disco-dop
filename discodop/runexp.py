@@ -21,6 +21,7 @@ from . import eval as evalmod
 from . import __version__, treebank, treebanktransforms, treetransforms, \
 		grammar, lexicon, parser, estimates
 from .treetransforms import binarizetree
+from .tree import Tree
 from .util import workerfunc
 from .containers import Grammar
 
@@ -232,7 +233,8 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 			functions=functions, morphology=morphology)
 	if isinstance(traincorpus.numsents, float):
 		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
-	trainset = [item for _, item in train.itertrees(None, traincorpus.numsents)
+	trainset = [item for _, item in train.itertrees(
+			traincorpus.skip, traincorpus.skip + traincorpus.numsents)
 			if 1 <= len(item.sent) <= traincorpus.maxwords]
 	trees = [item.tree for item in trainset]
 	sents = [item.sent for item in trainset]
@@ -427,7 +429,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
 					**altweights)
 			gram = Grammar(rulesfile, lexiconfile, start=top,
-					altweights='%s/%s.probs.npz' % (resultdir, stage.name))
+					altweights='%s/%s.probs.npz' % (resultdir, stage.name),
+					backtransform=backtransform)
 			logging.info('DOP model based on %d sentences, %d nodes, '
 				'%d nonterminals', len(traintrees), nodes, gram.nonterminals)
 			logging.info(msg)
@@ -534,8 +537,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		elif stage.estimates:
 			raise ValueError('unrecognized value; specify SX or SXlrgaps.')
 
-		stage.update(grammar=gram, backtransform=backtransform,
-				outside=outside)
+		stage.update(grammar=gram, outside=outside)
 
 	if any(stage.mapping is not None for stage in stages):
 		with codecs.getwriter('utf8')(gzip.open('%s/mapping.json.gz' % (

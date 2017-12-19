@@ -395,8 +395,8 @@ def test_fragments():
 	params = getctrees(zip(trees, sents))
 	fragments = extractfragments(params['trees1'],
 			0, 0, params['vocab'], disc=True, approx=False)
-	counts = exactcounts(params['trees1'], params['trees1'],
-			list(fragments.values()))
+	counts = exactcounts(
+			list(fragments.values()), params['trees1'], params['trees1'])
 	assert len(fragments) == 25
 	assert sum(counts) == 100
 
@@ -506,10 +506,11 @@ def test_grammar(debug=False):
 			splitprune=False, markorigin=False)
 	if debug:
 		print(grammar)
-	assert grammar.testgrammar()[0], "RFE should sum to 1."
+	result, msg = grammar.testgrammar()
+	assert result, 'RFE should sum to 1.\n%s' % msg
 	for tree, sent in zip(corpus.trees().values(), sents):
 		if debug:
-			print("sentence:", ' '.join(a.encode('unicode-escape').decode()
+			print('sentence:', ' '.join(a.encode('unicode-escape').decode()
 					for a in sent))
 		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		if debug:
@@ -521,7 +522,7 @@ def test_grammar(debug=False):
 			print('no parse\n', chart)
 		if debug:
 			print()
-	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
+	tree = Tree.parse('(ROOT (S (F (E (S (C (B (A 0))))))))', parse_leaf=int)
 	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
 
 
@@ -820,5 +821,5 @@ def test_issue51():
 			[((('S', 'A'), ((0,),)), 1.0),
 			((('A', 'Epsilon'), ('a',)), 1.0)],
 			start='S')
-	chart, msg = parse(["b"], g)
+	chart, _msg = parse(['b'], g)
 	chart.filter()

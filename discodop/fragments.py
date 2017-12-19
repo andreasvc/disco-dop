@@ -254,7 +254,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 			logging.info('getting %s for %d fragments',
 					'indices of occurrence' if PARAMS['indices']
 					else 'exact counts', len(bitsets))
-			counts = _fragments.exactcounts(trees1, trees2, bitsets,
+			counts = _fragments.exactcounts(bitsets, trees1, trees2,
 					indices=PARAMS['indices'],
 					maxnodes=maxnodes)
 		outputfilename = '%s/%s_%s' % (outputdir,
@@ -367,12 +367,12 @@ def exactcountworker(args):
 	n, m, bitsets = args
 	trees1 = PARAMS['trees1']
 	if PARAMS['complete']:
-		results = _fragments.exactcounts(trees1, PARAMS['trees2'], bitsets,
+		results = _fragments.exactcounts(bitsets, trees1, PARAMS['trees2'],
 				indices=PARAMS['indices'])
 		logging.debug('complete matches chunk %d of %d', n + 1, m)
 		return results
 	results = _fragments.exactcounts(
-			trees1, trees1, bitsets, indices=PARAMS['indices'])
+			bitsets, trees1, trees1, indices=PARAMS['indices'])
 	if PARAMS['indices']:
 		logging.debug('exact indices chunk %d of %d', n + 1, m)
 	else:

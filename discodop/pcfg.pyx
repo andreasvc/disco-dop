@@ -176,13 +176,16 @@ cdef class DenseCFGChart(CFGChart):
 		return self.items[n]
 
 	def itemid(self, str label, indices, Whitelist whitelist=None):
-		cdef short left = min(indices)
-		cdef short right = max(indices) + 1
 		cdef Label labelid
 		try:
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		return self.itemid1(labelid, indices, whitelist)
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
 		item = cellidx(left, right, self.lensent, self.grammar.nonterminals
 				) + labelid
 		if whitelist is not None:
@@ -345,13 +348,16 @@ cdef class SparseCFGChart(CFGChart):
 				item.st.start, item.st.end)
 
 	def itemid(self, str label, indices, Whitelist whitelist=None):
-		cdef short left = min(indices)
-		cdef short right = max(indices) + 1
 		cdef Label labelid
 		try:
 			labelid = self.grammar.toid[label]
 		except KeyError:
 			return 0
+		return self.itemid1(labelid, indices, whitelist)
+
+	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
+		cdef short left = min(indices)
+		cdef short right = max(indices) + 1
 		item = cellstruct(left, right) + labelid
 		if whitelist is not None:
 			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
@@ -440,6 +446,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 		uint64_t item, leftitem, rightitem, cell, blocked = 0
 		ItemNo lastidx
 		size_t nts = grammar.nonterminals
+		bint usemask = grammar.mask.size() != 0
 	# Create matrices to track minima and maxima for binary splits.
 	n = (lensent + 1) * nts + 1
 	midfilter.minleft.resize(n, -1)
@@ -476,7 +483,8 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 					narrowr = midfilter.minright[left * nts + rule.rhs1]
 					narrowl = midfilter.minleft[right * nts + rule.rhs2]
 					if (rule.rhs2 == 0 or narrowr >= right or narrowl < narrowr
-							or TESTBIT(grammar.mask, rule.no)):
+							or (usemask and TESTBIT(
+								&(grammar.mask[0]), rule.no))):
 						n += 1
 						rule = &(grammar.bylhs[lhs][n])
 						continue
@@ -533,6 +541,7 @@ cdef parse_leftchildloop(sent, SparseCFGChart chart, tags,
 		uint32_t n
 		short left, right, mid, span, lensent = len(sent)
 		CFGItem li
+		bint usemask = grammar.mask.size() != 0
 	cellindex.resize(compactcellidx(lensent - 1, lensent, lensent, 1) + 2, 0)
 	if beam_beta:
 		chart.beambuckets.resize(
@@ -568,8 +577,8 @@ cdef parse_leftchildloop(sent, SparseCFGChart chart, tags,
 						rightprob = chart._subtreeprob(rightcell + rule.rhs2)
 						item = cell + rule.lhs
 						if isfinite(rightprob):
-							if TESTBIT(grammar.mask, rule.no) or (
-									whitelist is not None
+							if (usemask and TESTBIT(&(grammar.mask[0]), rule.no
+									)) or (whitelist is not None
 									and whitelist.mapping[rule.lhs]
 									and not whitelist.cfg[ccell].count(
 										whitelist.mapping[rule.lhs])):
@@ -686,12 +695,13 @@ cdef inline void applyunaryrules(
 		uint64_t item, leftitem
 		uint64_t ccell = compactcellidx(left, right, chart.lensent, 1)
 		size_t nts = grammar.nonterminals
+		bint usemask = grammar.mask.size() != 0
 		# pair[Label, Prob] unaryentry
 		# vector[pair[Label, Prob]] unaryentries
 	# collect possible rhs items for unaries
 	for itemidx in range(lastidx, chart.items.size()):
 		item = chart.items[itemidx]
-		unaryagenda.setitem(
+		unaryagenda.setifbetter(
 				chart._label(item), (<Chart>chart).subtreeprob(itemidx))
 	# 	unaryentry.first = chart._label(item)
 	# 	unaryentry.second = chart._subtreeprob(item)
@@ -712,7 +722,7 @@ cdef inline void applyunaryrules(
 			lhs = rule.lhs
 			if rule.rhs1 != rhs1:
 				break
-			elif TESTBIT(grammar.mask, rule.no) or (
+			elif (usemask and TESTBIT(&(grammar.mask[0]), rule.no)) or (
 					whitelist is not None
 					and whitelist.mapping[lhs]
 					and whitelist.cfg[ccell].count(
@@ -765,38 +775,35 @@ def test():
 	from .containers import Grammar
 
 	cfg = Grammar([
-		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),
-		((('A', 'C'), ((0, ), )), 0.5), ((('A', 'D'), ((0, ), )), 0.4),
-		((('B', 'A'), ((0, ), )), 0.3), ((('B', 'B'), ((0, ), )), 0.2),
-		((('B', 'C'), ((0, ), )), 0.1), ((('B', 'D'), ((0, ), )), 0.2),
-		# ((('B', 'C'), ((0, ), )), 0.3),
-		((('C', 'A'), ((0, ), )), 0.4),
-		((('C', 'B'), ((0, ), )), 0.5), ((('C', 'C'), ((0, ), )), 0.6),
-		((('C', 'D'), ((0, ), )), 0.7), ((('D', 'A'), ((0, ), )), 0.8),
-		((('D', 'B'), ((0, ), )), 0.9), ((('D', 'C'), ((0, ), )), 0.8),
-		((('D', 'NP', 'VP'), ((0, 1), )), 1),
-		((('S', 'A'), ((0, ), )), 0.8),
-		((('S', 'D'), ((0, ), )), 0.5),
+		((('A', 'A'), ((0, ), )), 1), ((('A', 'B'), ((0, ), )), 1),
+		((('A', 'C'), ((0, ), )), 1), ((('A', 'D'), ((0, ), )), 1),
+		((('B', 'A'), ((0, ), )), 1), ((('B', 'B'), ((0, ), )), 1),
+		((('B', 'C'), ((0, ), )), 1), ((('B', 'D'), ((0, ), )), 1),
+		# ((('B', 'C'), ((0, ), )), 1),
+		((('C', 'A'), ((0, ), )), 1),
+		((('C', 'B'), ((0, ), )), 1), ((('C', 'C'), ((0, ), )), 1),
+		((('C', 'D'), ((0, ), )), 1), ((('D', 'A'), ((0, ), )), 1),
+		((('D', 'B'), ((0, ), )), 1), ((('D', 'C'), ((0, ), )), 1),
+		((('D', 'NP', 'VP'), ((0, 1), )), 2),
+		((('S', 'A'), ((0, ), )), 1), ((('S', 'D'), ((0, ), )), 2),
 		((('NP', 'Epsilon'), ('mary', )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)],
 		start='S')
 	print(cfg)
 	testsent('mary walks', cfg, 10)
-	# chart, msg = parse_sparse('mary walks'.split(), cfg)
-	# assert chart, msg
 
 	rules = [
-		((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
+		((('NP', 'NP', 'PP'), ((0, 1), )), 1),
 		((('PP', 'P', 'NP'), ((0, 1), )), 1),
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
-		((('VP', 'V', 'NP'), ((0, 1), )), 0.7),
-		((('VP', 'VP', 'PP'), ((0, 1), )), 0.3),
-		((('NP', 'Epsilon'), ('astronomers', )), 0.1),
-		((('NP', 'Epsilon'), ('ears', )), 0.18),
+		((('VP', 'V', 'NP'), ((0, 1), )), 1),
+		((('VP', 'VP', 'PP'), ((0, 1), )), 2),
+		((('NP', 'Epsilon'), ('astronomers', )), 1),
+		((('NP', 'Epsilon'), ('ears', )), 1),
 		((('V', 'Epsilon'), ('saw', )), 1),
-		((('NP', 'Epsilon'), ('saw', )), 0.04),
-		((('NP', 'Epsilon'), ('stars', )), 0.18),
-		((('NP', 'Epsilon'), ('telescopes', )), 0.1),
+		((('NP', 'Epsilon'), ('saw', )), 1),
+		((('NP', 'Epsilon'), ('stars', )), 1),
+		((('NP', 'Epsilon'), ('telescopes', )), 1),
 		((('P', 'Epsilon'), ('with', )), 1)]
 	cfg2 = Grammar(rules, start='S')
 	testsent('astronomers saw stars with telescopes', cfg2, 2)

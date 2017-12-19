@@ -1,7 +1,7 @@
 """Web interface to the disco-dop parser.
 
 Requires Flask. Expects a series of grammars produced by runexp in
-subdirectories of ``grammar/``
+subdirectories of ``grammars/``
 
 Also usable from the command line:
 $ curl http://localhost:5000/parser/parse -G --data-urlencode "sent=What's up?"
@@ -24,6 +24,7 @@ from discodop import treebank
 from discodop.tree import Tree, DrawTree, DrawDependencies, \
 		writediscbrackettree
 from discodop.parser import Parser, readparam, readgrammars, probstr
+from discodop.util import tokenize
 
 LIMIT = 40  # maximum sentence length
 APP = Flask(__name__)
@@ -33,7 +34,8 @@ SHOWFUNC = True  # show function tags in results
 SHOWMORPH = True  # show morphological features in results
 # POS tagged input is tokenized, and every token is of the form "word/POS"
 # POS may be empty.
-POSTAGS = re.compile('^\s*(?:\S+/\S*)(?:\s+\S+/\S*)*\s*$')
+POSTAGS = re.compile(r'^\s*(?:\S+/\S*)(?:\s+\S+/\S*)*\s*$')
+
 
 @APP.route('/')
 def main():
@@ -68,7 +70,7 @@ def parse():
 	if POSTAGS.match(sent):
 		senttok, tags = zip(*(a.rsplit('/', 1) for a in sent.split()))
 	else:
-		senttok, tags = tokenize(sent), None
+		senttok, tags = tuple(tokenize(sent)), None
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
 	if lang == 'detect':
@@ -138,17 +140,17 @@ def parse():
 			rid = randid()
 			nbest = Markup('\n\n'.join('%d. [%s] '
 					'<a href=\'javascript: toggle("f%s%d"); \'>'
-					'toggle fragments</a>\n'
-					'<span id=f%s%d style="display: none; ">'
+					'derivation</a>\n'
+					'<span id=f%s%d style="display: none; margin-left: 3em; ">'
 					'Fragments used in the highest ranked derivation'
 					' of this parse tree:\n%s</span>\n%s' % (
 						n + 1,
 						probstr(prob),
 						rid, n + 1,
 						rid, n + 1,
-						'\n\n'.join(
-							DrawTree(frag).text(unicodelines=True, html=html)
-							for frag in fragments or ()  # if frag.count('(') > 1
+						'\n\n'.join('%s\n%s' % (w,
+							DrawTree(frag).text(unicodelines=True, html=html))
+							for frag, w in fragments or ()  # if frag.count('(') > 1
 						),
 						DrawTree(tree, senttok).text(
 							unicodelines=True, html=html, funcsep='-'))
@@ -217,39 +219,6 @@ def randid():
 	"""Return a string with 6 random letters."""
 	return ''.join(random.choice(string.ascii_letters)
 		for _ in range(6))
-
-
-# List of contractions adapted from Robert MacIntyre's tokenizer.
-CONTRACTIONS2 = re.compile(
-		"(?i)(?:%s)\b" % "|".join([
-		r"(.)('ll|'re|'ve|n't|'s|'m|'d)",
-		r"\b(can)(not)",
-		r"\b(D)('ye)",
-		r"\b(Gim)(me)",
-		r"\b(Gon)(na)",
-		r"\b(Got)(ta)",
-		r"\b(Lem)(me)",
-		r"\b(Mor)('n)",
-		r"\b(T)(is)",
-		r"\b(T)(was)",
-		r"\b(Wan)(na)"]))
-CONTRACTIONS3 = re.compile(r"(?i)\b(?:(Whad)(dd)(ya)|(Wha)(t)(cha))\b")
-
-
-def tokenize(text):
-	"""A tokenizer with specific support for splitting English contractions.
-
-	Adapted from nltk.tokenize.TreebankTokenizer."""
-	text = CONTRACTIONS2.sub(r'\1 \2', text)
-	text = CONTRACTIONS3.sub(r'\1 \2 \3', text)
-	# Separate most punctuation
-	text = re.sub(r"([^\w\.\'\-\/,&])", r' \1 ', text, flags=re.UNICODE)
-	# Separate commas if they're followed by space; e.g., don't separate 2,500
-	# Separate single quotes if they're followed by a space.
-	text = re.sub(r"([,']\s)", r' \1', text)
-	# Separate periods that come before newline or end of string.
-	text = re.sub(r'\. *(\n|$)', ' . ', text)
-	return tuple(text.split())
 
 
 def unigramprob(model, sent, smooth=-math.log(1e-20)):

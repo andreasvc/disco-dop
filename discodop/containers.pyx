@@ -15,6 +15,7 @@ from .tree import Tree
 cimport cython
 from cython.operator cimport dereference
 from libc.string cimport strchr
+from libc.stdio cimport FILE, fopen, fread, fclose
 include "constants.pxi"
 
 cdef array chararray = array('b')
@@ -73,13 +74,13 @@ cdef class Chart:
 		"""Return probability of subtree headed by item."""
 		raise NotImplementedError
 
-	cdef ItemNo left(self, RankedEdge rankededge):
+	cdef ItemNo left(self, ItemNo v, RankedEdge rankededge):
 		"""Given a ranked edge, return the left item it points to."""
-		return self._left(rankededge.head, rankededge.edge)
+		return self._left(v, rankededge.edge)
 
-	cdef ItemNo right(self, RankedEdge rankededge):
+	cdef ItemNo right(self, ItemNo v, RankedEdge rankededge):
 		"""Given a ranked edge, return the right item it points to."""
-		return self._right(rankededge.head, rankededge.edge)
+		return self._right(v, rankededge.edge)
 
 	cdef ItemNo getitemidx(self, uint64_t n):
 		"""Get itemidx of n'th item."""
@@ -107,17 +108,23 @@ cdef class Chart:
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
-	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1:
-		"""Return lexical probability given a lexical edge."""
+	cdef int lexruleno(self, ItemNo itemidx, Edge edge) except -1:
+		"""Return lexical rule number given a lexical edge."""
 		cdef Label label = self.label(itemidx)
 		cdef string word = self.sent[self.lexidx(edge)].encode('utf8')
-		cdef Prob prob
 		it = self.grammar.lexicalbylhs.find(label)
 		if it != self.grammar.lexicalbylhs.end():
 			it2 = dereference(it).second.find(word)
 			if it2 != dereference(it).second.end():
-				prob = self.grammar.lexical[dereference(it2).second].prob
-				return exp(-prob) if self.logprob else prob
+				return dereference(it2).second
+		raise ValueError
+
+	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1:
+		"""Return lexical probability given a lexical edge."""
+		cdef int ruleno = self.lexruleno(itemidx, edge)
+		if ruleno >= 0:
+			prob = self.grammar.lexical[ruleno].prob
+			return exp(-prob) if self.logprob else prob
 		return 0 if self.logprob else 1
 
 	def numitems(self):
@@ -710,11 +717,63 @@ cdef class Vocabulary:
 		finally:
 			fclose(out)
 
+	@classmethod
+	def fromfile(cls, filename):
+		"""Create a mutable Vocabulary object from a file."""
+		cdef Vocabulary ob = Vocabulary.__new__(Vocabulary)
+		cdef uint32_t header[3]
+		cdef FILE *fp
+		cdef int result
+		fp = fopen(filename.encode('utf8'), b'rb')
+		if fp is NULL:
+			raise IOError
+		try:
+			result = fread(&header, sizeof(uint32_t), 3, fp)
+			if result != 3:
+				raise IOError
+			ob.prodbuf.itemsize = sizeof(char)
+			ob.prodbuf.capacity = ob.prodbuf.len = header[0] * sizeof(Rule)
+			ob.prodbuf.d.ptr = malloc(
+					ob.prodbuf.capacity * ob.prodbuf.itemsize)
+			ob.labelidx.itemsize = sizeof(uint32_t)
+			ob.labelidx.capacity = ob.labelidx.len = header[1]
+			ob.labelidx.d.ptr = malloc(
+					ob.labelidx.capacity * ob.labelidx.itemsize)
+			ob.labelbuf.itemsize = sizeof(char)
+			ob.labelbuf.capacity = ob.labelbuf.len = header[2]
+			ob.labelbuf.d.ptr = malloc(
+					ob.labelbuf.capacity * ob.labelbuf.itemsize)
+			if (ob.prodbuf.d.ptr is NULL or ob.labelidx.d.ptr is NULL
+					or ob.labelbuf.d.ptr is NULL):
+				raise MemoryError
+			result = fread(ob.prodbuf.d.ptr, ob.prodbuf.itemsize,
+					ob.prodbuf.len, fp)
+			if result != ob.prodbuf.len:
+				raise IOError
+			result = fread(ob.labelidx.d.ptr, ob.labelidx.itemsize,
+					ob.labelidx.len, fp)
+			if result != ob.labelidx.len:
+				raise IOError
+			result = fread(ob.labelbuf.d.ptr, ob.labelbuf.itemsize,
+					ob.labelbuf.len, fp)
+			if result != ob.labelbuf.len:
+				raise IOError
+		finally:
+			fclose(fp)
+		ob.prods = {<bytes>ob.prodbuf.d.aschar[n * sizeof(Rule):
+				(n + 1) * sizeof(Rule)]: n
+				for n in range(ob.prodbuf.len // sizeof(Rule))}
+		ob.labels = {ob.labelbuf.d.aschar[ob.labelidx.d.asint[n]:
+				ob.labelidx.d.asint[n + 1]].decode('utf8'): n
+				for n in range(ob.labelidx.len - 1)}
+		return ob
+
 
 @cython.final
 cdef class FixedVocabulary(Vocabulary):
 	@classmethod
 	def fromfile(cls, filename):
+		"""Return an immutable Vocabulary object from a file."""
 		cdef FixedVocabulary ob = FixedVocabulary.__new__(FixedVocabulary)
 		cdef size_t offset = 3 * sizeof(uint32_t)
 		cdef Py_buffer buffer

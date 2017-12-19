@@ -1,12 +1,14 @@
 from math import isinf, exp, fsum, log
-from libc.stdlib cimport malloc, calloc, realloc, free, abort, \
-		qsort, atol, strtod
+from libc.stdlib cimport malloc, calloc, realloc, free, abort, atol, strtod
 from libc.math cimport fabs, log, exp
 from libc.string cimport memcmp, memset, memcpy
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int16_t, int32_t
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int16_t, \
+		int32_t
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
 from libcpp.string cimport string
+from libcpp.algorithm cimport sort as stdsort
+from libcpp cimport bool
 from cpython.array cimport array
 from libc.stdio cimport FILE, fopen, fwrite, fclose
 from cpython.buffer cimport PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer, \
@@ -19,6 +21,11 @@ from .bit cimport bit_popcount
 include "constants.pxi"
 
 ctypedef uint16_t Idx  # PCFG chart indices; max 16 bits.
+
+cdef extern from "<algorithm>" namespace "std" nogil:
+	void inplace_merge[Iter](Iter first, Iter middle, Iter last)
+	void inplace_merge[Iter, Compare](Iter first, Iter middle, Iter last,
+			Compare comp)
 
 cdef extern from "_containers.h":
 	ctypedef uint32_t ItemNo  # numeric ID for chart item
@@ -206,10 +213,9 @@ cdef extern from "_containers.h" nogil:
 		bint operator>(FatChartItem&)
 	cdef cppclass RankedEdge:
 		Edge edge
-		ItemNo head
 		int left, right
 		RankedEdge()
-		RankedEdge(ItemNo _head, Edge _edge, int _left, int _right)
+		RankedEdge(Edge _edge, int _left, int _right)
 		bint operator==(RankedEdge&)
 		bint operator<(RankedEdge&)
 		bint operator>(RankedEdge&)
@@ -517,36 +523,42 @@ cdef class StringIntDict(object):
 
 @cython.final
 cdef class Grammar:
-	cdef ProbRule **bylhs
-	cdef ProbRule **unary
-	cdef ProbRule **lbinary
-	cdef ProbRule **rbinary
+	cdef vector[ProbRule] _bylhs
+	cdef vector[ProbRule] _unary
+	cdef vector[ProbRule] _lbinary
+	cdef vector[ProbRule] _rbinary
+	cdef vector[ProbRule *] bylhs
+	cdef vector[ProbRule *] unary
+	cdef vector[ProbRule *] lbinary
+	cdef vector[ProbRule *] rbinary
+	cdef vector[Prob] rulecounts, lexcounts, freqmass
+	cdef RuleHashMap[uint32_t] rulenos
 	cdef vector[LexicalRule] lexical
 	cdef sparse_hash_map[string, vector[uint32_t]] lexicalbyword
 	cdef sparse_hash_map[Label, sparse_hash_map[string, uint32_t]] lexicalbylhs
-	cdef Label *mapping
-	cdef Label *selfmapping
-	cdef Label **splitmapping
-	cdef uint32_t *revrulemap
-	cdef uint64_t *mask
-	cdef vector[vector[Label]] revmap
+	cdef readonly list backtransform
+	cdef vector[uint64_t] mask
 	cdef vector[uint8_t] fanout
-	cdef vector[ProbRule] buf
-	cdef RuleHashMap[uint32_t] rulenos
+	cdef StringList tolabel
+	cdef StringIntDict toid
+	cdef vector[uint32_t] revrulemap
+	cdef vector[Label] mapping
+	cdef vector[Label] selfmapping
+	cdef vector[vector[Label]] splitmapping
+	cdef vector[vector[Label]] revmap
+	cdef readonly list rulemapping, selfrulemapping
+	cdef readonly dict tblabelmapping
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
 	cdef readonly bint logprob, bitpar
 	cdef readonly str start
 	cdef readonly str rulesfile, lexiconfile, altweightsfile
 	cdef readonly object ruletuples
-	cdef StringList tolabel
-	cdef StringIntDict toid
-	cdef readonly list rulemapping, selfrulemapping
-	cdef readonly dict tblabelmapping
 	cdef readonly str currentmodel
-	cdef vector[Prob] defaultmodel
 	cdef readonly object models  # serialized numpy arrays
-	cdef _indexrules(self, ProbRule **dest, int idx, int filterlen)
+	#
+	cdef _indexrules(self, vector[ProbRule *]& dest, int idx, int filterlen,
+			int orignumrules)
 	cpdef rulestr(self, int n)
 	cpdef noderuleno(self, node)
 	cpdef getruleno(self, tuple r, tuple yf)
@@ -576,11 +588,12 @@ cdef class Chart:
 	cdef int lexidx(self, Edge edge) except -1
 	cdef Prob subtreeprob(self, ItemNo itemidx)
 	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1
+	cdef int lexruleno(self, ItemNo itemidx, Edge edge) except -1
 	cdef edgestr(self, ItemNo itemidx, Edge edge)
 	cdef ItemNo _left(self, ItemNo itemidx, Edge edge)
 	cdef ItemNo _right(self, ItemNo itemidx, Edge edge)
-	cdef ItemNo left(self, RankedEdge edge)
-	cdef ItemNo right(self, RankedEdge edge)
+	cdef ItemNo left(self, ItemNo v, RankedEdge edge)
+	cdef ItemNo right(self, ItemNo v, RankedEdge edge)
 	cdef Label label(self, ItemNo itemidx)
 	cdef ItemNo getitemidx(self, uint64_t idx)
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx)
@@ -596,7 +609,7 @@ cdef class Whitelist:
 	cdef vector[SmallChartItemSet] small  # label -> set of items
 	cdef vector[FatChartItemSet] fat   # label -> set of items
 	cdef Label *mapping  # maps of labels to ones in this whitelist
-	cdef Label **splitmapping
+	cdef vector[Label] *splitmapping
 
 
 cdef SmallChartItem CFGtoSmallChartItem(Label label, Idx start, Idx end)
@@ -637,7 +650,7 @@ cdef FatChartItem CFGtoFatChartItem(Label label, Idx start, Idx end)
 # start fragments stuff
 
 cdef packed struct Node:  # a node of a binary tree
-	int32_t prod # >= 0: production ID; -1: unseen production
+	int32_t prod  # >= 0: production ID; -1: unseen production
 	int16_t left  # >= 0: array idx to child Node; <0: idx sent[-left - 1];
 	int16_t right  # >=0: array idx to child Node; -1: empty (unary Node)
 

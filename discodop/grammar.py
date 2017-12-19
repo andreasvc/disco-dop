@@ -110,11 +110,7 @@ def treebankgrammar(trees, sents, extrarules=None):
 	if extrarules is not None:
 		for rule in extrarules:
 			grammar[rule] += extrarules[rule]
-	lhsfd = Counter()
-	for rule, freq in grammar.items():
-		lhsfd[rule[0][0]] += freq
-	return sortgrammar((rule, (freq, lhsfd[rule[0][0]]))
-			for rule, freq in grammar.items())
+	return sortgrammar(grammar.items())
 
 
 def dopreduction(trees, sents, packedgraph=False, decorator=None,
@@ -162,7 +158,7 @@ def dopreduction(trees, sents, packedgraph=False, decorator=None,
 		# http://aclweb.org/anthology/W96-0214
 		(r, yf), freq = rule
 		rfe = ((1 if '@' in r[0] else freq) * reduce(mul,
-				(fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
+				(fd[z] for z in r[1:] if '@' in z), 1))
 		# Bod (2003, figure 3): correction factor for number of subtrees.
 		# Caveat: the original formula (Goodman 2003, eq. 8.23) has a_j in the
 		# denominator of all rules; this is probably a misprint.
@@ -226,7 +222,7 @@ def dop1(trees, sents, maxdepth=4, maxfrontier=999, extrarules=None):
 	return dopgrammar(trees, fragments, extrarules=extrarules)
 
 
-def dopgrammar(trees, fragments, extrarules=None, debug=False):
+def dopgrammar(trees, fragments, extrarules=None, debug=False, ids=None):
 	"""Create a DOP grammar from a set of fragments and occurrences.
 
 	A second level of binarization (a normal form) is needed when fragments are
@@ -237,7 +233,7 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 	terminal and tag: ``tag@word``.
 
 	:param fragments: a dictionary of fragments from binarized trees, with
-		occurrences as values (a mapping of sentence numbers to counts).
+		occurrences as values (a sequence of sentence numbers with repetitions).
 	:param extrarules: Additional rules to add to the grammar.
 	:returns: a tuple (grammar, altweights, backtransform, fragments)
 		altweights is a dictionary containing alternate weights."""
@@ -248,8 +244,7 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 		nonterms = frag.count('(') - 1
 		# Sangati & Zuidema (2011, eq. 5)
 		# FIXME: verify that this formula is equivalent to Bod (2003).
-		ewe = sum(1 / fragmentcount[idx]
-				for idx in fragments[frag])
+		ewe = sum(1 / fragmentcount[idx] for idx in fragments[frag])
 		# Bonnema (2003, p. 34)
 		bon = 2 ** -nonterms * (freq / ntfd[root])
 		short = 0.5
@@ -258,7 +253,8 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 	uniformweight = (1, 1, 1, 1)
 	grammar = {}
 	backtransform = {}
-	ids = UniqueIDs()
+	if ids is None:
+		ids = UniqueIDs()
 	# build index of the number of fragments extracted from a tree for ewe
 	fragmentcount = defaultdict(int)
 	for indices in fragments.values():
@@ -311,10 +307,8 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 	backtransform = [backtransform[rule][1] for rule, _ in grammar
 			if rule in backtransform]
 	# relative frequences as probabilities (don't normalize shortest & bon)
-	ntsums = defaultdict(int)
 	ntsumsewe = defaultdict(int)
-	for rule, (freq, ewe, _, _) in grammar:
-		ntsums[rule[0][0]] += freq
+	for rule, (_, ewe, _, _) in grammar:
 		ntsumsewe[rule[0][0]] += ewe
 	eweweights = np.array([float(ewe) / ntsumsewe[rule[0][0]]
 			for rule, (_, ewe, _, _) in grammar], dtype=np.double)
@@ -322,8 +316,7 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 			dtype=np.double)
 	shortest = np.array([s for _rule, (_, _, _, s) in grammar],
 			dtype=np.double)
-	grammar = [(rule, (freq, ntsums[rule[0][0]]))
-			for rule, (freq, _, _, _) in grammar]
+	grammar = [(rule, freq) for rule, (freq, _, _, _) in grammar]
 	return grammar, backtransform, dict(
 			ewe=eweweights, bon=bonweights, shortest=shortest), fragments
 
@@ -331,7 +324,8 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False):
 def compiletsg(fragments):
 	"""Compile a set of weighted fragments (i.e., a TSG) into a grammar.
 
-	Similar to dopgrammar(), only the values are weights instead of counts.
+	Similar to dopgrammar(), but the supplied fragments have fixed weights
+		and no alternative weights are returned.
 
 	:param fragments: a dictionary of fragments mapped to weights. The
 		fragments must consist of strings in discbracket format.
@@ -383,7 +377,7 @@ def doubleostagfromtsg(trees, sents, numproc=None,
 	auxtrees = {frag: weight for frag, weight in auxtrees.items()
 			if lexicalized.search(frag) is not None}
 	cfg = allfragments(trees, sents, maxdepth=1, maxfrontier=999)
-	inittrees.update((a, sum(b.values())) for a, b in cfg.items())
+	inittrees.update((a, len(b)) for a, b in cfg.items())
 	logging.info('added %d initial trees corresponding to CFG productions',
 			len(cfg))
 	rules, lexicon = ostagreduction(
@@ -971,25 +965,24 @@ class UniqueIDs(object):
 	>>> print(ids['foo'], ids['bar'], ids['foo'])
 	1 2 1"""
 
-	def __init__(self):
+	def __init__(self, prefix=''):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen
+		self.prefix = prefix
 
 	def __getitem__(self, key):
 		val = self.ids.get(key)
 		if val is None:
-			val = self.ids[key] = '%d' % self.cnt
+			val = self.ids[key] = '%s%d' % (self.prefix, self.cnt)
 			self.cnt += 1
 		return val
 
 	def __next__(self):
 		self.cnt += 1
-		return '%d' % (self.cnt - 1)
+		return '%s%d' % (self.prefix, self.cnt - 1)
 
 	def __iter__(self):
 		return self
-
-	next = __next__
 
 
 def rangeheads(s):
@@ -1045,8 +1038,6 @@ def printrule(r, yf, w=None):
 			yfstr, r[0], ' '.join(x for x in r[1:]))
 	if w is None:
 		return result
-	elif isinstance(w, tuple):
-		return '%g/%d %s' % (w[0], w[1], result)
 	return '%s %s' % (w, result)
 
 
@@ -1075,30 +1066,11 @@ def writegrammar(grammar, bitpar=False):
 	:param bitpar: when ``True``, use bitpar format: for rules, put weight
 		first and leave out the yield function. By default, a format that
 		supports LCFRS is used.
-	:returns: tuple of strings``(rules, lexicon)``
-
-	Weights are written in the following format:
-
-	- if ``bitpar`` is ``False``, write rational fractions; e.g., ``2/3``.
-	- if ``bitpar`` is ``True``, write frequencies (e.g., ``2``)
-		if probabilities sum to 1, i.e., in that case probabilities can be
-		re-computed as relative frequencies. Otherwise, resort to floating
-		point numbers (e.g., ``0.666``, imprecise)."""
+	:returns: tuple of strings``(rules, lexicon)``"""
 	rules, lexicon = [], []
 	lexical = OrderedDict()
-	freqs = bitpar
 	for (r, yf), w in grammar:
-		if isinstance(w, tuple):
-			if freqs:
-				w = '%g' % w[0]
-			else:
-				w1, w2 = w
-				if bitpar:
-					w = '%s' % (w1 / w2)  # .hex()
-				else:
-					w = '%s/%s' % (w1, w2)
-		elif isinstance(w, float):
-			w = w.hex()
+		w = '%g' % w
 		if len(r) == 2 and r[1] == 'Epsilon':
 			lexical.setdefault(yf[0], []).append((r[0], w))
 			continue
