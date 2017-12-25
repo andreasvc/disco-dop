@@ -599,10 +599,19 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 			if node.get('compound') == 'yes':
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
-				for child in node:
-					subtree = getsubtree(child, nodeid)
-					subtree.source[PARENT] = nodeid
-					result.append(subtree)
+				# handle a few cases in FTB where we have a compound consisting of just one word
+				# e.g. like in sentence number 1497 in file flmf3_01000_01499ep.aa.xml:
+				#  <w cat="CL" compound="yes" ee="CL-suj-3ms" ei="CL3ms" lemma="il" mph="3ms" subcat="suj">-t-il</w>
+				# otherwise we get an empty node like (MWCL ) instead of (MWCL -t-il)
+				if len(node) == 0:
+					result = ParentedTree(source[TAG], [len(sent)])
+					sent.append(node.text)
+					handlemorphology(morphology, lemmas, result, source, sent)
+				else:
+					for child in node:
+						subtree = getsubtree(child, nodeid)
+						subtree.source[PARENT] = nodeid
+						result.append(subtree)
 			else:  # regular word token
 				source[TAG] = node.get('cat') or node.get('catint')
 				result = ParentedTree(source[TAG], [len(sent)])
