@@ -7,11 +7,10 @@
 import re
 from itertools import islice
 from .tree import Tree, ParentedTree, escape, unescape, ptbescape
-from .treebank import EXPORTNONTERMINAL
+from .treebank import writebrackettree, EXPORTNONTERMINAL
 from .treetransforms import addfanoutmarkers, removefanoutmarkers
-from .punctuation import punctprune, PUNCTUATION
+from .punctuation import punctprune, PUNCTUATION, PUNCTTAGS
 from .util import ishead
-from ftb_handle_compounds import RegularCompoundPatterns, AllowedCompounds
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -764,6 +763,7 @@ def ftbtransforms(name, tree, sent):
 			t.label += STATESPLIT + "mwn3"
 	# Candito et al (LREC 2010). Statistical French dependency parsing:
 	# treebank conversion and first results.
+	# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
 	elif name == 'ftbraisecompl':
 		for sbtree in tree.subtrees():
 			if (strip(sbtree.label) in ('VPinf', 'VPpart')
@@ -784,7 +784,7 @@ def ftbtransforms(name, tree, sent):
 				# (Ssub (C-S si) (NP (NPP Paul)) (VN (V dort)))
 				# ==> (Ssub (C-S si) (Sint (NP (NPP Paul) (VN (V dort)) )))
 				# ignore punctuation
-				i = 2 if sent[sbtree[0, 0]] in PUNCTUATION else 1
+				i = 2 if sbtree[0].label in PUNCTTAGS else 1
 				if (strip(sbtree[i - 1].label) in ('C', 'CC', 'CS', 'MWC')
 						and len(sbtree) > i):
 					# store children to the right of C node, then remove them
@@ -793,52 +793,34 @@ def ftbtransforms(name, tree, sent):
 					new_tree = ParentedTree('Sint', [ch for ch in children])
 					sbtree.append(new_tree)
 	elif name == 'ftbundocompounds':
-		##########################################################################################################
-		# This function does the "undoing compounds" step as described by Marie Candito et al. in the following paper
-		# Candito, M., Crabbé, B., & Denis, P. (2010, May).
-		# Statistical French dependency parsing: treebank conversion and first results.
-		# In Seventh International Conference on Language Resources and Evaluation-LREC 2010 (pp. 1840-1847).
-		# European Language Resources Association (ELRA).
+		# The "undo compounds" step as described in Candito, M., Crabbé, B.,
+		# & Denis, P. (2010). Statistical French dependency parsing:
+		# treebank conversion and first results.
+		# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
+		#
+		# In particular, systematically undo compounds that
+		#   (i) have a known regular pattern,
+		#   (ii) and aren't in the allowed compounds list
+		# Undoing compounds amounts to rewriting selected compounds;
+		# e.g. (MWN (N ..) (N ..)) into regular phrases (NP (N ..) (N ..)).
+		from .lexicon import FTBREGULARCOMPOUNDPATTERNS, FTBALLOWEDCOMPOUNDS
 
-		# Copyright: Candito, M., Crabbé, B., & Denis, P.
-		###########################################################################################################
-		# In particular, this code does the following:
-		# It systematically undoes compounds that
-		#	(i) have a known regular pattern,
-		#	(ii) and aren't in the allowed compounds list"""
-		###########################################################################################################
-		# return a space-separated string of the children labels
-		def children_labels(subtree):
-			if subtree.children == None or len(subtree.children) < 2: return ""
-			return " ".join([x.label for x in subtree.children])
-
-		# if the sbtree has the label 'P' or 'P+D', it is marked as isP-sbtree
-		def isP(sbtree):
-			return sbtree.label in ['P', 'P+D']
-
-		def set_label(self, label):
-			"""
-                this definition is taken from http://www.nltk.org/_modules/nltk/tree.html
-                Set the sbtree label of the tree.
-            """
-			self.label = label
-
-		# the following functions (make_VP, make_PP, make_NP, make_AP, make_COORD)
-		# create the corresponding trees given the sbtrs
+		# the following functions (make_VP, make_PP, make_NP, make_AP,
+		# make_COORD) create the corresponding trees given the sbtrs
 		def make_VP(sbtrs):
 			vp = ParentedTree('VP', [])
 			vp_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
 			vp.append(vp_subtree)
-			if isP(sbtrs[1]):
+			if strip(sbtrs[1].label) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
 				vp.append(pp)
 				return vp
-			if sbtrs[1].label in ['D', 'N', 'ET']:
+			if sbtrs[1].label in ('D', 'N', 'ET'):
 				np = make_NP(sbtrs[1:])
 				vp.append(np)
 				return vp
 			else:
-				vp.children = [sbtrs]
+				vp = [sbtrs]
 			return vp
 
 		def make_PP(sbtrs):
@@ -851,10 +833,10 @@ def ftbtransforms(name, tree, sent):
 				pp.append(np_subtree)
 			return pp
 
-		def make_NP(sbtrs, beforehead=True):
-			np = ParentedTree("NP", [])
+		def make_NP(sbtrs):
+			np = ParentedTree('NP', [])
 			while sbtrs != []:
-				if sbtrs[0].label in ['D', 'ET']:
+				if sbtrs[0].label in ('D', 'ET'):
 					np_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
@@ -863,21 +845,23 @@ def ftbtransforms(name, tree, sent):
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
 				elif sbtrs[0].label == 'A':
-					if len(sbtrs) > 2 and sbtrs[1].label == 'C' and sbtrs[2].label == 'A':
+					if (len(sbtrs) > 2 and sbtrs[1].label == 'C'
+							and sbtrs[2].label == 'A'):
 						ap = make_AP(sbtrs[0:3], 'A C A')
 						np.append(ap)
 						sbtrs = sbtrs[3:]
 					else:
-						ap = ParentedTree("AP", [])
-						ap_subtree = ParentedTree("A", sbtrs[0])
+						ap = ParentedTree('AP', [])
+						ap_subtree = ParentedTree('A', sbtrs[0])
 						ap.append(ap_subtree)
 						np.append(ap)
 						sbtrs = sbtrs[1:]
 				# if a prep is encountered
 				# => treat all remaining sbtrs as a whole PP
 				# (cf. closest attachment preferred)
-				# (unhandled case : N1 (P N2) others : where others attaches to N1)
-				elif sbtrs[0].label in ['P', 'P+D']:
+				# (unhandled case: N1 (P N2) others
+				# where others attaches to N1)
+				elif sbtrs[0].label in ('P', 'P+D'):
 					pp = make_PP(sbtrs)
 					np.append(pp)
 					sbtrs = []
@@ -893,7 +877,7 @@ def ftbtransforms(name, tree, sent):
 			coord.append(coord_subtree)
 			# conjunction is supposed to be the first sbtree
 			# if C P ... => coordination of PPs
-			if isP(sbtrs[1]):
+			if strip(sbtrs[1].label) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
 				coord.append(pp)
 			# otherwise = coordination of NPs (APs handled differently)
@@ -904,17 +888,17 @@ def ftbtransforms(name, tree, sent):
 
 		def make_AP(sbtrs, cmpd_str):
 			if cmpd_str == 'A':
-				ap = ParentedTree("AP", [])
-				ap_subtree = ParentedTree("A", sbtrs[0])
+				ap = ParentedTree('AP', [])
+				ap_subtree = ParentedTree('A', sbtrs[0])
 				ap.append(ap_subtree)
 			elif cmpd_str == 'A C A':
-				ap = ParentedTree("AP", [])
+				ap = ParentedTree('AP', [])
 				ap_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
 				ap.append(ap_subtree)
 				coord = ParentedTree('COORD', [])
 				coord_subtree = ParentedTree(sbtrs[1].label, sbtrs[1])
 				coord.append(coord_subtree)
-				ap2 = ParentedTree("AP", [])
+				ap2 = ParentedTree('AP', [])
 				ap2_subtree = ParentedTree(sbtrs[2].label, sbtrs[2])
 				ap2.append(ap2_subtree)
 				coord.append(ap2)
@@ -922,37 +906,37 @@ def ftbtransforms(name, tree, sent):
 			return ap
 
 		for sbtree in tree.subtrees():
-			if sbtree.label.startswith("MW"):
-				if str(treebank.writetree(sbtree, item.sent, key, "bracket")).strip() not in AllowedCompounds:
-					base_label = sbtree.label.replace("MW", "")
-					cmpd_str = children_labels(sbtree)
-					if base_label in ['N', 'V', 'P', 'ADV']:
-						for pattern in RegularCompoundPatterns[base_label]:
-							if re.match(pattern + "$", cmpd_str):
-								if base_label == "V" and sbtree.head == True:
-									sbtree_to_append = make_VP(sbtree.children)
-									set_label(sbtree_to_append, "FTBUC-VP")
-									parent = sbtree.parent
-									if sbtree.parent != None:
-										sbtree.parent[:] = []
-										parent.append(sbtree_to_append)
-								elif base_label == 'N':
-									sbtree_to_append = make_NP(sbtree.children, beforehead=True)
-									set_label(sbtree_to_append, "FTBUC-NP")
-									parent = sbtree.parent
-									if sbtree.parent != None:
-										sbtree.parent[:] = []
-										parent.append(sbtree_to_append)
-								elif (isP(sbtree) and sbtree.parent.label != 'VPinf') or base_label == 'ADV':
-									# cases where P is sbtree and P has parent with the label VPinf
-									# are treated in a separate function as PP raising
-									sbtree_to_append = make_PP(sbtree.children)
-									set_label(sbtree_to_append, "FTBUC-PP")
-									parent = sbtree.parent
-									if sbtree.parent != None:
-										sbtree.parent[:] = []
-										parent.append(sbtree_to_append)
-
+			if (sbtree.label.startswith('MW')
+					and writebrackettree(sbtree, sent).strip()
+					not in FTBALLOWEDCOMPOUNDS):
+				base_label = sbtree.label[2:]
+				if base_label in FTBREGULARCOMPOUNDPATTERNS:
+					cmpd_str = ('' if sbtree is None or len(sbtree) < 2
+							else ' '.join(x.label for x in sbtree))
+					if FTBREGULARCOMPOUNDPATTERNS[base_label].match(cmpd_str):
+						if base_label == 'V' and sbtree.head:
+							sbtree_to_append = make_VP(sbtree)
+							parent = sbtree.parent
+							if sbtree.parent is not None:
+								sbtree.parent.remove(sbtree)
+								parent.append(sbtree_to_append)
+						elif base_label == 'N':
+							sbtree_to_append = make_NP(sbtree)
+							parent = sbtree.parent
+							if sbtree.parent is not None:
+								sbtree.parent.remove(sbtree)
+								parent.append(sbtree_to_append)
+						elif ((strip(sbtree.label) in ('P', 'P+D')
+								and sbtree.parent.label != 'VPinf')
+								or base_label == 'ADV'):
+							# cases where P is sbtree and P has parent
+							# with the label VPinf are treated in a
+							# separate function as PP raising
+							sbtree_to_append = make_PP(sbtree)
+							parent = sbtree.parent
+							if sbtree.parent is not None:
+								sbtree.parent.remove(sbtree)
+								parent.append(sbtree_to_append)
 	else:
 		return False
 	return True
