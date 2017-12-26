@@ -596,7 +596,7 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 		source[MORPH] = node.get('ee') or ''
 		source[FUNC] = node.get('fct') or ''
 		if node.tag == 'w':
-			if node.get('compound') == 'yes':
+			if node.get('compound') == 'yes' and len(node):
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
 				for child in node:
