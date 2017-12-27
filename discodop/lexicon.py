@@ -531,6 +531,55 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 	return word, tagmap.get(tag, tag)
 
 
+# The following is based on the undo-compounds transformation of FTB in
+# Candito, M., Crabbé, B., & Denis, P. (2010). Statistical French dependency
+# parsing: treebank conversion and first results.
+# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
+
+# regex expressions for repeated compound patterns which will be undone
+FTBREGULARCOMPOUNDPATTERNS = {
+		# an N, maybe with Det, Adj, and PPs:
+		# "Organisation de coopération et de développement économique"
+		# "Institut de formation des agents de voyages"
+		# "pomme de terre"
+		# "marché monétaire et obligataire"
+		# "Bureau de recherches géologiques et minières"
+		'N': re.compile(
+			r'(D )?(A )*N( A( C A)?)*( P(\+D)?( D)?( A)* N( A( C A)?)*'
+			r'(( C)? P(\+D)?( D)?( A)* N( A)*)*)?$'
+			# r'|N( N)+$'  # Air France, maison mère ...
+			# r'|(N|ET)( ET)+$'  # Wall Street, Zenith Data Structures,
+			),
+		'V': re.compile(
+			r'V( V)*( P| A| D)*( N)+( P)*$'  # mettre en place, etc.
+			r'|V( D)?( A)?( N)+$'),  # faire face, faire appel
+		'P': re.compile(r'P(\+D)? (D )?(A )*N( P(\+D)?( D)?( A)* N( A( C A)?)*'
+			r'(( C)? P(\+D)?( D)?( A)* N( A)*)*)? P(\+D)?$'),
+		'ADV': re.compile(r'P(\+D)? (D )?(A )*N( P(\+D)?( D)?( A)* N( A)*)?$'),
+		}
+
+# The following compounds should not be undone; mostly organization names or
+# fixed expressions like "aujourd'hui". TODO! extend list of allowed compounds
+FTBALLOWEDCOMPOUNDS = {
+		'(MWN (N Fondation) (N France) (A active))',
+		'(MWN (N Côte) (PONCT -) (P d\') (N Ivoire))',
+		'(MWP (CL Il) (CL y) (V a))',
+		'(MWN (N Jean) (PONCT -) (N Louis))',
+		'(MWADV (ADV tout) (P de) (N suite))',
+		'(MWP (P jusqu\') (P au))',
+		'(MWN (A Haute) (PONCT -) (N Corse))',
+		'(MWP (CL y) (A compris))',
+		'(MWN (N Chalon) (PONCT -) (P sur) (PONCT -) (N Saône))',
+		'(MWP (CL il) (CL y) (V a))',
+		'(MWN (N Royaume) (PONCT -) (A uni))',
+		'(MWN (N Seine) (PONCT -) (N Saint) (PONCT -) (N Denis))',
+		'(MWN (N Roche) (PONCT -) (N la) (PONCT -) (N Molière))',
+		'(MWN (N Air) (N France))',
+		'(MWN (A Grande) (PONCT -) (N Bretagne))',
+		'(MWN (N Union) (A soviétique))',
+		}
+
+
 __all__ = ['getunknownwordmodel', 'replaceraretrainwords',
 		'replaceraretestwords', 'simplesmoothlexicon', 'getlexmodel',
 		'smoothlexicon', 'unknownword6', 'unknownword4', 'unknownwordbase',

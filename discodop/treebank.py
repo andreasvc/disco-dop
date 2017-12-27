@@ -465,7 +465,7 @@ class FTBXMLCorpusReader(CorpusReader):
 			context = ElementTree.iterparse(filename,
 					events=('start', 'end'))
 			_event, root = next(context)  # event == 'start' of root element
-			filename1 = filename.split('.')[0]
+			filename1 = os.path.splitext(os.path.basename(filename))[0]
 			for event, elem in context:
 				if event == 'end' and elem.tag == 'SENT':
 					sentid = '%s-%s' % (filename1, elem.get('nb'))
@@ -587,7 +587,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 
 def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in FTB format given as etree XML object."""
-	def getsubtree(node, parentid):
+	def getsubtree(node):
 		"""Parse a subtree of an FTB tree."""
 		source = [''] * len(FIELDS)
 		nodeid = next(nodeids)
@@ -600,19 +600,19 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
 				for child in node:
-					subtree = getsubtree(child, nodeid)
+					subtree = getsubtree(child)
 					subtree.source[PARENT] = nodeid
 					result.append(subtree)
 			else:  # regular word token
 				source[TAG] = node.get('cat') or node.get('catint')
 				result = ParentedTree(source[TAG], [len(sent)])
-				sent.append((node.text or '').strip())
+				sent.append(re.sub(r'\s+', '', (node.text or '')))
 				handlemorphology(morphology, lemmas, result, source, sent)
 		else:
 			source[TAG] = label = node.tag
 			result = ParentedTree(label, [])
 			for child in node:
-				subtree = getsubtree(child, nodeid)
+				subtree = getsubtree(child)
 				subtree.source[PARENT] = nodeid
 				result.append(subtree)
 			if not result:
@@ -623,7 +623,7 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 
 	sent = []
 	nodeids = count(500)
-	tree = getsubtree(block, 0)
+	tree = getsubtree(block)
 	comment = ' '.join('%s=%r' % (a, block.get(a))
 			for a in ('argument', 'author', 'date', 'textID', 'nb'))
 	handlefunctions(functions, tree, morphology=morphology)
