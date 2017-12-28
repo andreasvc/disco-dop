@@ -1180,7 +1180,7 @@ def reversetransform(tree, transformations):
 					leaves_with_parents = [sbtree[path[:-1]] for path in leafpositions]
 					""" following the code of Marie Candito, it is not possible to revert
 						the undone MWADV - they become PPs when undone"""
-					if sbtree.label in ('COORD', 'ADV'):
+					if sbtree.label in ('COORD', 'ADV', 'PRO'):
 						sbtree = tree.ParentedTree('MW' + sbtree.label, [])
 					else:
 						sbtree = tree.ParentedTree('MW' + sbtree.label[0], [])
