@@ -1174,14 +1174,19 @@ def reversetransform(tree, transformations):
 		elif name == 'FTB-REVERSE-UNDO-COMPOUNDS': # flatten undone compounds from FTB
 			for sbtree in tree.subtrees():
 				if sbtree in list_of_undone_cmpds: # Attention: a list_of_undone_cmpds is required!
-					"""flatten the trees with undone compounds from FTB
+					""" flatten the trees with undone compounds from FTB
 						through finding leaves with their parents and appending them"""
 					leafpositions = [sbtree.leaf_treeposition(n) for n, x in enumerate(sbtree.leaves())]
 					leaves_with_parents = [sbtree[path[:-1]] for path in leafpositions]
-					sbtree = tree.ParentedTree('MW' + sbtree.label[0], [])
-					for leave in leaves_with_parents:
-						subtree_to_append = tree.ParentedTree(leave.label, [leave[0]])
-						sbtree.append(subtree_to_append)
+					""" following the code of Marie Candito, it is not possible to revert
+						the undone MWADV - they become PPs when undone"""
+					if sbtree.label in ('COORD', 'ADV'):
+						sbtree = tree.ParentedTree('MW' + sbtree.label, [])
+					else:
+						sbtree = tree.ParentedTree('MW' + sbtree.label[0], [])
+						for leave in leaves_with_parents:
+							subtree_to_append = tree.ParentedTree(leave.label, [leave[0]])
+							sbtree.append(subtree_to_append)
 
 	maxid = getmaxid(tree)
 	for node in tree.subtrees():
