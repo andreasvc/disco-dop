@@ -1,4 +1,10 @@
-charset = utf-8
+root = true
+
+[*]
 end_of_line = lf
+insert_final_newline = true
+
+[*.{py,pyx,pxd,pxi,c,h,cpp,css,js}]
+charset = utf-8
 indent_style = tab
 indent_size = 4
