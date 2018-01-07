@@ -3,22 +3,24 @@ Coding style
 
 Code should follow  `PEP8 <https://www.python.org/dev/peps/pep-0008/>`_,
 except for the differences described below.
-Part of these conventions can checked automatically with ``make lint``;
+Part of these conventions can be checked automatically with ``make lint``;
 this requires ``pip3 install pep8 pylint``.
 
 - Tabs rather than spaces for indentation (with tabs set to display as 4
-  spaces).
+  spaces). Lines end with a linefeed (UNIX format).
 - Strict 80 characters per line limit; only exception is where this hurts
   usability such as with long URLs.
 - Spread long statements over several lines by leaving an open
   parenthesis/bracket/brace in the first line and indent the following
-  line(s) with two extra levels of indentation (tabs, not spaces), e.g.:
+  line(s) with an extra level of indentation (tabs, not spaces) to make the
+  continued line stand out from regular indented statements, e.g.:
   
   .. code:: python
 
       if (longcondition
               and anothercondition
-              or yetanothercondition):
+              or yetanothercondition(
+                  verylongargument)):
           dosomething()
 
   Do not use a backslash for continuing long lines except when necessary
@@ -56,4 +58,5 @@ this requires ``pip3 install pep8 pylint``.
 - Classes ``CapitalizedWithoutUnderscores``.
 - Globals in ``ALLCAPS`` (preferably used for constants).
 - Prefer single quotes ``'``, except when double quotes ``"``
-  are more convenient.
+  are more convenient. Similarly, use raw strings when this results in less
+  need for escaping.
