@@ -151,9 +151,11 @@ class Test_treebanktransforms(object):
 			trees = [transform(tree, sent, transformations)
 					for tree, sent in zip(nn.trees().values(),
 						nn.sents().values())]
-			for a, b in islice(zip(n.trees().values(), trees), 100):
+			for sent, a, b in islice(zip(
+					n.sents().values(), n.trees().values(), trees), 100):
 				before = bracketings(canonicalize(a))
-				transformb = reversetransform(b.copy(True), transformations)
+				transformb = reversetransform(
+						b.copy(True), sent, transformations)
 				after = bracketings(canonicalize(transformb))
 				assert before == after, (
 						'mismatch with %r\nbefore: %r\nafter: %r' % (
@@ -638,9 +640,9 @@ def test_transforms():
 				nn.sents().values())]
 	print('\ntransformed')
 	correct = exact = e = 0
-	for a, b, c, d in islice(zip(n.trees().values(),
-			n.sents().values(), trees, count()), 100):
-		transformc = reversetransform(c.copy(True), transformations)
+	for a, b, c, d in islice(zip(
+			n.trees().values(), n.sents().values(), trees, count()), 100):
+		transformc = reversetransform(c.copy(True), b, transformations)
 		c1 = bracketings(canonicalize(a))
 		c2 = bracketings(canonicalize(transformc))
 		z = -1  # 825

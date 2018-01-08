@@ -10,6 +10,7 @@
 !requirements.txt
 !README.rst
 !.gitignore
+!.editorconfig
 !Vagrantfile
 !alpinosample.export
 !alpino.headrules

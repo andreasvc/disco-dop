@@ -209,7 +209,7 @@ def loadparsers():
 			params = readparam(os.path.join(directory, 'params.prm'))
 			params.resultdir = directory
 			readgrammars(directory, params.stages, params.postagging,
-					top=getattr(params, 'top', 'ROOT'))
+					params.transformations, top=getattr(params, 'top', 'ROOT'))
 			PARSERS[lang] = Parser(params)
 			APP.logger.info('Grammar for %s loaded.', lang)
 	assert PARSERS, 'no grammars found!'

@@ -308,7 +308,7 @@ where input and output are treebanks; standard in/output is used if not given.
 			actions.append(lambda tree, sent: (unbinarize(tree, sent), sent))
 		if key == '--reversetransforms':
 			actions.append(lambda tree, sent, value=value:
-					(treebanktransforms.reversetransform(tree,
+					(treebanktransforms.reversetransform(tree, sent,
 						treebanktransforms.expandpresets(value.split(','))),
 					sent))
 
@@ -431,7 +431,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
 				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
-				prm.transformations, prm.relationalrealizational)
+				prm.transformations, prm.relationalrealizational, resultdir)
 		simplelexsmooth = False
 		if prm.postagging and prm.postagging.method == 'unknownword':
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)

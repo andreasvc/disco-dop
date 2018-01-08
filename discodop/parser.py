@@ -197,7 +197,8 @@ class Parser(object):
 						prm.corpusfmt, prm.traincorpus, prm.binarization,
 						prm.punct, prm.functions, prm.morphology,
 						prm.removeempty, prm.ensureroot,
-						prm.transformations, prm.relationalrealizational)
+						prm.transformations, prm.relationalrealizational,
+						prm.resultdir)
 			if prm.postagging and prm.postagging.method == 'unknownword':
 				sents, _ = getposmodel(prm.postagging, train_tagged_sents)
 			trees = dobinarization(trees, sents, prm.binarization,
@@ -473,7 +474,8 @@ class Parser(object):
 		if self.funcclassifier is not None:
 			applyfunctionclassifier(self.funcclassifier, parsetree, sent)
 		if self.transformations:
-			treebanktransforms.reversetransform(parsetree, self.transformations)
+			treebanktransforms.reversetransform(
+					parsetree, sent, self.transformations)
 		else:
 			treetransforms.canonicalize(parsetree)
 		if self.headrules:
@@ -624,7 +626,8 @@ class Parser(object):
 						startidx=orignumlabels)
 
 
-def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
+def readgrammars(resultdir, stages, postagging=None,
+		transformations=None, top='ROOT'):
 	"""Read the grammars from a previous experiment.
 
 	Expects a directory ``resultdir`` which contains the relevant grammars and
@@ -719,6 +722,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				if not w.startswith(UNK)}
 		postagging.sigs = {w for w in stages[0].grammar.getwords()
 				if w.startswith(UNK)}
+	if transformations and 'ftbundocompounds' in transformations:
+		treebanktransforms.collectftbcompounds(
+				None, None, resultdir + '/compounds.txt')
 
 
 def probstr(prob):
@@ -989,7 +995,7 @@ def main():
 		params = readparam(os.path.join(directory, 'params.prm'))
 		params.update(resultdir=directory)
 		readgrammars(directory, params.stages, params.postagging,
-				top=getattr(params, 'top', top))
+				params.transformations, top=getattr(params, 'top', top))
 		params.update(verbosity=int(opts.get('--verbosity', params.verbosity)))
 		parser = Parser(params)
 		morph = params.morphology

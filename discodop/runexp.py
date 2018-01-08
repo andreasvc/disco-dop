@@ -21,7 +21,6 @@ from . import eval as evalmod
 from . import __version__, treebank, treebanktransforms, treetransforms, \
 		grammar, lexicon, parser, estimates
 from .treetransforms import binarizetree
-from .tree import Tree
 from .util import workerfunc
 from .containers import Grammar
 
@@ -78,7 +77,7 @@ def startexp(
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
 				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
-				prm.transformations, prm.relationalrealizational)
+				prm.transformations, prm.relationalrealizational, resultdir)
 	elif isinstance(prm.traincorpus.numsents, float):
 		raise ValueError('need to specify number of training set sentences, '
 				'not fraction, in rerun mode.')
@@ -175,7 +174,8 @@ def startexp(
 	funcclassifier = None
 
 	if rerun:
-		parser.readgrammars(resultdir, prm.stages, prm.postagging, top)
+		parser.readgrammars(resultdir, prm.stages, prm.postagging,
+				prm.transformations, top)
 		if prm.predictfunctions:
 			from sklearn.externals import joblib
 			funcclassifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
@@ -225,7 +225,7 @@ def startexp(
 
 def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		morphology, removeempty, ensureroot, transformations,
-		relationalrealizational):
+		relationalrealizational, resultdir):
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
@@ -243,6 +243,9 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	if not trees:
 		raise ValueError('training corpus (selection) should be non-empty.')
 	if transformations:
+		if 'ftbundocompounds' in transformations:
+			treebanktransforms.collectftbcompounds(
+					trees, sents, resultdir + '/compounds.txt')
 		newtrees, newsents = [], []
 		for tree, sent in zip(trees, sents):
 			treebanktransforms.transform(tree, sent, transformations)

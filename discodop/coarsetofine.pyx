@@ -6,7 +6,6 @@ from libcpp.algorithm cimport sort
 import re
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
-from .containers import REMOVESTATESPLITS
 from .containers cimport Grammar, Chart, Edge, RankedEdge, LexicalRule, \
 		Label, ItemNo, compactcellidx, CFGtoSmallChartItem, \
 		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist
