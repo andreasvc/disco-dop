@@ -809,13 +809,13 @@ def ftbtransforms(name, tree, sent):
 		# make_COORD) create the corresponding trees given the sbtrs
 		def make_VP(sbtrs):
 			vp = ParentedTree('VP', [])
-			vp_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			vp_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 			vp.append(vp_subtree)
-			if strip(sbtrs[1].label) in ('P', 'P+D'):
+			if strip(sbtrs[1].label.rstrip('/')) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
 				vp.append(pp)
 				return vp
-			if sbtrs[1].label in ('D', 'N', 'ET'):
+			if sbtrs[1].label.rstrip('/') in ('D', 'N', 'ET'):
 				np = make_NP(sbtrs[1:])
 				vp.append(np)
 				return vp
@@ -825,7 +825,7 @@ def ftbtransforms(name, tree, sent):
 
 		def make_PP(sbtrs):
 			pp = ParentedTree('PP', [])
-			pp_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			pp_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 			pp.append(pp_subtree)
 			if len(sbtrs) > 1:
 				sbtrs_children = sbtrs[1:]
@@ -836,17 +836,17 @@ def ftbtransforms(name, tree, sent):
 		def make_NP(sbtrs):
 			np = ParentedTree('NP', [])
 			while sbtrs != []:
-				if sbtrs[0].label in ('D', 'ET'):
-					np_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+				if sbtrs[0].label.rstrip('/') in ('D', 'ET'):
+					np_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
-				if sbtrs[0].label == 'N':
-					np_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+				if sbtrs[0].label.rstrip('/') == 'N':
+					np_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
-				elif sbtrs[0].label == 'A':
-					if (len(sbtrs) > 2 and sbtrs[1].label == 'C'
-							and sbtrs[2].label == 'A'):
+				elif sbtrs[0].label.rstrip('/') == 'A':
+					if (len(sbtrs) > 2 and sbtrs[1].label.rstrip('/') == 'C'
+							and sbtrs[2].label.rstrip('/') == 'A'):
 						ap = make_AP(sbtrs[0:3], 'A C A')
 						np.append(ap)
 						sbtrs = sbtrs[3:]
@@ -861,11 +861,11 @@ def ftbtransforms(name, tree, sent):
 				# (cf. closest attachment preferred)
 				# (unhandled case: N1 (P N2) others
 				# where others attaches to N1)
-				elif sbtrs[0].label in ('P', 'P+D'):
+				elif sbtrs[0].label.rstrip('/') in ('P', 'P+D'):
 					pp = make_PP(sbtrs)
 					np.append(pp)
 					sbtrs = []
-				elif sbtrs[0].label == 'C':
+				elif sbtrs[0].label.rstrip('/') == 'C':
 					coord = make_COORD(sbtrs)
 					np.append(coord)
 					sbtrs = []
@@ -873,11 +873,11 @@ def ftbtransforms(name, tree, sent):
 
 		def make_COORD(sbtrs):
 			coord = ParentedTree('COORD', [])
-			coord_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			coord_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 			coord.append(coord_subtree)
 			# conjunction is supposed to be the first sbtree
 			# if C P ... => coordination of PPs
-			if strip(sbtrs[1].label) in ('P', 'P+D'):
+			if strip(sbtrs[1].label.rstrip('/')) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
 				coord.append(pp)
 			# otherwise = coordination of NPs (APs handled differently)
@@ -893,13 +893,13 @@ def ftbtransforms(name, tree, sent):
 				ap.append(ap_subtree)
 			elif cmpd_str == 'A C A':
 				ap = ParentedTree('AP', [])
-				ap_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+				ap_subtree = ParentedTree(sbtrs[0].label.rstrip('/'), sbtrs[0])
 				ap.append(ap_subtree)
 				coord = ParentedTree('COORD', [])
-				coord_subtree = ParentedTree(sbtrs[1].label, sbtrs[1])
+				coord_subtree = ParentedTree(sbtrs[1].label.rstrip('/'), sbtrs[1])
 				coord.append(coord_subtree)
 				ap2 = ParentedTree('AP', [])
-				ap2_subtree = ParentedTree(sbtrs[2].label, sbtrs[2])
+				ap2_subtree = ParentedTree(sbtrs[2].label.rstrip('/'), sbtrs[2])
 				ap2.append(ap2_subtree)
 				coord.append(ap2)
 				ap.append(coord)
@@ -912,7 +912,7 @@ def ftbtransforms(name, tree, sent):
 				base_label = sbtree.label[2:]
 				if base_label in FTBREGULARCOMPOUNDPATTERNS:
 					cmpd_str = ('' if sbtree is None or len(sbtree) < 2
-							else ' '.join(x.label for x in sbtree))
+							else ' '.join(x.label.rstrip('/') for x in sbtree))
 					if FTBREGULARCOMPOUNDPATTERNS[base_label].match(cmpd_str):
 						if base_label == 'V' and sbtree.head:
 							sbtree_to_append = make_VP(sbtree)
@@ -926,8 +926,8 @@ def ftbtransforms(name, tree, sent):
 							if sbtree.parent is not None:
 								sbtree.parent.remove(sbtree)
 								parent.append(sbtree_to_append)
-						elif ((strip(sbtree.label) in ('P', 'P+D')
-								and sbtree.parent.label != 'VPinf')
+						elif ((strip(sbtree.label.rstrip('/')) in ('P', 'P+D')
+								and sbtree.parent.label.rstrip('/') != 'VPinf')
 								or base_label == 'ADV'):
 							# cases where P is sbtree and P has parent
 							# with the label VPinf are treated in a
@@ -1171,6 +1171,22 @@ def reversetransform(tree, transformations):
 				a.source[LEMMA] = unescape(a[0].label)
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
+		elif name == 'FTB-REVERSE-UNDO-COMPOUNDS': # flatten undone compounds from FTB
+			for sbtree in tree.subtrees():
+				if sbtree in list_of_undone_cmpds: # Attention: a list_of_undone_cmpds is required!
+					""" flatten the trees with undone compounds from FTB
+						through finding leaves with their parents and appending them"""
+					leafpositions = [sbtree.leaf_treeposition(n) for n, x in enumerate(sbtree.leaves())]
+					leaves_with_parents = [sbtree[path[:-1]] for path in leafpositions]
+					""" following the code of Marie Candito, it is not possible to revert
+						the undone MWADV - they become PPs when undone"""
+					if sbtree.label in ('COORD', 'ADV', 'PRO'):
+						sbtree = tree.ParentedTree('MW' + sbtree.label, [])
+					else:
+						sbtree = tree.ParentedTree('MW' + sbtree.label[0], [])
+						for leave in leaves_with_parents:
+							subtree_to_append = tree.ParentedTree(leave.label, [leave[0]])
+							sbtree.append(subtree_to_append)
 
 	maxid = getmaxid(tree)
 	for node in tree.subtrees():
