@@ -7,8 +7,8 @@ from itertools import count, chain, islice
 from collections import defaultdict
 import xml.etree.ElementTree as ElementTree
 from collections import OrderedDict
-from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
-		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE
+from .tree import (Tree, ParentedTree, brackettree, escape, unescape,
+		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE)
 from .treetransforms import removeemptynodes
 from .punctuation import applypunct
 from .heads import applyheadrules, readheadrules
@@ -587,7 +587,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 
 def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in FTB format given as etree XML object."""
-	def getsubtree(node, parentid):
+	def getsubtree(node):
 		"""Parse a subtree of an FTB tree."""
 		source = [''] * len(FIELDS)
 		nodeid = next(nodeids)
@@ -596,64 +596,26 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 		source[MORPH] = node.get('ee') or ''
 		source[FUNC] = node.get('fct') or ''
 		if node.tag == 'w':
-			if node.get('compound') == 'yes':
+			# Could rely on compound="yes" attribute here, but there are a few
+			# cases (annotation errors) where it is inconsistent with the
+			# actual structure.
+			if len(node) == 0:  # regular word token
+				source[TAG] = node.get('cat') or node.get('catint')
+				result = ParentedTree(source[TAG], [len(sent)])
+				sent.append(re.sub(r'\s+', '', (node.text or '')))
+				handlemorphology(morphology, lemmas, result, source, sent)
+			else:  # compound node, has <w> child nodes with actual terminals.
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
-				"""handle a few cases in FTB where we have a compound consisting
-				 of just one word, e.g. like in sentence number 1497 
-				 in file flmf3_01000_01499ep.aa.xml:
-				 <w cat="CL" compound="yes" ee="CL-suj-3ms" ei="CL3ms"
-				 lemma="il" mph="3ms" subcat="suj">-t-il</w>
-				 otherwise we get an empty node like (MWCL ) instead of (MWCL -t-il)"""
-				if len(node) == 0:
-					result = ParentedTree(source[TAG], [len(sent)])
-					sent.append(node.text)
-					handlemorphology(morphology, lemmas, result, source, sent)
-				else:
-					for child in node:
-						subtree = getsubtree(child, nodeid)
-						subtree.source[PARENT] = nodeid
-						result.append(subtree)
-						sent.append(child.text)
-			else:
-				source[TAG] = node.get('cat') or node.get('catint')
-				result = ParentedTree(source[TAG], [])
-				if not node.text:
-					"""handle a few cases in FTB where - because of the differences
-					in annotations - we have a non-compound consisting of several words
-					e.g. like in sentence number 6bis in file flmf7as1ep.cat.xml:
-						 <w cat="ADV" ee="ADV" ei="ADV" lemma="aujourd'hui"> 
-								<w catint="P">Aujourd'</w> 
-								<w catint="N">hui</w>
-						  </w>
-					 otherwise we get an empty node like (ADV ) instead of (ADV (P Aujourd') (N hui))"""
-					if len(node) == 0:
-						result = ParentedTree(source[TAG], [len(sent)])
-						sent.append('')
-						handlemorphology(morphology, lemmas, result, source,
-										 sent)
-					else:
-						for child in node:
-							subtree = getsubtree(child, nodeid)
-							subtree.source[PARENT] = nodeid
-							result.append(subtree)
-							sent.append(child.text)
-				elif (len(node) > 0 and re.match(r"((\s)+\n(\s)+)|((\n)+(\t)*)|((\s)+)", node.text)):
-					for child in node:
-						subtree = getsubtree(child, nodeid)
-						subtree.source[PARENT] = nodeid
-						result.append(subtree)
-						sent.append(child.text)
-				else:
-					result = ParentedTree(source[TAG], [len(sent)])
-					sent.append(node.text.strip())
-					handlemorphology(morphology, lemmas, result, source, sent)
-
-		else:
+				for child in node:
+					subtree = getsubtree(child)
+					subtree.source[PARENT] = nodeid
+					result.append(subtree)
+		else:  # non-terminal node
 			source[TAG] = label = node.tag
 			result = ParentedTree(label, [])
 			for child in node:
-				subtree = getsubtree(child, nodeid)
+				subtree = getsubtree(child)
 				subtree.source[PARENT] = nodeid
 				result.append(subtree)
 			if not result:
@@ -664,9 +626,9 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 
 	sent = []
 	nodeids = count(500)
-	tree = getsubtree(block, 0)
+	tree = getsubtree(block)
 	comment = ' '.join('%s=%r' % (a, block.get(a))
-					   for a in ('argument', 'author', 'date'))
+			for a in ('nb', 'textid', 'argument', 'author', 'date'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
