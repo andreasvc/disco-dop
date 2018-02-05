@@ -1,5 +1,4 @@
 cimport cython
-from libc.math cimport isinf, isfinite
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -9,6 +8,10 @@ from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
 		Edge, RankedEdge, Idx, Prob, Label, ItemNo, cellidx, compactcellidx, \
 		sparse_hash_map, sparse_hash_set, Agenda, Whitelist, \
 		SmallChartItem, FatChartItem, CFGtoSmallChartItem, CFGtoFatChartItem
+
+cdef extern from "<cmath>" namespace "std" nogil:
+	bint isfinite(double v)
+	bint isinf(double v)
 
 cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b)
