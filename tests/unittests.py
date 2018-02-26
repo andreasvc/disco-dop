@@ -7,13 +7,12 @@ import re
 from unittest import TestCase
 from itertools import count, islice
 from operator import itemgetter
-from discodop.tree import Tree, ParentedTree
+from discodop.tree import Tree, ParentedTree, HEAD
 from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
 		addbitsets, fanout, canonicalize
 from discodop.punctuation import punctraise, balancedpunctraise
-from discodop.heads import sethead
 from discodop.grammar import flatten, UniqueIDs
 
 
@@ -22,7 +21,7 @@ class Test_treetransforms(object):
 		treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))'
 		origtree = Tree(treestr)
 		tree = Tree(treestr)
-		sethead(tree[1])  # set VMFIN as head
+		tree[1].type = HEAD  # set VMFIN as head
 		assert str(binarize(tree, horzmarkov=0)) == (
 				'(S (VP (PDS 0) (VP|<> (ADV 3) (VVINF 4))) (S|<> (VMFIN 1)'
 				' (PIS 2)))')

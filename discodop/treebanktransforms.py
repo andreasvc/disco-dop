@@ -7,11 +7,11 @@
 import os
 import re
 from itertools import islice
-from .tree import Tree, ParentedTree, escape, unescape, ptbescape
+from .tree import (Tree, ParentedTree, escape, unescape, ptbescape,
+		HEAD, COMPLEMENT, MODIFIER)
 from .treebank import writebrackettree, EXPORTNONTERMINAL
 from .treetransforms import addfanoutmarkers, removefanoutmarkers
 from .punctuation import punctprune, PUNCTUATION, PUNCTTAGS
-from .util import ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -137,8 +137,7 @@ def transform(tree, sent, transformations):
 	preset can be used as an alias that expands to a sequence of
 	transformations; see the variable ``PRESETS``."""
 	# unfreeze attributes so that they can be modified
-	for a in tree.subtrees(lambda n: isinstance(
-			getattr(n, 'source', None), tuple)):
+	for a in tree.subtrees(lambda n: isinstance(n.source, tuple)):
 		a.source = list(a.source)
 	for name in transformations:
 		if name == 'APPEND-FUNC':  # add function to phrasal label
@@ -156,20 +155,20 @@ def transform(tree, sent, transformations):
 		elif name == 'APPEND-MORPH':  # Append morph. features to POS tag
 			for a in tree.subtree(lambda n: n and isinstance(n[0], int)):
 				morph = '--'
-				if getattr(a, 'source', None):
+				if a.source:
 					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
 				a.label += STATESPLIT + morph
 		elif name == 'MORPH-NODE':  # insert node w/morph. features above POS
 			for a in tree.postorder(lambda n: n and isinstance(n[0], int)):
 				morph = '--'
-				if getattr(a, 'source', None):
+				if a.source:
 					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
 				a[:] = [a.__class__(morph,
 						[a.pop() for _ in range(len(a))][::-1])]
 		elif name == 'LEMMA-NODE':  # insert node w/lemma above terminal
 			for a in tree.postorder(lambda n: n and isinstance(n[0], int)):
 				lemma = '--'
-				if getattr(a, 'source', None):
+				if a.source:
 					lemma = escape(a.source[LEMMA])
 				a[:] = [a.__class__(lemma,
 						[a.pop() for _ in range(len(a))][::-1])]
@@ -215,8 +214,7 @@ def transform(tree, sent, transformations):
 			node.children.sort(key=lambda n: min(n.leaves())
 					if isinstance(n, Tree) else n)
 		# assign node id to new nodes
-		if (getattr(node, 'source', None) is not None
-				and node.source[WORD] == '--'):
+		if node.source and node.source[WORD] == '--':
 			maxid += 1
 			node.source[WORD] = '#%d' % maxid
 	return tree
@@ -303,11 +301,11 @@ def negratransforms(name, tree, sent):
 			svp = [x for x in a if function(x) == 'SVP'].pop()
 			# apparently there can be a _verb_ particle without a verb.
 			# headlines? annotation mistake?
-			if any(map(ishead, a)):
-				hd = [x for x in a if ishead(x)].pop()
+			if any(x.type == HEAD for x in a):
+				hd = [x for x in a if x.type == HEAD].pop()
 				if hd.label != a.label:
 					particleverb = ParentedTree(hd.label, [hd, svp])
-					a[:] = [particleverb if ishead(x) else x
+					a[:] = [particleverb if x.type == HEAD else x
 										for x in a if function(x) != 'SVP']
 	elif name == 'SBAR':  # introduce SBAR level
 		sbarfunc = 'CP'.split()
@@ -354,10 +352,10 @@ def negratransforms(name, tree, sent):
 			if case:
 				node.label += '/' + case.group(1)
 	elif name == 'elimNKCJ':  # eliminate NK and CJ functions
-		for node in tree.subtrees(lambda n: function(n) in {'NK', 'CJ'}):
+		for node in tree.subtrees():
 			if function(node) == 'NK':
 				node.source[FUNC] = 'HD'
-			else:  # elif function(node) == 'CJ':
+			elif function(node) == 'CJ':
 				node.source[FUNC] = function(node.parent) or '--'
 	elif name == 'lexPrep':  # lexicalize frequent prepositions/conjunctions
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
@@ -384,7 +382,7 @@ def negratransforms(name, tree, sent):
 			node.label += STATESPLIT + annot
 			if strip(node.label) == 'AVP':  # propagate to head child
 				for child in node:
-					if ishead(child):
+					if child.type == HEAD:
 						child.label += STATESPLIT + annot
 						break
 	elif name == 'relPath':  # mark path from relative clause to rel. pronoun
@@ -419,7 +417,7 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: base(n, 'AP')):
 			if any(base(a, 'ADJD') for a in node.subtrees()):
 				node.label += STATESPLIT + 'pred'
-			if any(ishead(child) and strip(child.label) in {'NN', 'NP'}
+			if any(child.type == HEAD and strip(child.label) in {'NN', 'NP'}
 					for child in node):
 				node.label += STATESPLIT + 'nom'
 	elif name == 'subConjType':  # mark type of subordinating conj.
@@ -433,7 +431,7 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: base(n, 'VP')
 				and function(n) == 'OC'):
 			for child in node:
-				if ishead(child):
+				if child.type == HEAD:
 					node.label += STATESPLIT + strip(child.label)
 					break
 	elif name == 'noHead':  # constituents without head child
@@ -466,7 +464,7 @@ def ptbtransforms(name, tree, sent):
 					s.label += STATESPLIT + 'WH'
 	elif name == 'VP-HD':  # VP category split based on head
 		for vp in tree.subtrees(lambda n: n.label == 'VP'):
-			hd = [x for x in vp if ishead(x)].pop()
+			hd = [x for x in vp if x.type == HEAD].pop()
 			if hd.label == 'VB':
 				vp.label += STATESPLIT + 'HINF'
 			elif hd.label == 'TO':
@@ -475,7 +473,7 @@ def ptbtransforms(name, tree, sent):
 				vp.label += STATESPLIT + 'HPART'
 	elif name == 'S-INF':
 		for s in tree.subtrees(lambda n: n.label == 'S'):
-			hd = [x for x in s if ishead(x)].pop()
+			hd = [x for x in s if x.type == HEAD].pop()
 			if hd.label in ('VP' + STATESPLIT + 'HINF',
 					'VP' + STATESPLIT + 'HTO'):
 				s.label += STATESPLIT + 'INF'
@@ -594,7 +592,7 @@ def ptbtransforms(name, tree, sent):
 	elif name == 'splitVP':  # Stanford Parser splitVP=2
 		for node in tree.subtrees(lambda n: base(n, 'VP')):
 			for child in node:
-				if ishead(child):
+				if child.type == HEAD:
 					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
 						node.label += STATESPLIT + 'VBF'
 					else:
@@ -603,7 +601,7 @@ def ptbtransforms(name, tree, sent):
 	elif name == 'splitVP3':  # Stanford Parser splitVP=3
 		for node in tree.subtrees(lambda n: base(n, 'VP')):
 			for child in node:
-				if ishead(child):
+				if child.type == HEAD:
 					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
 						node.label += STATESPLIT + 'VBF'
 					elif strip(child.label) in {'TO', 'VBG', 'VBN', 'VB'}:
@@ -632,7 +630,8 @@ def ptbtransforms(name, tree, sent):
 			hd = None
 			while node and isinstance(node[0], Tree):
 				try:
-					i, hd = next(a for a in enumerate(child) if ishead(a[1]))
+					i, hd = next((n, a) for n, a in enumerate(child)
+							if a.type == HEAD)
 				except StopIteration:
 					break
 				if strip(hd) == 'POS' and i > 0:
@@ -657,7 +656,7 @@ def ptbtransforms(name, tree, sent):
 				base(n, 'NP') and 'ADV' in functions(n)):
 			node.label += STATESPLIT + 'ADV'
 			try:
-				hd = next(a for a in node if ishead(a))
+				hd = next(a for a in node if a.type == HEAD)
 			except StopIteration:
 				continue
 			if base(hd, 'POS') and hd.parent_index > 0:
@@ -665,7 +664,7 @@ def ptbtransforms(name, tree, sent):
 			while base(hd, 'NP'):
 				hd.label += STATESPLIT + 'ADV'
 				try:
-					hd = next(a for a in hd if ishead(a))
+					hd = next(a for a in hd if a.type == HEAD)
 				except StopIteration:
 					break
 	elif name == 'markDitransV':  # Stanford Parser markDitransV=2
@@ -781,6 +780,8 @@ def ftbtransforms(name, tree, sent):
 				sbtree[1:] = []
 				new_tree = ParentedTree(sbtree_label_origin,
 						[ch for ch in children])
+				new_tree.type = COMPLEMENT
+				sbtree[0].type = HEAD
 				sbtree.append(new_tree)
 			elif strip(sbtree.label) == 'Ssub':
 				# raising the complements (CS or C-S) of the Ssub constituents:
@@ -794,6 +795,8 @@ def ftbtransforms(name, tree, sent):
 					children = sbtree[i:]
 					sbtree[i:] = []
 					new_tree = ParentedTree('Sint', [ch for ch in children])
+					new_tree.type = COMPLEMENT
+					sbtree[i - 1].type = HEAD
 					sbtree.append(new_tree)
 	elif name == 'ftbundocompounds':
 		# The "undo compounds" step as described in Candito, M., Crabbé, B.,
@@ -813,26 +816,35 @@ def ftbtransforms(name, tree, sent):
 		def make_VP(sbtrs):
 			vp = ParentedTree('VP', [])
 			vp_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			vp_subtree.type = sbtrs[0].type
+			vp_subtree.source = sbtrs[0].source
 			vp.append(vp_subtree)
 			if strip(sbtrs[1].label) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
+				pp.type = COMPLEMENT
 				vp.append(pp)
 				return vp
-			if sbtrs[1].label in ('D', 'N', 'ET'):
+			if sbtrs[1].label in ('D', 'A', 'N', 'ET'):
 				np = make_NP(sbtrs[1:])
+				np.type = COMPLEMENT
 				vp.append(np)
 				return vp
 			else:
-				vp = [sbtrs]
+				x = list(sbtrs[1:])
+				sbtrs[:] = []
+				vp.extend(x)
 			return vp
 
 		def make_PP(sbtrs):
 			pp = ParentedTree('PP', [])
 			pp_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			pp_subtree.type = sbtrs[0].type
+			pp_subtree.source = sbtrs[0].source
 			pp.append(pp_subtree)
 			if len(sbtrs) > 1:
 				sbtrs_children = sbtrs[1:]
 				np_subtree = make_NP(sbtrs_children)
+				np_subtree.type = HEAD
 				pp.append(np_subtree)
 			return pp
 
@@ -841,10 +853,14 @@ def ftbtransforms(name, tree, sent):
 			while sbtrs != []:
 				if sbtrs[0].label in ('D', 'ET'):
 					np_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+					np_subtree.type = sbtrs[0].type
+					np_subtree.source = sbtrs[0].source
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
 				if sbtrs[0].label == 'N':
 					np_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+					np_subtree.type = sbtrs[0].type
+					np_subtree.source = sbtrs[0].source
 					np.append(np_subtree)
 					sbtrs = sbtrs[1:]
 				elif sbtrs[0].label == 'A':
@@ -855,7 +871,10 @@ def ftbtransforms(name, tree, sent):
 						sbtrs = sbtrs[3:]
 					else:
 						ap = ParentedTree('AP', [])
+						ap.type = MODIFIER
 						ap_subtree = ParentedTree('A', sbtrs[0])
+						ap_subtree.type = sbtrs[0].type
+						ap_subtree.source = sbtrs[0].source
 						ap.append(ap_subtree)
 						np.append(ap)
 						sbtrs = sbtrs[1:]
@@ -866,10 +885,12 @@ def ftbtransforms(name, tree, sent):
 				# where others attaches to N1)
 				elif sbtrs[0].label in ('P', 'P+D'):
 					pp = make_PP(sbtrs)
+					pp.type = COMPLEMENT
 					np.append(pp)
 					sbtrs = []
 				elif sbtrs[0].label == 'C':
 					coord = make_COORD(sbtrs)
+					coord.type = MODIFIER
 					np.append(coord)
 					sbtrs = []
 			return np
@@ -877,15 +898,20 @@ def ftbtransforms(name, tree, sent):
 		def make_COORD(sbtrs):
 			coord = ParentedTree('COORD', [])
 			coord_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+			coord_subtree.type = sbtrs[0].type
+			coord_subtree.source = sbtrs[0].source
+			coord_subtree.type = HEAD
 			coord.append(coord_subtree)
 			# conjunction is supposed to be the first sbtree
 			# if C P ... => coordination of PPs
 			if strip(sbtrs[1].label) in ('P', 'P+D'):
 				pp = make_PP(sbtrs[1:])
+				pp.type = COMPLEMENT
 				coord.append(pp)
 			# otherwise = coordination of NPs (APs handled differently)
 			else:
 				np = make_NP(sbtrs[1:])
+				np.type = COMPLEMENT
 				coord.append(np)
 			return coord
 
@@ -893,16 +919,27 @@ def ftbtransforms(name, tree, sent):
 			if cmpd_str == 'A':
 				ap = ParentedTree('AP', [])
 				ap_subtree = ParentedTree('A', sbtrs[0])
+				ap_subtree.type = HEAD
+				ap_subtree.source = sbtrs[0].source
 				ap.append(ap_subtree)
 			elif cmpd_str == 'A C A':
 				ap = ParentedTree('AP', [])
+				ap.type = MODIFIER
 				ap_subtree = ParentedTree(sbtrs[0].label, sbtrs[0])
+				ap_subtree.type = HEAD
+				ap_subtree.source = sbtrs[0].source
 				ap.append(ap_subtree)
 				coord = ParentedTree('COORD', [])
+				coord.type = MODIFIER
 				coord_subtree = ParentedTree(sbtrs[1].label, sbtrs[1])
+				coord_subtree.type = sbtrs[1].type
+				coord_subtree.source = sbtrs[1].source
 				coord.append(coord_subtree)
 				ap2 = ParentedTree('AP', [])
+				ap2.type = COMPLEMENT
 				ap2_subtree = ParentedTree(sbtrs[2].label, sbtrs[2])
+				ap2_subtree.type = sbtrs[2].type
+				ap2_subtree.source = sbtrs[2].source
 				ap2.append(ap2_subtree)
 				coord.append(ap2)
 				ap.append(coord)
@@ -917,29 +954,33 @@ def ftbtransforms(name, tree, sent):
 					cmpd_str = ('' if sbtree is None or len(sbtree) < 2
 							else ' '.join(x.label for x in sbtree))
 					if FTBREGULARCOMPOUNDPATTERNS[base_label].match(cmpd_str):
-						if base_label == 'V' and sbtree.head:
+						if base_label == 'V' and sbtree.type == HEAD:
+							parent = sbtree.parent
+							parent.remove(sbtree)
 							sbtree_to_append = make_VP(sbtree)
-							parent = sbtree.parent
-							if sbtree.parent is not None:
-								sbtree.parent.remove(sbtree)
-								parent.append(sbtree_to_append)
+							sbtree_to_append.type = HEAD
+							sbtree_to_append.source = sbtree.source
+							parent.append(sbtree_to_append)
 						elif base_label == 'N':
-							sbtree_to_append = make_NP(sbtree)
 							parent = sbtree.parent
-							if sbtree.parent is not None:
-								sbtree.parent.remove(sbtree)
-								parent.append(sbtree_to_append)
+							parent.remove(sbtree)
+							sbtree_to_append = make_NP(sbtree)
+							sbtree_to_append.type = sbtree.type
+							sbtree_to_append.source = sbtree.source
+							parent.append(sbtree_to_append)
 						elif ((strip(sbtree.label) in ('P', 'P+D')
 								and sbtree.parent.label != 'VPinf')
 								or base_label == 'ADV'):
 							# cases where P is sbtree and P has parent
 							# with the label VPinf are treated in a
 							# separate function as PP raising
-							sbtree_to_append = make_PP(sbtree)
 							parent = sbtree.parent
-							if sbtree.parent is not None:
-								sbtree.parent.remove(sbtree)
-								parent.append(sbtree_to_append)
+							parent.remove(sbtree)
+							sbtree_to_append = make_PP(sbtree)
+							sbtree_to_append.type = COMPLEMENT
+							sbtree_to_append.type = sbtree.type
+							sbtree_to_append.source = sbtree.source
+							parent.append(sbtree_to_append)
 	else:
 		return False
 	return True
@@ -974,7 +1015,7 @@ def lassytransforms(name, tree, _sent):
 		for node in tree.subtrees(lambda n: strip(n.label) in EXPANDCAT):
 			node.label += STATESPLIT + next(
 					iter(strip(a.label) for a in node
-					if ishead(a) or a is node[-1]))
+					if a.type == HEAD or a is node[-1]))
 	elif name == 'nladdunary':  # introduce unary NPs
 		for node in tree.postorder(lambda n: strip(n.label) in {'n', 'vnw'}
 				and strip(n.parent.label) in {'SMAIN', 'PP', 'INF'}):
@@ -1011,7 +1052,7 @@ def reversetransform(tree, sent, transformations):
 				if isinstance(n, Tree) else n)
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees():
-		if isinstance(getattr(a, 'source', None), tuple):
+		if isinstance(a.source, tuple):
 			a.source = list(a.source)
 
 	for name in reversed(transformations):
@@ -1091,7 +1132,7 @@ def reversetransform(tree, sent, transformations):
 								'PIS', 'PRELS', 'CARD', 'PN'}):
 						child.label = child[0].label
 						origfunc = function(child)
-						child.source = getattr(child[0], 'source', None)
+						child.source = child[0].source
 						if child.source:
 							child.source[FUNC] = origfunc or '--'
 						children = child[0][:]
@@ -1101,16 +1142,16 @@ def reversetransform(tree, sent, transformations):
 			for node in tree.subtrees(lambda n: strip(n.label)
 					in {'NP', 'PP'}):
 				for child in node:
-					if not getattr(child, 'source', None):
+					if not child.source:
 						child.source = ['--'] * 6
 					if function(child) == 'HD':
 						child.source[FUNC] = 'NK'
 			for node in tree.subtrees(lambda n: strip(n.label)
 					in {'CS', 'CNP', 'CVP', 'CAP', 'CAVP', 'CAC'}):
 				for child in node:
-					if not getattr(child, 'source', None):
+					if not child.source:
 						child.source = ['--'] * 6
-					if function(child) != 'CD':
+					if function(child) not in ('CD', ''):
 						child.source[FUNC] = 'CJ'
 		elif name == 'nladdunary':  # remove unary node
 			for node in tree.subtrees(lambda n:
@@ -1121,7 +1162,7 @@ def reversetransform(tree, sent, transformations):
 							and strip(child[0].label) in {'n', 'vnw'}):
 						child.label = child[0].label
 						origfunc = function(child)
-						child.source = getattr(child[0], 'source', None)
+						child.source = child[0].source
 						if child.source:
 							child.source[FUNC] = origfunc or '--'
 						children = child[0][:]
@@ -1130,7 +1171,7 @@ def reversetransform(tree, sent, transformations):
 		elif name == 'nlelimcnj':  # restore cnj function
 			for node in tree.subtrees(lambda n: base(n, 'CONJ')):
 				for child in node:
-					if not getattr(child, 'source', None):
+					if not child.source:
 						child.source = ['--'] * 6
 					if function(child) != 'crd' and not base(child, 'let'):
 						child.source[FUNC] = 'cnj'
@@ -1139,7 +1180,7 @@ def reversetransform(tree, sent, transformations):
 					and not n.label.startswith('-')
 					and not n.label.endswith('-')):  # -LRB-
 				label, func = a.label.split('-', 1)
-				if not getattr(a, 'source', None):
+				if not a.source:
 					a.source = ['--'] * 6
 				a.source[TAG] = a.label = label
 				a.source[FUNC] = func
@@ -1148,7 +1189,7 @@ def reversetransform(tree, sent, transformations):
 			for a in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 				if '/' in a.label:
 					label, morph = a.label.split('/', 1)
-					if not getattr(a, 'source', None):
+					if not a.source:
 						a.source = ['--'] * 6
 					a.source[TAG] = a.label = label
 					a.source[MORPH] = morph.replace('[', '(').replace(']', ')')
@@ -1200,8 +1241,7 @@ def reversetransform(tree, sent, transformations):
 			node.children.sort(key=lambda n: min(n.leaves())
 					if isinstance(n, Tree) else n)
 		# assign node id to new nodes
-		if (getattr(node, 'source', None) is not None
-				and node.source[WORD] == '--'):
+		if node.source and node.source[WORD] == '--':
 			maxid += 1
 			node.source[WORD] = '#%d' % maxid
 	return tree
@@ -1556,14 +1596,14 @@ def unifymorphfeat(feats, percolatefeatures=None):
 # Function tags
 def function(node):
 	""":returns: The first function tag for node, or the empty string."""
-	if getattr(node, 'source', None) is None:
+	if not node.source:
 		return ''
 	return node.source[FUNC].split('-')[0]
 
 
 def functions(node):
 	""":returns: list of function tags for node, or an empty list."""
-	if getattr(node, 'source', None) is None:
+	if not node.source:
 		return []
 	a = node.source[FUNC]
 	if a == '--' or a == '' or a is None:
@@ -1574,7 +1614,7 @@ def functions(node):
 # Secondary edges
 def hassecedge(node, func, parentid):
 	"""Test whether this node has a secondary edge ``(func, parentid)``."""
-	if getattr(node, 'source', None) is None:
+	if not node.source:
 		return False
 	return any(f == func and pid == parentid
 			for f, pid in zip(node.source[6::2], node.source[7::2]))

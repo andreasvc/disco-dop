@@ -108,10 +108,10 @@ class AnnotatedTree(object):
 		while stack:
 			n, anc = stack.pop()
 			# hack; this is actually an ID but can't add new attributes
-			n.head = j
+			n.type = j
 			for c in n:
 				a = deque(anc)
-				a.appendleft(n.head)
+				a.appendleft(n.type)
 				stack.append((c, a))
 			pstack.append((n, anc))
 			j += 1
@@ -122,7 +122,7 @@ class AnnotatedTree(object):
 			n, anc = pstack.pop()
 			self.nodes.append(n)
 			if n:
-				lmd = leftmostdescendents[n.head]
+				lmd = leftmostdescendents[n.type]
 			else:
 				lmd = i
 				for a in anc:
@@ -219,9 +219,9 @@ def newtreedist(tree1, tree2, debug=False):
 	tree2 = prepare(tree2).freeze()
 	for n, a in enumerate(tree1.subtrees()):
 		# hack; this is actually an ID but can't add new attributes
-		a.head = n
+		a.type = n
 	for n, a in enumerate(tree2.subtrees()):
-		a.head = n
+		a.type = n
 	result = geteditstats((tree1,), (tree2,))
 	geteditstats.mem.clear()
 	if debug:
@@ -252,9 +252,9 @@ class EditStats(object):
 		return "%s(distance=%d, matched=%d, [\n\t%s])" % (
 				self.__class__.__name__, self.distance, self.matched,
 				",\n\t".join("%s(%s, %s)" % (a[0],
-					"%s[%d]" % (a[1].label, a[1].head)
+					"%s[%d]" % (a[1].label, a[1].type)
 						if isinstance(a[1], Tree) else a[1],
-					"%s[%d]" % (a[2].label, a[2].head)
+					"%s[%d]" % (a[2].label, a[2].type)
 						if isinstance(a[2], Tree) else a[2])
 					for a in self.editscript))
 

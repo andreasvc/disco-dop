@@ -19,6 +19,7 @@ from collections import defaultdict, OrderedDict
 from html import escape as htmlescape
 from .util import slice_bounds, ANSICOLOR
 
+HEAD, COMPLEMENT, MODIFIER = range(3)
 PTBPUNC = {'-LRB-', '-RRB-', '-LCB-', '-RCB-', '-LSB-', '-RSB-', '-NONE-'}
 FRONTIERNTRE = re.compile(r' \)')
 SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
@@ -78,7 +79,7 @@ class Tree(object):
 			'label',  # a string with the label of this constituent
 			'children',  # a list of Tree instances or terminals
 			'source',  # a list/tuple with extra treebank attributes
-			'head',  # a bool: is this constituent the head of its parent?
+			'type',  # one of None, HEAD, COMPLEMENT, or MODIFIER
 			'_parent',  # if this is a ParentedTree, the parent node, or None.
 			)
 
@@ -109,8 +110,7 @@ class Tree(object):
 		# list.__init__(self, children)
 		self.label = label_or_str
 		self.children = list(children)
-		self.source = None
-		self.head = False
+		self.source = self.type = None
 
 	# === Comparison operators ==================================
 	def __eq__(self, other):
@@ -383,7 +383,7 @@ class Tree(object):
 			children = [cls.convert(child) for child in val]
 			tree = cls(val.label, children)
 			tree.source = val.source
-			tree.head = val.head
+			tree.type = val.type
 			if (isinstance(val, ImmutableTree)
 					and isinstance(cls, ImmutableTree)):
 				tree.bitset = val.bitset  # pylint: disable=W0201,E0237

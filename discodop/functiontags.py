@@ -1,8 +1,7 @@
 """Function tags classifier."""
-from .tree import Tree
+from .tree import Tree, HEAD
 from .treebanktransforms import base, functions, FUNC
 from .heads import getheadpos
-from .util import ishead
 
 
 FIELDS = tuple(range(8))
@@ -79,7 +78,7 @@ def applyfunctionclassifier(funcclassifier, tree, sent):
 	# store labels in tree
 	for node, func in zip(tree.subtrees(lambda n: n is not tree and n
 			and (posfunc or isinstance(n[0], Tree))), funclabels):
-		if not getattr(node, 'source', None):
+		if node.source is None:
 			node.source = ['--'] * 6
 		elif isinstance(node.source, tuple):
 			node.source = list(node.source)
@@ -101,7 +100,7 @@ def functionfeatures(node, sent):
 	http://aclweb.org/anthology/A00-2031"""
 	headsib = headsibpos = None
 	for sib in node.parent:
-		if ishead(sib):
+		if sib.type == HEAD:
 			headsib = sib
 			headsibpos = getheadpos(headsib)
 			break

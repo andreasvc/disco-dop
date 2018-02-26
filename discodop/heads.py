@@ -2,8 +2,7 @@
 import io
 import re
 from collections import defaultdict, Counter
-from .tree import Tree
-from .util import ishead
+from .tree import Tree, HEAD, COMPLEMENT, MODIFIER
 from .punctuation import ispunct
 
 FIELDS = tuple(range(8))
@@ -12,13 +11,15 @@ HEADRULERE = re.compile(r'^(\S+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT'
 		r'|LEFT|RIGHT|LEFTDIS|RIGHTDIS|LIKE)(?:\s+(.*))?$')
 
 
-def applyheadrules(tree, headrules):
+def applyheadrules(tree, headrules, modifierrules=None):
 	"""Apply head rules and set head attribute of nodes."""
 	for node in tree.subtrees(
 			lambda n: n and isinstance(n[0], Tree)):
 		head = headfinder(node, headrules)
 		if head is not None:
-			sethead(head)
+			head.type = HEAD
+			if modifierrules is not None:
+				markmodifiers(node, modifierrules)
 
 
 def getheadpos(node):
@@ -30,7 +31,7 @@ def getheadpos(node):
 		if not isinstance(child[0], Tree):
 			return child
 		try:
-			child = next(a for a in child if ishead(a))
+			child = next(a for a in child if a.type == HEAD)
 		except StopIteration:
 			break
 	return None
@@ -82,10 +83,10 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 
 	# check if we already have head information:
 	for child in tree:
-		if getattr(child, 'head', False):
+		if child.type == HEAD:
 			return child
 	for child in tree:
-		if (getattr(child, 'source', None) and not headlabels.isdisjoint(
+		if (child.source and not headlabels.isdisjoint(
 				child.source[FUNC].upper().split('-'))):
 			return child
 	# apply heuristic rules:
@@ -120,23 +121,59 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		return head
 
 
-def sethead(child):
-	"""Mark node as head in an auxiliary field."""
-	child.head = True
+def readmodifierrules(filename):
+	"""Read a file containing heuristic rules for marking modifiers.
+
+	Example line: ``S *-MOD``, which means that for an S
+	constituent, any child with the MOD function tag is a modifier.
+	A default rule can be specified by using * as the first label, which
+	always matches (in addition to another matching rule, if any).
+	If none of the rules matches, a non-terminal is assumed to be a complement.
+	"""
+	modifierrules = {}
+	with io.open(filename, encoding='utf8') as inp:
+		for line in inp:
+			line = line.strip().upper()
+			if line and not line.startswith("%") and len(line.split()) > 2:
+				label, modifiers = line.split(None, 1)
+				if label in modifierrules:
+					raise ValueError('duplicate rule for %r (each label'
+							' should occur at most once in the file)' % label)
+				modifierrules[label] = modifiers.split()
+	return modifierrules
+
+
+def markmodifiers(tree, modifierrules):
+	"""Use heuristics to distinguish complements from modifiers.
+
+	Should be applied after heads have been identified."""
+	from discodop.treebanktransforms import function
+	for child in tree:
+		if child.type == HEAD:
+			continue
+		child.type = COMPLEMENT
+		for mod in modifierrules.get(tree.label, []) + modifierrules.get('*', []):
+			if ((child.label.split('-', 1)[0] == mod.split('-', 1)
+					or mod.split('-', 1)[0] == '*')
+					and ('-' not in mod
+						or mod.split('-', 1)[1] == '*'
+						or function(child) == mod.split('-', 1)[1])):
+				child.type = MODIFIER
+				break
 
 
 def saveheads(tree, tailmarker):
 	"""Infer head from binarization and store."""
 	if tailmarker:
 		for node in tree.subtrees(lambda n: tailmarker in n.label):
-			sethead(node)
+			node.type = HEAD
 	else:
 		# assume head-outward binarization; the last binarized node has the head.
 		for node in tree.subtrees(lambda n: '|<' in n.label
 				and not any(child.label.startswith(
 					n.label[:n.label.index('|<') + 2])
 					for child in n)):
-			sethead(node[-1])
+			node[-1].type = HEAD
 
 
 def headstats(trees):
@@ -152,7 +189,7 @@ def headstats(trees):
 	for tree in trees:
 		for a in tree.subtrees(lambda x: len(x) > 1):
 			for n, b in enumerate(a):
-				if ishead(b):
+				if b.type == HEAD:
 					heads[a.label][b.label] += 1
 					pos1[a.label][n] += 1
 					pos2[a.label][len(a) - (n + 2)] += 1
@@ -162,5 +199,5 @@ def headstats(trees):
 	return heads, unknown, pos1, pos2
 
 
-__all__ = ['getheadpos', 'readheadrules', 'headfinder', 'sethead', 'saveheads',
+__all__ = ['getheadpos', 'readheadrules', 'headfinder', 'saveheads',
 		'headstats', 'applyheadrules']

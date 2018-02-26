@@ -21,8 +21,8 @@ import re
 from operator import attrgetter
 from itertools import islice
 from collections import defaultdict, Counter
-from .tree import Tree, ImmutableTree, isdisc, bitfanout
-from .util import ishead, OrderedSet, PyAgenda
+from .tree import Tree, ImmutableTree, isdisc, bitfanout, HEAD
+from .util import OrderedSet, PyAgenda
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -80,19 +80,17 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		l, r, or m; l is everything before the head, r to the right, and m
 		just before introducing the head.
 
-	>>> from discodop.heads import sethead
 	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))')
-	>>> sethead(tree[1])
+	>>> tree[1].type = HEAD
 	>>> sent = 'das muss man jetzt machen'.split()
 	>>> print(binarize(tree, horzmarkov=1, headoutward=True))
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<VMFIN> (VMFIN 1) (PIS 2)))
 	>>> tree = Tree('(S (X (A 0) (B 3) (C 4)) (D 1) (E 2))')
-	>>> sethead(tree[1])
+	>>> tree[1].type = HEAD
 	>>> print(binarize(tree, headoutward=True, leftmostunary=True,
-	... rightmostunary=True))
-	(S (S|<X,D,E> (X (X|<A,B,C> (A 0) (X|<B,C> (B 3) (X|<C> (C 4))))) \
-(S|<D,E> (S|<D,E> (D 1)) (E 2))))
-	"""
+	... rightmostunary=True))  # doctest: +NORMALIZE_WHITESPACE
+	(S (S|<X,D,E> (X (X|<A,B,C> (A 0) (X|<B,C> (B 3) (X|<C> (C 4)))))
+		(S|<D,E> (S|<D,E> (D 1)) (E 2))))"""
 	# FIXME: combination of factor='left' and headoutward=True is broken.
 	# FIXME: horiz. markov label is wrong when direction switches
 	# assume all nodes have homogeneous children, terminals have no siblings
@@ -124,7 +122,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		headidx = None
 		if headoutward or markhead:
 			for i, child in enumerate(node):
-				if isinstance(child, Tree) and ishead(child):
+				if isinstance(child, Tree) and child.type == HEAD:
 					headidx = i
 					break
 		# binary form factorization

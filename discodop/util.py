@@ -10,12 +10,6 @@ from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections import Set, Iterable
 
-
-def ishead(tree):
-	"""Test whether this node is the head of the parent constituent."""
-	return getattr(tree, 'head', False)
-
-
 def which(program):
 	"""Return first match for program in search path."""
 	for path in os.environ.get('PATH', os.defpath).split(":"):
@@ -339,7 +333,7 @@ def merge(*iterables, key=None):
 		yield from iterable
 
 
-FRENCHCONTRACTIONS = 'qu|jusqu|quelqu|quoiqu'
+FRENCHCONTRACTIONS = 'aujourd|jusqu|lorsqu|presqu|puisqu|qu|quelqu|quoiqu'
 # List of contractions adapted from Robert MacIntyre's tokenizer.
 CONTRACTIONS = [
 		r"(.)('ll|'re|'ve|n't|'s|'m|'d)",
@@ -353,7 +347,7 @@ CONTRACTIONS = [
 		r"\b(T)(is)",
 		r"\b(T)(was)",
 		r"\b(Wan)(na)",
-		r"\b((?:[ldmntscj]|%s)')(\w+)" % FRENCHCONTRACTIONS,
+		r"\b((?:[cdjlmnst]|%s)')(\w+)" % FRENCHCONTRACTIONS,
 		]
 CONTRACTIONSRE = re.compile(
 		r"(?i)(?:%s)\b" % "|".join(CONTRACTIONS), flags=re.UNICODE)
@@ -364,7 +358,7 @@ CONTRACTIONSREPL = ''.join(  # r'\1\3\5... \2\4\6...',
 
 
 def tokenize(text):
-	"""A basic tokenizer that splits English/French contractions.
+	"""A basic tokenizer following English/French PTB/FTB conventions.
 
 	Adapted from nltk.tokenize.TreebankTokenizer."""
 	text = CONTRACTIONSRE.sub(CONTRACTIONSREPL, text)
@@ -393,5 +387,5 @@ ANSICOLOR = {
 		'white': 37,
 }
 
-__all__ = ['ishead', 'which', 'workerfunc', 'openread', 'slice_bounds',
+__all__ = ['which', 'workerfunc', 'openread', 'slice_bounds',
 		'OrderedSet', 'ANSICOLOR']
