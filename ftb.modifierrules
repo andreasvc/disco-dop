@@ -1,0 +1,4 @@
+% Heuristic rules for distinguishing modifiers from complements
+
+* *-MOD ADV MWADV
+NP A MWA
