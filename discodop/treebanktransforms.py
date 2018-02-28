@@ -873,7 +873,7 @@ def ftbtransforms(name, tree, sent):
 						ap = ParentedTree('AP', [])
 						ap.type = MODIFIER
 						ap_subtree = ParentedTree('A', sbtrs[0])
-						ap_subtree.type = sbtrs[0].type
+						ap_subtree.type = HEAD
 						ap_subtree.source = sbtrs[0].source
 						ap.append(ap_subtree)
 						np.append(ap)
@@ -938,7 +938,7 @@ def ftbtransforms(name, tree, sent):
 				ap2 = ParentedTree('AP', [])
 				ap2.type = COMPLEMENT
 				ap2_subtree = ParentedTree(sbtrs[2].label, sbtrs[2])
-				ap2_subtree.type = sbtrs[2].type
+				ap2_subtree.type = HEAD
 				ap2_subtree.source = sbtrs[2].source
 				ap2.append(ap2_subtree)
 				coord.append(ap2)

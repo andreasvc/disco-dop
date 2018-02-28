@@ -148,18 +148,23 @@ def markmodifiers(tree, modifierrules):
 
 	Should be applied after heads have been identified."""
 	from discodop.treebanktransforms import function
+	prev = None
 	for child in tree:
 		if child.type == HEAD:
 			continue
 		child.type = COMPLEMENT
-		for mod in modifierrules.get(tree.label, []) + modifierrules.get('*', []):
-			if ((child.label.split('-', 1)[0] == mod.split('-', 1)
+		for mod in modifierrules.get(tree.label.split('-', 1)[0], []
+				) + modifierrules.get('*', []):
+			if ((child.label.split('-', 1)[0] == mod.split('-', 1)[0]
 					or mod.split('-', 1)[0] == '*')
 					and ('-' not in mod
 						or mod.split('-', 1)[1] == '*'
 						or function(child) == mod.split('-', 1)[1])):
 				child.type = MODIFIER
 				break
+		if child.label == prev:  # mark enumerations/lists as modifiers
+			child.type = MODIFIER
+		prev = child.label
 
 
 def saveheads(tree, tailmarker):
