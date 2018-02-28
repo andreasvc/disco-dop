@@ -46,7 +46,7 @@ mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
 tar -xzf tree-tagger-linux-3.2.tar.gz
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
-tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+tar -xzf tagger-scripts.tar.gz
 mkdir lib && cd lib && wget \
 ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
 gunzip german-par-linux-3.2-utf8.bin.gz'''
@@ -556,6 +556,7 @@ FTBREGULARCOMPOUNDPATTERNS = {
 		'P': re.compile(r'P(\+D)? (D )?(A )*N( P(\+D)?( D)?( A)* N( A( C A)?)*'
 			r'(( C)? P(\+D)?( D)?( A)* N( A)*)*)? P(\+D)?$'),
 		'ADV': re.compile(r'P(\+D)? (D )?(A )*N( P(\+D)?( D)?( A)* N( A)*)?$'),
+		'A': re.compile(r'A (C A)?'),
 		}
 
 # The following compounds should not be undone; mostly organization names or

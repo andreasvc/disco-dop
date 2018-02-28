@@ -968,6 +968,13 @@ def ftbtransforms(name, tree, sent):
 							sbtree_to_append.type = sbtree.type
 							sbtree_to_append.source = sbtree.source
 							parent.append(sbtree_to_append)
+						elif base_label == 'A':
+							parent = sbtree.parent
+							parent.remove(sbtree)
+							sbtree_to_append = make_AP(sbtree)
+							sbtree_to_append.type = sbtree.type
+							sbtree_to_append.source = sbtree.source
+							parent.append(sbtree_to_append)
 						elif ((strip(sbtree.label) in ('P', 'P+D')
 								and sbtree.parent.label != 'VPinf')
 								or base_label == 'ADV'):
@@ -981,6 +988,13 @@ def ftbtransforms(name, tree, sent):
 							sbtree_to_append.type = sbtree.type
 							sbtree_to_append.source = sbtree.source
 							parent.append(sbtree_to_append)
+					else:
+						sbtree.label = {
+								'N': 'NP',
+								'V': 'VP',
+								'A': 'AP',
+								'ADV': 'AdP',
+								}[base_label]
 	else:
 		return False
 	return True
