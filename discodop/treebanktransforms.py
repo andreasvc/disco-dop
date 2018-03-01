@@ -844,7 +844,7 @@ def ftbtransforms(name, tree, sent):
 			if len(sbtrs) > 1:
 				sbtrs_children = sbtrs[1:]
 				np_subtree = make_NP(sbtrs_children)
-				np_subtree.type = HEAD
+				np_subtree.type = COMPLEMENT
 				pp.append(np_subtree)
 			return pp
 
