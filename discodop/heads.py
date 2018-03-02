@@ -134,7 +134,7 @@ def readmodifierrules(filename):
 	with io.open(filename, encoding='utf8') as inp:
 		for line in inp:
 			line = line.strip().upper()
-			if line and not line.startswith("%") and len(line.split()) > 2:
+			if line and not line.startswith("%"):
 				label, modifiers = line.split(None, 1)
 				if label in modifierrules:
 					raise ValueError('duplicate rule for %r (each label'
