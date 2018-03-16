@@ -639,7 +639,6 @@ cdef class Grammar:
 			# construct mapping from coarse label to fine labels
 			self.revmap.resize(coarse.nonterminals)
 		if splitprune and markorigin:
-			self.splitmapping.resize(0)
 			self.splitmapping.resize(self.nonterminals)
 		for n in range(startidx, self.nonterminals):
 			strlabel = self.tolabel.ob[n].decode('utf8')
