@@ -348,7 +348,7 @@ def negratransforms(name, tree, sent):
 			tag.source[FUNC] = 'HD'
 	elif name == 'addCase':  # add case features to POS tags
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
-			case = CASERE.match(node.source[MORPH])
+			case = CASERE.search(node.source[MORPH])
 			if case:
 				node.label += '/' + case.group(1)
 	elif name == 'elimNKCJ':  # eliminate NK and CJ functions
