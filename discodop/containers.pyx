@@ -311,6 +311,7 @@ cdef class Ctrees:
 		if self.trees is NULL or self.nodes is NULL:
 			raise MemoryError('allocation error')
 		self.nodesleft = numnodes
+		self.allocated = True
 
 	cdef realloc(self, int numtrees, int extranodes):
 		"""Increase size of array (handy with incremental binarization)."""
@@ -334,6 +335,7 @@ cdef class Ctrees:
 			if self.nodes is NULL:
 				raise MemoryError('allocation error')
 			self.nodesleft = numnodes - self.numnodes
+		self.allocated = True
 
 	cdef addnodes(self, Node *source, int cnt, int root):
 		"""Incrementally add tree to the node array.
@@ -369,25 +371,29 @@ cdef class Ctrees:
 			self.maxnodes = cnt
 		self.numwords += lensent
 
-	def indextrees(self, Vocabulary vocab):
+	def indextrees(self, Vocabulary vocab, int start=0, freeze=False):
 		"""Create index from productions to trees containing that production.
 
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
-		cdef:
-			list prodindex = [None] * len(vocab.prods)
-			Node *nodes
-			int n, m
-		for n in range(self.len):
+		cdef Node *nodes
+		cdef int n, m
+		if self.prodindex is None:
+			self.prodindex = [None] * len(vocab.prods)
+		elif len(self.prodindex) != len(vocab.prods):
+			self.prodindex.extend(
+					[None] * (len(vocab.prods) - len(self.prodindex)))
+		for n in range(start, self.len):
 			nodes = &self.nodes[self.trees[n].offset]
 			for m in range(self.trees[n].len):
 				if nodes[m].prod >= 0:
 					# Add to production index
-					rb = prodindex[nodes[m].prod]
+					rb = self.prodindex[nodes[m].prod]
 					if rb is None:
-						rb = prodindex[nodes[m].prod] = RoaringBitmap()
+						rb = self.prodindex[nodes[m].prod] = RoaringBitmap()
 					rb.add(n)
-		self.prodindex = MultiRoaringBitmap(prodindex)
+		if freeze:
+			self.prodindex = MultiRoaringBitmap(self.prodindex)
 
 	def extract(self, int n, Vocabulary vocab, bint disc=True, int node=-1):
 		"""Return given tree in discbracket format.
@@ -430,13 +436,21 @@ cdef class Ctrees:
 		# 	print("%d. '%s' '%s' '%s'" % (m, vocab.labels[m], vocab.words[m], a))
 		# print()
 
-	def __dealloc__(self):
+	def close(self):
+		"""Close any open files and free memory."""
 		if isinstance(self._state, tuple):
 			self._state[1].close()
 			os.close(self._state[0])
 			self._state = None
-			return
-		elif isinstance(self._state, dict):
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, _type, _value, _traceback):
+		self.close()
+
+	def __dealloc__(self):
+		if not self.allocated:
 			return
 		if self.nodes is not NULL:
 			free(self.nodes)
@@ -467,17 +481,19 @@ cdef class Ctrees:
 		self.numwords = state['numwords']
 		self.maxnodes = state['maxnodes']
 		self.prodindex = state['prodindex']
-		# self.alloc(self.len, self.numnodes)
 		self.nodesleft = 0
 		self.nodes = <Node *><char *><bytes>state['nodes']
 		self.trees = <NodeArray *><char *><bytes>state['trees']
+		self.allocated = False
 		self._state = state  # keep reference alive
 
 	def tofile(self, filename):
 		cdef array out
 		cdef uint64_t *ptr
 		cdef int offset
-		cdef bytes tmp = self.prodindex.__getstate__()
+		cdef bytes tmp
+		prodindex = MultiRoaringBitmap(self.prodindex)
+		tmp = prodindex.__getstate__()
 		out = clone(chararray,
 				4 * sizeof(uint64_t)
 				+ len(tmp)
@@ -502,6 +518,7 @@ cdef class Ctrees:
 
 	@classmethod
 	def fromfile(cls, filename):
+		"""Load read-only version of Ctrees object using mmap."""
 		cdef Ctrees ob = Ctrees.__new__(Ctrees)
 		cdef size_t prodidxsize
 		cdef Py_buffer buffer
@@ -524,7 +541,96 @@ cdef class Ctrees:
 		ob.trees = <NodeArray *>&(ptr[4 * sizeof(uint64_t) + prodidxsize])
 		ob.nodes = <Node *>&ob.trees[ob.len]
 		PyBuffer_Release(&buffer)
+		ob.allocated = False
 		return ob
+
+	@classmethod
+	def fromfilemut(cls, filename):
+		"""Mutable version of fromfile(); changes not stored to disk."""
+		cdef Ctrees ob = Ctrees.__new__(Ctrees)
+		cdef size_t prodidxsize
+		cdef char *ptr = NULL
+		cdef uint64_t *header = NULL
+		with open(filename, 'rb') as inp:
+			buf = inp.read()
+		ptr = <char *>buf
+		header = <uint64_t *>ptr
+		ob.len = ob.max = header[0]
+		ob.numnodes, ob.numwords, ob.maxnodes = header[1], header[2], header[3]
+		ob.alloc(ob.len, ob.numnodes)
+		ob.nodesleft = 0
+		prodindex = MultiRoaringBitmap.frombuffer(buf, 4 * sizeof(uint64_t))
+		prodidxsize = prodindex.bufsize()
+		memcpy(ob.trees,
+				&(ptr[4 * sizeof(uint64_t) + prodidxsize]),
+				ob.len * sizeof(NodeArray))
+		memcpy(ob.nodes,
+				&(ptr[4 * sizeof(uint64_t) + prodidxsize
+					+ ob.len * sizeof(NodeArray)]),
+				ob.numnodes * sizeof(Node))
+		# create mutable copy of mrb
+		ob.prodindex = [RoaringBitmap(a) for a in prodindex]
+		return ob
+
+	def addtrees(self, items, Vocabulary vocab, index=True):
+		"""Add binarized Tree objects.
+
+		:param items: an iterable with tuples of the form ``(tree, sent)``.
+		:param index: whether to create production index of trees.
+		:returns: dictionary with keys 'trees1', 'trees2', and 'vocab',
+			where trees1 and trees2 are Ctrees objects for disc. binary trees
+			and sentences.
+		"""
+		cdef Node *scratch
+		cdef int cnt
+		from .grammar import lcfrsproductions
+		maxnodes = 512
+		scratch = <Node *>malloc(maxnodes * sizeof(Node))
+		if scratch is NULL:
+			raise MemoryError('allocation error')
+		if vocab is None:
+			vocab = Vocabulary()
+		self.realloc(self.len + len(items), len(items) * maxnodes)
+		for tree, sent in items:
+			cnt = 0
+			prodsintree = []
+			for r, yf in lcfrsproductions(tree, sent, frontiers=True):
+				prodsintree.append(vocab.getprod(r, yf))
+				cnt += 1
+			if cnt > maxnodes:
+				maxnodes = cnt
+				scratch = <Node *>realloc(scratch, maxnodes * sizeof(Node))
+				if scratch is NULL:
+					raise MemoryError('allocation error')
+			cnt = 0
+			copynodes(tree, prodsintree, scratch, &cnt)
+			self.addnodes(scratch, cnt, 0)
+		if index:
+			self.indextrees(vocab, freeze=False)
+		free(scratch)
+
+
+cdef inline copynodes(tree, list prodsintree, Node *result, int *idx):
+	"""Convert a binarized Tree object to an array of Node structs."""
+	cdef size_t n = idx[0]
+	if not isinstance(tree, Tree):
+		raise ValueError('Expected Tree node, got %s\n%r' % (type(tree), tree))
+	elif not 1 <= len(tree) <= 2:
+		raise ValueError('trees must be non-empty and binarized\n%s' % tree)
+	result[n].prod = prodsintree[n]
+	idx[0] += 1
+	if isinstance(tree[0], int):  # a terminal index
+		result[n].left = -tree[0] - 1
+	else:  # non-terminal
+		result[n].left = idx[0]
+		copynodes(tree[0], prodsintree, result, idx)
+	if len(tree) == 1:  # unary node
+		result[n].right = -1
+	elif isinstance(tree[1], int):  # a terminal index
+		raise ValueError('right child can only be non-terminal.')
+	else:  # binary node
+		result[n].right = idx[0]
+		copynodes(tree[1], prodsintree, result, idx)
 
 
 cdef inline getyf(tuple yf, uint32_t *args, uint32_t *lengths):
@@ -802,11 +908,18 @@ cdef class FixedVocabulary(Vocabulary):
 		PyBuffer_Release(&buffer)
 		return ob
 
-	def __dealloc__(self):
+	def close(self):
+		"""Close open files, if any."""
 		if self.state:
 			self.state[1].close()
 			os.close(self.state[0])
 			self.state = None
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, _type, _value, _traceback):
+		self.close()
 
 	def makeindex(self):
 		"""Build dictionaries; necessary for getprod()."""

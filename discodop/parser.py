@@ -29,7 +29,8 @@ from .heads import saveheads, readheadrules, applyheadrules
 from .punctuation import punctprune, applypunct
 from .functiontags import applyfunctionclassifier
 from .util import workerfunc, openread
-from .treetransforms import binarizetree
+from .treetransforms import binarizetree, binarize, splitdiscnodes
+from .grammar import UniqueIDs
 
 SHORTUSAGE = '''
 usage: discodop parser [options] <grammar/> [input [output]]
@@ -179,7 +180,8 @@ class Parser(object):
 			if prm.verbosity >= 3:
 				print(stage.name)
 				print(stage.grammar)
-		self.ctrees = self.vocab = self.phrasallabels = self.poslabels = None
+		self.ctrees = self.newctrees = self.vocab = None
+		self.phrasallabels = self.functiontags = self.poslabels = None
 		if loadtrees:
 			self._loadtrees()
 
@@ -191,7 +193,7 @@ class Parser(object):
 		if os.path.exists('%s/train.ct' % prm.resultdir):
 			self.vocab = Vocabulary.fromfile(
 					'%s/vocab.idx' % prm.resultdir)
-			self.ctrees = Ctrees.fromfile('%s/train.ct' % prm.resultdir)
+			self.ctrees = Ctrees.fromfilemut('%s/train.ct' % prm.resultdir)
 		else:
 			trees, sents, train_tagged_sents = loadtraincorpus(
 						prm.corpusfmt, prm.traincorpus, prm.binarization,
@@ -207,12 +209,26 @@ class Parser(object):
 			self.ctrees, self.vocab = result['trees1'], result['vocab']
 			self.ctrees.tofile('%s/train.ct' % prm.resultdir)
 			self.vocab.tofile('%s/vocab.idx' % prm.resultdir)
-		matches = (REMOVESTATESPLITS.match(a)
-				for a in prm.stages[0].grammar.getpos())
-		self.poslabels = {match.group(1) for match in matches if match}
+		self.newctrees = Ctrees()
+		m = 0
+		for n, stage in enumerate(prm.stages):
+			if not stage.split and not stage.dop:
+				m = n
+				break
 		# NB: assumes labels of first stage have not been collapsed
-		self.phrasallabels = set(prm.stages[0].grammar.tblabelmapping
-				) - self.poslabels
+		pos = [REMOVESTATESPLITS.match(a)
+				for a in prm.stages[m].grammar.getpos()]
+		labels = [match for match in (REMOVESTATESPLITS.match(a)
+				for a in prm.stages[m].grammar.getlabels())
+				if match]
+		self.poslabels = {match.group(2) for match in pos if match}
+		self.phrasallabels = {match.group(2) for match in labels
+					} - self.poslabels
+		self.functiontags = {match.group(3)[1:]
+				for match in labels if match.group(3)} | {
+				match.group(3)[1:] for match in pos if match.group(3)}
+		self.morphtags = {match.group(4)[1:]
+				for match in pos if match.group(4)}
 		for stage in prm.stages:
 			if stage.dop == 'doubledop':
 				# map of fragments to line numbers
@@ -222,7 +238,8 @@ class Parser(object):
 							stage.name), 'rt', encoding='utf8'))}
 		self.cnt = 0
 
-	def parse(self, sent, tags=None, goldtree=None, require=None, block=None):
+	def parse(self, sent, tags=None, root=None, goldtree=None,
+			require=(), block=()):
 		"""Parse a sentence and perform postprocessing.
 
 		Yields a dictionary from parse trees to probabilities for each stage.
@@ -439,14 +456,16 @@ class Parser(object):
 					logging.error("something's amiss. %s\n%s", resultstr,
 							''.join(traceback.format_exception(*sys.exc_info())))
 					parsetree, prob, noparse = self.noparse(
-							stage, xsent, tags, lastsuccessfulparse)
+							stage, xsent, tags, lastsuccessfulparse, n)
 				else:
-					lastsuccessfulparse = parsetree
+					lastsuccessfulparse = resultstr
 				msg += probstr(prob) + ' '
 			else:
 				fragments = None
 				parsetree, prob, noparse = self.noparse(
-						stage, xsent, tags, lastsuccessfulparse)
+						stage, xsent, tags, lastsuccessfulparse, n)
+				parsetrees = [(lastsuccessfulparse or str(parsetree),
+						prob, None)]
 			elapsedtime = time.clock() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
@@ -482,16 +501,17 @@ class Parser(object):
 			applyheadrules(parsetree, self.headrules)
 		return parsetree, False
 
-	def noparse(self, stage, sent, tags, lastsuccessfulparse):
+	def noparse(self, stage, sent, tags, lastsuccessfulparse, n):
 		"""Return parse from previous stage or a dummy parse."""
 		# use successful parse from earlier stage if available
 		if lastsuccessfulparse is not None:
-			parsetree = lastsuccessfulparse.copy(True)
+			parsetree = self.postprocess(lastsuccessfulparse, sent, n)
 		else:  # Produce a dummy parse for evaluation purposes.
 			default = grammar.defaultparse([(n, t) for n, t
-					in enumerate(tags or (len(sent) * ['NONE']))])
+					in enumerate(tags or (len(sent) * ['NN']))])
 			parsetree = ParentedTree(
 					'(%s %s)' % (stage.grammar.start, default))
+			applyheadrules(parsetree, self.headrules)
 		noparse = True
 		prob = 1.0
 		return parsetree, prob, noparse
@@ -510,37 +530,37 @@ class Parser(object):
 				self.postagging.lexicon.update(sent)
 		newtrees = dobinarization(newtrees, newsents, prm.binarization,
 				prm.relationalrealizational)
+		orignumtrees = self.ctrees.len
+		# FIXME: by adding trees at this point, cannot support 2dop+splitdisc
+		self.ctrees.addtrees(list(zip(newtrees, newsents)), self.vocab)
 		for n, stage in enumerate(prm.stages):
 			prevn = 0
 			backtransform = None
+			traintrees = newtrees
 			if n and stage.prune:
 				prevn = [a.name for a in prm.stages].index(stage.prune)
 			if stage.split:
-				raise NotImplementedError
+				traintrees = [binarize(splitdiscnodes(
+							tree.copy(True),
+							stage.markorigin),
+						childchar=':', dot=True, ids=UniqueIDs())
+						for tree in traintrees]
 			if stage.dop:
 				if stage.dop == 'doubledop':
 					if self.ctrees is None:
 						raise ValueError('original treebank required')
 					# get fragments
-					trees2 = _fragments.getctrees(
-							zip(newtrees, newsents), vocab=self.vocab,
-							index=True)['trees1']
 					fragments = _fragments.extractfragments(
-							trees2, 0, 0, self.vocab, self.ctrees,
-							approx=False, disc=True,
-							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
-					fragments.update(_fragments.extractfragments(
-							trees2, 0, 0, self.vocab, trees2,
-							approx=False, disc=True,
-							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes)))
+							self.ctrees, orignumtrees, 0, self.vocab,
+							self.ctrees, approx=False, disc=True)
 					# for fragments already part of the grammar, increment
 					# existing rules with occurrences in the new trees.
 					fragmentkeysold = [a for a in fragments
 							if a in stage.fragments]
 					bitsetsold = [fragments[a] for a in fragmentkeysold]
-					counts0 = _fragments.exactcounts(
-							bitsetsold, trees2, trees2, indices=1,
-							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
+					counts0 = _fragments.exactcountsslice(
+							bitsetsold, self.ctrees, self.ctrees, indices=1,
+							start=orignumtrees)
 					for a, b in zip(fragmentkeysold, counts0):
 						stage.grammar.incrementrulecount(
 								stage.fragments[a], len(b))
@@ -549,46 +569,32 @@ class Parser(object):
 							if a not in stage.fragments]
 					bitsetsnew = [fragments[a] for a in fragmentkeysnew]
 					counts1 = _fragments.exactcounts(
-							bitsetsnew, trees2, self.ctrees, indices=1,
-							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
-					counts2 = _fragments.exactcounts(
-							bitsetsnew, trees2, trees2, indices=1,
-							maxnodes=max(trees2.maxnodes, self.ctrees.maxnodes))
-					# merge counts
+							bitsetsnew, self.ctrees, self.ctrees, indices=1)
 					combined = dict(zip(fragmentkeysnew, counts1))
-					for a, b in zip(fragmentkeysnew, counts2):
-						# offset indices of new trees after original trees
-						for c, _ in enumerate(b):
-							b[c] += self.ctrees.len
-						combined[a].extend(b)
-					# cover fragments
+					# merge cover fragments
 					if stage.maxdepth:
 						cover = _fragments.allfragments(
-								trees2, self.vocab, stage.maxdepth,
+								self.ctrees, self.vocab, stage.maxdepth,
 								maxfrontier=stage.maxfrontier, disc=True,
-								indices=True)
+								indices=True, start=orignumtrees)
 						for a, b in cover.items():
-							for x, _ in enumerate(b):
-								# offset indices
-								b[x] += self.ctrees.len
-							if a in stage.fragments:
-								if a not in fragments:
-									stage.grammar.incrementrulecount(
-											stage.fragments[a], len(b))
-							else:
+							if a not in stage.fragments:
 								combined[a] = b
+							elif a not in fragments:
+								stage.grammar.incrementrulecount(
+										stage.fragments[a], len(b))
 					# it is crucial that auxiliary binarization symbols are
 					# unique, so include a sequence number
 					ids = grammar.UniqueIDs(prefix='%d_' % self.cnt)
 					self.cnt += 1
 					# get grammar
-					(xgrammar, backtransform, _altweights, _newfragments
-							) = grammar.dopgrammar(newtrees, combined, ids=ids)
+					(xgrammar, backtransform, _, _) = grammar.dopgrammar(
+								traintrees, combined, ids=ids)
 				else:
 					raise NotImplementedError
 			else:
 				xgrammar = grammar.treebankgrammar(
-						newtrees, newsents, extrarules=None)
+						traintrees, newsents, extrarules=None)
 			rules, lex = grammar.writegrammar(
 					xgrammar, bitpar=stage.grammar.bitpar)
 			orignumlabels = stage.grammar.nonterminals

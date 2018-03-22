@@ -19,7 +19,7 @@ import sys
 from functools import partial
 from itertools import islice
 from array import array
-from roaringbitmap import RoaringBitmap
+from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from .tree import Tree, escape
 from .util import openread
 from .grammar import lcfrsproductions, printrule
@@ -30,8 +30,8 @@ from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, SIZE_MAX
 from cpython.array cimport array, clone, extend_buffer, resize
-from .containers cimport Node, NodeArray, Ctrees, Vocabulary, Rule, \
-		yieldranges, termidx
+from .containers cimport (Node, NodeArray, Ctrees, Vocabulary, Rule,
+		yieldranges, termidx)
 from .bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
@@ -554,14 +554,23 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 	"""Get candidates from productions in fragment ``bitset`` at ``a[i]``."""
 	cdef uint64_t cur = bitset[0]
 	cdef int i, idx = 0
-	cdef list tmp = []
+	cdef list indices = []
+	end = end or trees.len
 	while True:
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		if i == -1 or i >= alen:  # FIXME. why is 2nd condition necessary?
 			break
-		tmp.append(a[i].prod)
-	return trees.prodindex.intersection(
-			tmp, start=start, stop=end or trees.len)
+		indices.append(a[i].prod)
+	if isinstance(trees.prodindex, MultiRoaringBitmap):
+		return trees.prodindex.intersection(
+				indices, start=start, stop=end)
+	elif len(indices) == 0:
+		return None
+	elif len(indices) == 1:  # work around bug for older RoaringBitmap
+		return trees.prodindex[indices[0]].clamp(start, end)
+	else:
+		return trees.prodindex[indices[0]].intersection(
+				*[trees.prodindex[i] for i in indices[1:]]).clamp(start, end)
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
@@ -660,7 +669,7 @@ cdef twoterminals(NodeArray a, Node *anodes,
 
 def allfragments(Ctrees trees, Vocabulary vocab,
 		unsigned int maxdepth, unsigned int maxfrontier=999, bint disc=True,
-		bint indices=False):
+		bint indices=False, start=None, end=None):
 	"""Return all fragments of trees up to maxdepth.
 
 	:param maxdepth: maximum depth of fragments; depth 1 gives fragments that
@@ -668,6 +677,7 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 	:param maxfrontier: maximum number of frontier non-terminals (substitution
 		sites) in fragments; a limit of 0 only gives fragments that bottom out
 		in terminals; 999 is unlimited for practical purposes.
+	:param start, end: only consider this interval of trees (default is all).
 	:returns: dictionary fragments with tree strings as keys and integer counts
 		as values (or arrays if indices is True)."""
 	cdef NodeArray tree
@@ -677,9 +687,10 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 	cdef set inter = set()
 	cdef dict fragments = {}
 	cdef uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
+	cdef int start_ = start or 0, end_ = end or trees.len
 	if scratch is NULL:
 		raise MemoryError('allocation error')
-	for n in range(trees.len):
+	for n in range(start_, end_):
 		tree = trees.trees[n]
 		sent = trees.extractsent(n, vocab)
 		nodes = &trees.nodes[tree.offset]
