@@ -13,12 +13,6 @@ from .util import which
 cimport cython
 from cython.operator cimport postincrement, dereference
 from libc.math cimport HUGE_VAL as INFINITY
-from libcpp.algorithm cimport binary_search
-cdef extern from "<algorithm>" namespace "std" nogil:
-	vector[Label].iterator lower_bound(
-			vector[Label].iterator first,
-			vector[Label].iterator last,
-			const Label& value)
 include "constants.pxi"
 
 
@@ -193,16 +187,6 @@ cdef class DenseCFGChart(CFGChart):
 					].count(whitelist.mapping[labelid]) != 0 and item
 		return self.parseforest[item].size() != 0 and item
 
-	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef short left = min(indices)
-		cdef short right = max(indices) + 1
-		item = cellidx(left, right, self.lensent, self.grammar.nonterminals
-				) + labelid
-		if whitelist is not None:
-			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
-					].count(whitelist.mapping[labelid]) != 0 and item
-		return self.parseforest[item].size() != 0 and item
-
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		cdef CFGItem item
 		item.dt = itemidx
@@ -364,15 +348,6 @@ cdef class SparseCFGChart(CFGChart):
 					].count(whitelist.mapping[labelid]) != 0 and item
 		return self.itemindex.find(item) != self.itemindex.end() and item
 
-	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef short left = min(indices)
-		cdef short right = max(indices) + 1
-		item = cellstruct(left, right) + labelid
-		if whitelist is not None:
-			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
-					].count(whitelist.mapping[labelid]) != 0 and item
-		return self.itemindex.find(item) != self.itemindex.end() and item
-
 	cdef SmallChartItem asSmallChartItem(self, ItemNo itemidx):
 		cdef CFGItem item
 		item.dt = self.items[itemidx]
@@ -391,7 +366,8 @@ cdef class SparseCFGChart(CFGChart):
 
 
 def parse(sent, Grammar grammar, tags=None, start=None, whitelist=None,
-		Prob beam_beta=0.0, int beam_delta=50, itemsestimate=None):
+		Prob beam_beta=0.0, int beam_delta=50, itemsestimate=None,
+		postagging=None):
 	"""PCFG parsing using CKY.
 
 	:param sent: A sequence of tokens that will be parsed.
@@ -421,17 +397,19 @@ def parse(sent, Grammar grammar, tags=None, start=None, whitelist=None,
 	if whitelist is None and grammar.nonterminals < 20000:
 		chart = DenseCFGChart(grammar, sent, start)
 		return parse_grammarloop[DenseCFGChart](
-				sent, <DenseCFGChart>chart, tags, beam_beta, beam_delta)
+				sent, <DenseCFGChart>chart, tags, beam_beta, beam_delta,
+				postagging)
 	chart = SparseCFGChart(grammar, sent, start, itemsestimate=itemsestimate)
 	if whitelist is None:
 		return parse_grammarloop[SparseCFGChart](
-				sent, <SparseCFGChart>chart, tags, beam_beta, beam_delta)
+				sent, <SparseCFGChart>chart, tags, beam_beta, beam_delta,
+				postagging)
 	return parse_leftchildloop(
-			sent, chart, tags, whitelist, beam_beta, beam_delta)
+			sent, chart, tags, whitelist, beam_beta, beam_delta, postagging)
 
 
 cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
-		Prob beam_beta, int beam_delta):
+		Prob beam_beta, int beam_delta, postagging):
 	"""A CKY parser modeled after Bodenstab's 'fast grammar loop'."""
 	cdef:
 		Grammar grammar = chart.grammar
@@ -460,7 +438,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 				INFINITY)
 	# assign POS tags
 	covered, msg = populatepos[CFGChart_fused](chart, sent, tags,
-			unaryagenda, None, &blocked, &midfilter, NULL)
+			unaryagenda, None, &blocked, &midfilter, NULL, postagging)
 	if not covered:
 		return chart, msg
 
@@ -474,7 +452,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 				cell = cellstruct(left, right)
 			lastidx = chart.items.size()
 			# apply all binary rules
-			for lhs in range(1, grammar.phrasalnonterminals):
+			for lhs in range(1, grammar.nonterminals):
 				n = 0
 				rule = &(grammar.bylhs[lhs][n])
 				item = lhs + cell
@@ -526,7 +504,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 
 
 cdef parse_leftchildloop(sent, SparseCFGChart chart, tags,
-		Whitelist whitelist, Prob beam_beta, int beam_delta):
+		Whitelist whitelist, Prob beam_beta, int beam_delta, postagging):
 	"""A CKY parser that iterates over items in chart and compatible rules."""
 	cdef:
 		Grammar grammar = chart.grammar
@@ -548,7 +526,7 @@ cdef parse_leftchildloop(sent, SparseCFGChart chart, tags,
 				compactcellidx(lensent - 1, lensent, lensent, 1) + 1, INFINITY)
 	# assign POS tags
 	covered, msg = populatepos(chart, sent, tags, unaryagenda, whitelist,
-			&blocked, NULL, &cellindex)
+			&blocked, NULL, &cellindex, postagging)
 	if not covered:
 		return chart, msg
 
@@ -605,7 +583,8 @@ cdef parse_leftchildloop(sent, SparseCFGChart chart, tags,
 
 cdef populatepos(CFGChart_fused chart, sent, tags,
 		Agenda[Label, Prob]& unaryagenda, Whitelist whitelist,
-		uint64_t *blocked, MidFilter *midfilter, vector[size_t] *cellindex):
+		uint64_t *blocked, MidFilter *midfilter, vector[size_t] *cellindex,
+		object postagging):
 	"""Apply all possible lexical and unary rules on each lexical span.
 
 	:param unaryagenda: expects an empty agenda; only passed around to reuse
@@ -621,6 +600,7 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		uint64_t cell, ccell = 0
 		uint32_t n
 		short left, right, lensent = len(sent)
+		Prob openclassfactor = 0.001
 	for left, word in enumerate(sent):
 		tag = tags[left] if tags and tags[left] else None
 		# if we are given gold tags, make sure we only allow matching
@@ -637,9 +617,18 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		if cellindex is not NULL:
 			cellindex[0][ccell] = lastidx
 		recognized = False
-		# for n in grammar.lexicalbyword.get(word, ()):
 		it = grammar.lexicalbyword.find(word.encode('utf8'))
+		if it == grammar.lexicalbyword.end():
+			it = grammar.lexicalbyword.find(word.lower().encode('utf8'))
 		if it != grammar.lexicalbyword.end():
+			if (postagging and tag is None
+					and not word.startswith('_UNK')
+					and postagging.method == 'unknownword'
+					and postagging.closedclasswords
+					and word not in postagging.closedclasswords):
+				reserveprob = -pylog(1 - openclassfactor)
+			else:
+				reserveprob = 0
 			for n in dereference(it).second:
 				lexrule = grammar.lexical[n]
 				if (whitelist is not None and whitelist.mapping[lexrule.lhs]
@@ -649,7 +638,35 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 					continue
 				lhs = lexrule.lhs
 				if tag is None or tagre.match(grammar.tolabel[lhs]):
-					chart.updateprob(cell + lhs, lexrule.prob, 0.0)
+					chart.updateprob(cell + lhs,
+							lexrule.prob + reserveprob, 0.0)
+					chart.addedge(cell + lhs, right, NULL)
+					recognized = True
+					if midfilter is not NULL:
+						updatemidfilter(midfilter[0], left, right, lhs, nts)
+		if (postagging and tag is None
+				and not word.startswith('_UNK')
+				and postagging.method == 'unknownword'
+				and postagging.closedclasswords
+				and word not in postagging.closedclasswords):
+			# add tags associated with signature, scale probabilities
+			sig = postagging.unknownwordfun(word, left, postagging.lexicon)
+			it = grammar.lexicalbyword.find(sig.encode('utf8'))
+			if it != grammar.lexicalbyword.end():
+				for n in dereference(it).second:
+					lexrule = grammar.lexical[n]
+					# avoid POS tag already considered above
+					if isfinite(chart._subtreeprob(cell + lexrule.lhs)):
+						continue
+					if (whitelist is not None
+							and whitelist.mapping[lexrule.lhs]
+							and whitelist.cfg[ccell].count(
+								whitelist.mapping[lexrule.lhs]) == 0):
+						blocked[0] += 1
+						continue
+					lhs = lexrule.lhs
+					chart.updateprob(cell + lhs,
+							lexrule.prob - pylog(openclassfactor), 0.0)
 					chart.addedge(cell + lhs, right, NULL)
 					recognized = True
 					if midfilter is not NULL:

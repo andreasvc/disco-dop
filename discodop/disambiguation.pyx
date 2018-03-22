@@ -50,7 +50,14 @@ include "constants.pxi"
 
 REMOVEIDS = re.compile('@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
-REMOVESTATESPLITS = re.compile(r'(\([^^\s|()]+?)\^[^\s|]* ')
+# NB: similar to the one in _grammar.pxi, but used to match labels within parse
+# trees instead of individual labels
+REMOVESTATESPLITS = re.compile(
+		r'(\([^-/^|:\s()]+?'
+		r'(?:-[^/^|:\s()]+)?'
+		r'(?:/[^^|:\s()]+)?)'
+		r'(?:\^[^|:\s()]+)? '
+		)
 
 cdef str NONCONSTLABEL = ''
 cdef str NEGATIVECONSTLABEL = '-#-'
@@ -115,6 +122,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 			(0 < p <= 1), or a tuple ``(numfrags, p)`` for shortest derivation
 			parsing, and ``fragments`` is a list of fragments in the most
 			probable derivation for this parse.
+			NB: the list is in an arbitrary order.
 		:msg: a message reporting the number of derivations / parses.
 	"""
 	cdef list backtransform = chart.grammar.backtransform

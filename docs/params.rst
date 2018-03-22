@@ -86,7 +86,7 @@ Binarization
         only A is used to match against this sequence. Also, ``labelfun`` is
         first applied to the label, if given. Can be used to filter out
         modifiers, s.t. the context contains only required elements.
-    :param direction: if True, mark the the direction of the binarization with
+    :direction: if True, mark the the direction of the binarization with
         l, r, or m; l is everything before the head, r to the right, and m
         just before introducing the head.
 
@@ -214,7 +214,6 @@ Other options
         times or less for unknown words
     :openclassthreshold: add unseen tags for known words when tag rewrites
         at least this number of words. 0 to disable.
-    :simplelexsmooth: enable/disable sophisticated smoothing (untested)
 :punct: one of ...
 
     :``None``: leave punctuation as is.

@@ -331,7 +331,8 @@ class Parser(object):
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta,
 							itemsestimate=estimateitems(
-								sent, stage.prune, stage.mode, stage.dop))
+								sent, stage.prune, stage.mode, stage.dop),
+							postagging=self.postagging)
 				elif stage.mode == 'plcfrs':
 					chart, msg1 = plcfrs.parse(
 							sent, stage.grammar, tags=tags,
@@ -347,7 +348,8 @@ class Parser(object):
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta,
 							itemsestimate=estimateitems(
-								sent, stage.prune, stage.mode, stage.dop))
+								sent, stage.prune, stage.mode, stage.dop),
+							postagging=self.postagging)
 				elif stage.mode == 'dop-rerank':
 					if prevparsetrees[stage.prune]:
 						parsetrees, msg1 = disambiguation.doprerank(
@@ -645,6 +647,12 @@ def readgrammars(resultdir, stages, postagging=None,
 	else:
 		for stage in stages:
 			stage.mapping = None
+	if postagging and postagging.method == 'unknownword':
+		if os.path.exists(resultdir + '/closedclasswords.txt'):
+			with open(resultdir + '/closedclasswords.txt') as inp:
+				postagging.closedclasswords = set(inp.read().splitlines())
+		else:
+			postagging.closedclasswords = None
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
 		backtransform = outside = None

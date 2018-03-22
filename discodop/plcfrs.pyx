@@ -5,6 +5,7 @@ from __future__ import print_function
 import re
 import logging
 import numpy as np
+from math import exp, log as pylog
 cimport cython
 from cython.operator cimport postincrement, dereference
 from libc.math cimport HUGE_VAL as INFINITY
@@ -130,22 +131,13 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		return self.itemid1(labelid, indices, whitelist)
 
 	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef SmallChartItem tmp
+		cdef SmallChartItem tmp, tmp1
 		vec = sum(1 << n for n in indices)
 		tmp = SmallChartItem(labelid, vec)
 		if whitelist is not None:
-			tmp.label = whitelist.mapping[labelid]
-			return (whitelist.small[tmp.label].count(tmp)
-					and self.itemindex[tmp])
-		return self.itemindex[tmp]
-
-	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef SmallChartItem tmp
-		vec = sum(1 << n for n in indices)
-		tmp = SmallChartItem(labelid, vec)
-		if whitelist is not None:
-			tmp.label = whitelist.mapping[labelid]
-			return (whitelist.small[tmp.label].count(tmp)
+			tmp1.label = whitelist.mapping[labelid]
+			tmp1.vec = tmp.vec
+			return (whitelist.small[tmp1.label].count(tmp1)
 					and self.itemindex[tmp])
 		return self.itemindex[tmp]
 
@@ -247,7 +239,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 		return self.itemid1(labelid, indices, whitelist)
 
 	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef FatChartItem tmp
+		cdef FatChartItem tmp, tmp1
 		cdef uint64_t n
 		tmp = FatChartItem(labelid)
 		for n in indices:
@@ -255,22 +247,13 @@ cdef class FatLCFRSChart(LCFRSChart):
 				return 0
 			SETBIT(tmp.vec, n)
 		if whitelist is not None:
-			tmp.label = whitelist.mapping[labelid]
-			return (whitelist.fat[tmp.label].count(tmp) != 0
-					and self.itemindex[tmp])
-		return self.itemindex[tmp]
-
-	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
-		cdef FatChartItem tmp
-		cdef uint64_t n
-		tmp = FatChartItem(labelid)
-		for n in indices:
-			if n >= SLOTS * sizeof(unsigned long) * 8:
-				return 0
-			SETBIT(tmp.vec, n)
-		if whitelist is not None:
-			tmp.label = whitelist.mapping[labelid]
-			return (whitelist.fat[tmp.label].count(tmp) != 0
+			tmp1 = FatChartItem(labelid)
+			tmp1.label = whitelist.mapping[labelid]
+			for n in indices:
+				if n >= SLOTS * sizeof(unsigned long) * 8:
+					return 0
+				SETBIT(tmp1.vec, n)
+			return (whitelist.fat[tmp1.label].count(tmp1) != 0
 					and self.itemindex[tmp])
 		return self.itemindex[tmp]
 
@@ -292,7 +275,8 @@ cdef class FatLCFRSChart(LCFRSChart):
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		start=None, Whitelist whitelist=None, bint splitprune=False,
 		bint markorigin=False, estimates=None,
-		Prob beam_beta=0.0, int beam_delta=50, itemsestimate=None):
+		Prob beam_beta=0.0, int beam_delta=50, itemsestimate=None,
+		postagging=None):
 	"""Parse sentence and produce a chart.
 
 	:param sent: A sequence of tokens that will be parsed.
@@ -332,19 +316,21 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 				<SmallLCFRSChart>chart,
 				<SmallChartItem>(<SmallLCFRSChart>chart)._root(),
 				sent, grammar, tags, exhaustive, whitelist,
-				splitprune, markorigin, estimates, beam_beta, beam_delta)
+				splitprune, markorigin, estimates, beam_beta, beam_delta,
+				postagging)
 	chart = FatLCFRSChart(grammar, list(sent), start,
 			itemsestimate=itemsestimate)
 	return parse_main[FatLCFRSChart, FatChartItem](
 			<FatLCFRSChart>chart, <FatChartItem>(<FatLCFRSChart>chart)._root(),
 			sent, grammar, tags, exhaustive, whitelist,
-			splitprune, markorigin, estimates, beam_beta, beam_delta)
+			splitprune, markorigin, estimates, beam_beta, beam_delta,
+			postagging)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		Grammar grammar, tags, bint exhaustive, Whitelist whitelist,
 		bint splitprune, bint markorigin, estimates,
-		Prob beam_beta, int beam_delta):
+		Prob beam_beta, int beam_delta, postagging):
 	cdef:
 		Agenda[ItemNo, pair[Prob, Prob]] agenda  # prioritized items to explore
 		pair[ItemNo, pair[Prob, Prob]] entry
@@ -378,7 +364,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	# assign POS tags
 	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
 			grammar, agenda, chart, newitem,
-			sent, tags, whitelist, estimates)
+			sent, tags, whitelist, estimates, postagging)
 	if not covered:
 		return chart, msg
 	assert not agenda.empty()
@@ -655,7 +641,8 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 
 cdef populatepos(Grammar grammar,
 		Agenda[ItemNo, pair[Prob, Prob]]& agenda, LCFRSChart_fused chart,
-		LCFRSItem_fused item, sent, tags, Whitelist whitelist, estimates):
+		LCFRSItem_fused item, sent, tags, Whitelist whitelist, estimates,
+		postagging):
 	"""Apply all possible lexical and unary rules on each lexical span.
 
 	:returns: a tuple ``(success, msg)`` where ``success`` is True if a POS tag
@@ -669,6 +656,7 @@ cdef populatepos(Grammar grammar,
 		int length = 1, left = 0, right = 0, gaps = 0
 		Label lhs
 		bint recognized
+		Prob openclassfactor = 0.001
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
@@ -694,9 +682,18 @@ cdef populatepos(Grammar grammar,
 			left = wordidx
 			gaps = 0
 			right = lensent - 1 - wordidx
-		# for n in grammar.lexicalbyword.get(word, ()):
 		it = grammar.lexicalbyword.find(word.encode('utf8'))
+		if it == grammar.lexicalbyword.end():
+			it = grammar.lexicalbyword.find(word.lower().encode('utf8'))
 		if it != grammar.lexicalbyword.end():
+			if (postagging and tag is None
+					and not word.startswith('_UNK')
+					and postagging.method == 'unknownword'
+					and postagging.closedclasswords
+					and word not in postagging.closedclasswords):
+				reserveprob = -pylog(1 - openclassfactor)
+			else:
+				reserveprob = 0
 			for n in dereference(it).second:
 				lexrule = grammar.lexical[n]
 				if not tag or tagre.match(grammar.tolabel[lexrule.lhs]):
@@ -720,8 +717,36 @@ cdef populatepos(Grammar grammar,
 						memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
 						SETBIT(newitem.vec, wordidx)
 					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
-							newitem, lexrule.prob, score, wordidx, agenda, chart,
+							newitem, lexrule.prob + reserveprob,
+							score + reserveprob, wordidx, agenda, chart,
 							whitelist):
+						if LCFRSItem_fused is SmallChartItem:
+							newitem = SmallChartItem(0, 0)
+						elif LCFRSItem_fused is FatChartItem:
+							newitem = FatChartItem(0)
+						recognized = True
+		if (postagging and tag is None
+				and not word.startswith('_UNK')
+				and postagging.method == 'unknownword'
+				and postagging.closedclasswords
+				and word not in postagging.closedclasswords):
+			# add tags associated with signature, scale probabilities
+			sig = postagging.unknownwordfun(word, wordidx, postagging.lexicon)
+			it = grammar.lexicalbyword.find(sig.encode('utf8'))
+			if it != grammar.lexicalbyword.end():
+				for n in dereference(it).second:
+					lexrule = grammar.lexical[n]
+					newitem.label = lexrule.lhs
+					if LCFRSItem_fused is SmallChartItem:
+						newitem.vec = 1UL << wordidx
+					elif LCFRSItem_fused is FatChartItem:
+						memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
+						SETBIT(newitem.vec, wordidx)
+					score = lexrule.prob - pylog(openclassfactor)
+					# process_lexedge checks that tag is not already in agenda
+					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
+							newitem, lexrule.prob - pylog(openclassfactor),
+							score, wordidx, agenda, chart, whitelist):
 						if LCFRSItem_fused is SmallChartItem:
 							newitem = SmallChartItem(0, 0)
 						elif LCFRSItem_fused is FatChartItem:
@@ -800,8 +825,9 @@ cdef inline int process_lexedge(LCFRSItem_fused newitem,
 		inchart = chart.parseforest[itemidx].size() != 0
 		inagenda = agenda.member(itemidx)
 	if inagenda:
-		raise ValueError('lexical edge already in agenda: %s' %
-				chart.itemstr(itemidx))
+		return False
+		# raise ValueError('lexical edge already in agenda: %s' %
+		# 		chart.itemstr(itemidx))
 	elif inchart:
 		raise ValueError('lexical edge already in chart: %s' %
 				chart.itemstr(itemidx))
@@ -813,7 +839,7 @@ cdef inline int process_lexedge(LCFRSItem_fused newitem,
 	scoreprob.first = score
 	scoreprob.second = prob
 	agenda.setitem(itemidx, scoreprob)
-	assert not agenda.empty(), agenda.size()
+	# assert not agenda.empty(), agenda.size()
 	chart.addlexedge(itemidx, wordidx)
 	return True
 
@@ -827,8 +853,9 @@ cdef inline bint checkwhitelist(LCFRSItem_fused newitem, Whitelist whitelist,
 	if whitelist is None:
 		return True
 	elif splitprune:  # disc. item to be treated as several split items?
-		b = cnt = 0
+		b = 0
 		if markorigin:
+			cnt = 0
 			if whitelist.splitmapping[newitem.label].size() == 0:
 				return True
 		else:
@@ -836,26 +863,26 @@ cdef inline bint checkwhitelist(LCFRSItem_fused newitem, Whitelist whitelist,
 				return True
 			if LCFRSItem_fused is SmallChartItem:
 				COMPONENT.label = whitelist.splitmapping[
-						newitem.label][cnt]
+						newitem.label][0]
 			elif LCFRSItem_fused is FatChartItem:
 				FATCOMPONENT.label = whitelist.splitmapping[
-						newitem.label][cnt]
+						newitem.label][0]
 		if LCFRSItem_fused is SmallChartItem:
 			a = nextset(newitem.vec, b)
-		elif LCFRSItem_fused is FatChartItem:
-			a = anextset(newitem.vec, b, SLOTS)
-		while a != -1:
-			if LCFRSItem_fused is SmallChartItem:
+			while a != -1:
 				b = nextunset(newitem.vec, a)
 				# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 				COMPONENT.vec = (1UL << b) - (1UL << a)
 				if markorigin:
 					COMPONENT.label = whitelist.splitmapping[
 							newitem.label][cnt]
+					cnt += 1
 				if whitelist.small[COMPONENT.label].count(COMPONENT) == 0:
 					return False
 				a = nextset(newitem.vec, b)
-			elif LCFRSItem_fused is FatChartItem:
+		elif LCFRSItem_fused is FatChartItem:
+			a = anextset(newitem.vec, b, SLOTS)
+			while a != -1:
 				b = anextunset(newitem.vec, a, SLOTS)
 				# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 				memset(<void *>FATCOMPONENT.vec, 0, SLOTS * sizeof(uint64_t))
@@ -864,11 +891,11 @@ cdef inline bint checkwhitelist(LCFRSItem_fused newitem, Whitelist whitelist,
 				if markorigin:
 					FATCOMPONENT.label = whitelist.splitmapping[
 							newitem.label][cnt]
+					cnt += 1
 				if whitelist.fat[FATCOMPONENT.label].count(
 						FATCOMPONENT) == 0:
 					return False
 				a = anextset(newitem.vec, b, SLOTS)
-			cnt += 1
 	elif whitelist.mapping[newitem.label] != 0:
 		label = newitem.label
 		newitem.label = whitelist.mapping[label]

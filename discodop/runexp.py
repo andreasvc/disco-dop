@@ -109,7 +109,6 @@ def startexp(
 	logging.info('%d test sentences after length restriction <= %d',
 			len(test_trees), prm.testcorpus.maxwords)
 	lexmodel = None
-	simplelexsmooth = False
 	test_tagged_sents_mangled = test_tagged_sents
 	if prm.postagging and prm.postagging.method in (
 			'treetagger', 'stanford', 'frog'):
@@ -146,7 +145,8 @@ def startexp(
 	elif prm.postagging and prm.postagging.method == 'unknownword':
 		if not rerun:
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
-			simplelexsmooth = prm.postagging.simplelexsmooth
+			with open(resultdir + '/closedclasswords.txt', 'w') as out:
+				out.writelines(w + '\n' for w in lexmodel[3])
 		usetags = False  # make sure gold POS tags are not given to parser
 	else:
 		usetags = True  # give gold POS tags to parser
@@ -193,7 +193,7 @@ def startexp(
 		getgrammars(dobinarization(trees, sents, prm.binarization,
 					prm.relationalrealizational),
 				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
-				prm.numproc, lexmodel, simplelexsmooth, top)
+				prm.numproc, lexmodel, top)
 	evalparam = evalmod.readparam(prm.evalparam)
 	evalparam['DEBUG'] = -1
 	evalparam['CUTOFF_LEN'] = 40
@@ -266,25 +266,19 @@ def getposmodel(postagging, train_tagged_sents):
 	"""Apply unknown word model to sentences before extracting grammar."""
 	postagging.update(unknownwordfun=lexicon.UNKNOWNWORDFUNC[postagging.model])
 	# get smoothed probalities for lexical productions
-	lexresults, msg = lexicon.getunknownwordmodel(
+	lexmodel, msg = lexicon.getunknownwordmodel(
 			train_tagged_sents, postagging.unknownwordfun,
 			postagging.unknownthreshold, postagging.openclassthreshold)
 	logging.info(msg)
-	simplelexsmooth = postagging.simplelexsmooth
-	if simplelexsmooth:
-		lexmodel = lexresults[2:8]
-	else:
-		lexmodel, msg = lexicon.getlexmodel(*lexresults)
-		logging.info(msg)
-	# NB: knownwords are all words in training set, lexicon is the subset
-	# of words that are above the frequency threshold.
-	# for training purposes we work with the subset, at test time we
+	# NB: commonwords is the subset of words that are above the frequency
+	# threshold. for training purposes we work with the subset, at test time we
 	# exploit the full set of known words from the training set.
-	sigs, knownwords, lex = lexresults[:3]
-	postagging.update(sigs=sigs, lexicon=knownwords)
+	sigs, allwords, commonwords, closedclasswords = lexmodel[:4]
+	postagging.update(sigs=sigs, lexicon=allwords,
+			closedclasswords=closedclasswords)
 	# replace rare train words with signatures
 	sents = lexicon.replaceraretrainwords(train_tagged_sents,
-			postagging.unknownwordfun, lex)
+			postagging.unknownwordfun, commonwords)
 	return sents, lexmodel
 
 
@@ -322,7 +316,7 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 
 
 def getgrammars(trees, sents, stages, testmaxwords, resultdir,
-		numproc, lexmodel, simplelexsmooth, top):
+		numproc, lexmodel, top):
 	"""Read off the requested grammars."""
 	tbfanout, n = treetransforms.treebankfanout(trees)
 	logging.info('binarized treebank fan-out: %d #%d', tbfanout, n)
@@ -362,7 +356,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				raise ValueError('Cannot extract PCFG from treebank '
 						'with discontinuities.')
 		backtransform = extrarules = None
-		if lexmodel and simplelexsmooth:
+		if lexmodel:
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.mode == 'mc-rerank':
 			from . import _fragments
@@ -415,8 +409,6 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			else:
 				raise ValueError('unrecognized DOP model: %r' % stage.dop)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
-			if lexmodel and not simplelexsmooth:  # FIXME: altweights?
-				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			msg = grammar.grammarinfo(xgrammar)
 			if rules is None:
 				rules, lex = grammar.writegrammar(xgrammar)
@@ -492,8 +484,6 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			else:
 				logging.info(grammar.grammarinfo(xgrammar,
 						dump='%s/pcdist.txt' % resultdir))
-			if lexmodel and not simplelexsmooth:
-				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			rules, lex = grammar.writegrammar(xgrammar)
 			rulesfile = '%s/%s.rules.gz' % (resultdir, stage.name)
 			lexiconfile = '%s/%s.lex.gz' % (resultdir, stage.name)

@@ -92,7 +92,6 @@ postagging=dict(
     # options for unknown word models:
     unknownthreshold=1,  # use probs of rare words for unknown words
     openclassthreshold=50,  # add unseen tags for known words. 0 to disable.
-    simplelexsmooth=True,  # disable sophisticated smoothing
 ),
 
 # binarization options

@@ -432,10 +432,8 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
 				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
 				prm.transformations, prm.relationalrealizational, resultdir)
-		simplelexsmooth = False
 		if prm.postagging and prm.postagging.method == 'unknownword':
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
-			simplelexsmooth = prm.postagging.simplelexsmooth
 	elif model == 'ptsg':  # read fragments
 		xfragments = {frag: splitweight(weight) for frag, weight
 				in (line.split('\t') for line in openread(treebankfile,
@@ -474,7 +472,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		getgrammars(dobinarization(trees, sents, prm.binarization,
 				prm.relationalrealizational),
 				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
-				prm.numproc, lexmodel, simplelexsmooth, trees[0].label)
+				prm.numproc, lexmodel, trees[0].label)
 		paramfile = os.path.join(resultdir, 'params.prm')
 		with openread(args[1]) as inp:
 			with io.open(paramfile, 'w', encoding='utf8') as out:

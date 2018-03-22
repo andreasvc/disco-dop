@@ -11,7 +11,17 @@ BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile(b'[ \t][0-9]+[./][0-9]+[ \t\n]')
 # Detect rule format of bitpar
 BITPARRE = re.compile(rb'^[-.e0-9]+\b')
-REMOVESTATESPLITS = re.compile(r'^([^\s|]+?)(?:\^[^\s|]*)?$')
+# Match syntactic category and function tag, without any state splits,
+# for labels that were not introduced by the binarization:
+# e.g., given NN-HD/Acc^name group 1 will be NN-HD/Acc
+# but S|<r:NP-DA> will not match.
+# NB: see also similar pattern in disambiguation.pyx
+REMOVESTATESPLITS = re.compile(
+		r'^(([^-/^|:\s]+?)'  # NN
+		r'(-[^/^|:\s]+?)?'  # -HD
+		r'(/[^^|:\s]+?)?)'  # /Acc
+		r'(?:\^[^|:\s]+?)?'  # ^name
+		r'(_[0-9]+(\*[0-9]+)?)?$')  # _2*1
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef bool lt0(const ProbRule &a, const ProbRule &b) nogil:
@@ -179,7 +189,7 @@ cdef class Grammar:
 			strlabel = self.tolabel.ob[n].decode('utf8')
 			match = REMOVESTATESPLITS.match(strlabel)
 			if match is not None:
-				self.tblabelmapping.setdefault(match.group(1), []).append(n)
+				self.tblabelmapping.setdefault(match.group(2), []).append(n)
 
 	def _convertrules(self, bytes rules, list backtransform=None):
 		"""Count unary & binary rules; make a canonical list of all

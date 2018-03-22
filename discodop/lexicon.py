@@ -12,14 +12,6 @@ signatures from words, the flow is as follows:
   #. [ read off grammar ]
   #. simplesmoothlexicon (add extra lexical productions)
 
-- Sophisticated smoothing (untested):
-
-  #. getunknownwordmodel
-  #. getlexmodel
-  #. replaceraretrainwords
-  #. [ read off grammar ]
-  #. smoothlexicon
-
 - During parsing:
 
   #. replaceraretestwords (only give known words and signatures to parser)
@@ -38,6 +30,7 @@ from fractions import Fraction
 from .treebanktransforms import YEARRE
 from .tree import escape
 from .util import which
+from .containers import REMOVESTATESPLITS
 
 UNK = '_UNK'
 NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
@@ -86,14 +79,23 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordsig[word] = sig  # NB: sig may also depend on n and lexicon
 			sigtag[sig, tag] += 1
 	if openclassthreshold:
+		# consider POS tags with different function tags together
+		wordsforcollapsedtags = defaultdict(set)
+		for tag, ws in wordsfortag.items():
+			tag1 = REMOVESTATESPLITS.match(tag).group(2)
+			wordsforcollapsedtags[tag1].update(w.lower() for w in ws)
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
-				if len({w.lower() for w in ws}) >= openclassthreshold}
+				# if len({w.lower() for w in ws}) >= openclassthreshold}
+				if len(wordsforcollapsedtags[
+					REMOVESTATESPLITS.match(tag).group(2)])
+					>= openclassthreshold}
 		closedclasstags = {tag: len({w.lower() for w in wordsfortag[tag]})
 				for tag in tags if tag not in openclasstags}
 		closedclasswords = {word for tag in closedclasstags
 				for word in wordsfortag[tag]}
-		openclasswords = lexicon - closedclasswords
+		# NB: words below unknown word threshold are included
+		openclasswords = words.keys() - closedclasswords
 		# add rare closed-class words back to lexicon
 		lexicon.update(closedclasswords)
 	else:
@@ -104,15 +106,13 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			if word not in lexicon:
 				sig = unknownword(word, n, lexicon)
 				sigs[sig] += 1
-	msg = 'known words: %d, signature types seen: %d\n' % (
+	msg = 'word types: %d, signature types: %d\n' % (
 			len(lexicon), len(sigs))
 	msg += 'open class tags: %s\n\n' % ' '.join(sorted(
 			'%s:%d' % a for a in openclasstags.items()))
 	msg += 'closed class tags: %s' % ' '.join(sorted(
 			'%s:%d' % a for a in closedclasstags.items()))
-	return (sigs, words, lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags,
-			wordsig, sigtag), msg
+	return (sigs, words, lexicon, closedclasswords, tags, wordtags), msg
 
 
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
@@ -157,15 +157,14 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	"""Collect new lexical productions.
 
-	- unobserved combinations of open class tags with known open class words.
-	- unobserved signatures are mapped to ``'_UNK'`` and associated with all
-      potential tags.
+	- include productions for rare words with words in addition to signatures.
+	- map unobserved signatures to ``_UNK`` and associate w/all potential tags.
+	- (unobserved combinations of open class (word, tag) handled in parser).
 
 	:param epsilon: pseudo-frequency of unseen productions ``tag => word``.
 	:returns: a dictionary of lexical rules, with pseudo-frequencies as values.
 	"""
-	(lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags) = lexmodel
+	(_sigs, _words, lexicon, _closedclasswords, tags, wordtags) = lexmodel
 	newrules = {}
 	# rare words as signature AND as word:
 	for word, tag in wordtags:
@@ -173,86 +172,8 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 			# needs to be normalized later
 			newrules[(tag, 'Epsilon'), (escape(word), )] = wordtags[word, tag]
 			# print(tag, '=>', word, wordstags[word, tag], file=sys.stderr)
-	for tag in openclasstags:  # open class tag-word pairs
-		for word in openclasswords - wordsfortag[tag] - {UNK}:
-			newrules[(tag, 'Epsilon'), (escape(word), )] = epsilon
 	for tag in tags:  # catch-all unknown signature
 		newrules[(tag, 'Epsilon'), (UNK, )] = epsilon
-	return newrules
-
-
-def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags, wordsig, sigtag,
-			openclassoffset=1, kappa=1):
-	"""Compute a smoothed lexical model.
-
-	:returns: a dictionary giving P(word_or_sig | tag).
-	:param openclassoffset: for words that only appear with open class tags,
-		add unseen combinations of open class (tag, word) with this count.
-	:param kappa: FIXME; cf. Klein & Manning (2003), footnote 5.
-		http://aclweb.org/anthology/P03-1054"""
-	for tag in openclasstags:
-		for word in openclasswords - wordsfortag[tag]:
-			wordtags[word, tag] += openclassoffset
-			words[word] += openclassoffset
-			tags[tag] += openclassoffset
-		# unseen signatures
-		sigs[UNK] += 1
-		sigtag[UNK, tag] += 1
-	# Compute P(tag|sig)
-	tagtotal = sum(tags.values())
-	wordstotal = sum(words.values())
-	sigstotal = sum(sigs.values())
-	P_tag = {}
-	for tag in tags:
-		P_tag[tag] = Fraction(tags[tag], tagtotal)
-	P_word = defaultdict(int)
-	for word in words:
-		P_word[word] = Fraction(words[word], wordstotal)
-	P_tagsig = defaultdict(Fraction)  # ??
-	for sig in sigs:
-		P_tagsig[tag, sig] = Fraction(P_tag[tag],
-				Fraction(sigs[sig], sigstotal))
-		# print("P(%s | %s) = %s " % ()
-		# 		tag, sig, P_tagsig[tag, sig], file=sys.stderr)
-	# Klein & Manning (2003) Accurate unlexicalized parsing
-	# http://aclweb.org/anthology/P03-1054
-	# P(tag|word) = [count(tag, word) + kappa * P(tag|sig)]
-	# 		/ [count(word) + kappa]
-	P_tagword = defaultdict(int)
-	for word, tag in wordtags:
-		P_tagword[tag, word] = Fraction(wordtags[word, tag]
-				+ kappa * P_tagsig[tag, wordsig[word]],
-				words[word] + kappa)
-		# print("P(%s | %s) = %s " % ()
-		# 		tag, word, P_tagword[tag, word], file=sys.stderr)
-	# invert with Bayes theorem to get P(word|tag)
-	P_wordtag = defaultdict(int)
-	for tag, word in P_tagword:
-		# wordorsig = word if word in lexicon else wordsig[word]
-		wordorsig = word
-		P_wordtag[wordorsig, tag] += Fraction((P_tagword[tag, word]
-				* P_word[word]), P_tag[tag])
-		# print("P(%s | %s) = %s " % ()
-		# 		word, tag, P_wordtag[wordorsig, tag], file=sys.stderr)
-	msg = "(word, tag) pairs in model: %d" % len(P_tagword)
-	return P_wordtag, msg
-
-
-def smoothlexicon(grammar, P_wordtag):
-	"""Replace lexical probabilities using given unknown word model.
-	Ignores lexical productions of known subtrees (tag contains '@')
-	introduced by DOP, i.e., we only modify lexical depth 1 subtrees."""
-	newrules = []
-	for (rule, yf), w in grammar:
-		if rule[1] == 'Epsilon' and '@' not in rule[0]:
-			wordorsig = yf[0]
-			tag = rule[0]
-			newrule = (((tag, 'Epsilon'), (wordorsig, )),
-					P_wordtag[wordorsig, tag])
-			newrules.append(newrule)
-		else:
-			newrules.append(((rule, yf), w))
 	return newrules
 
 
@@ -582,6 +503,6 @@ FTBALLOWEDCOMPOUNDS = {
 
 
 __all__ = ['getunknownwordmodel', 'replaceraretrainwords',
-		'replaceraretestwords', 'simplesmoothlexicon', 'getlexmodel',
-		'smoothlexicon', 'unknownword6', 'unknownword4', 'unknownwordbase',
+		'replaceraretestwords', 'simplesmoothlexicon',
+		'unknownword6', 'unknownword4', 'unknownwordbase',
 		'unknownwordftb', 'externaltagging', 'tagmangle']
