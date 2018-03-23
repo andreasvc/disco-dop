@@ -30,8 +30,8 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 	:param discount: a factor between 0 and 1.0; 1.0 means no discount, lower
 		values introduce increasingly larger discount for repeated rules.
 
-	Cf. http://eli.thegreenplace.net/2010/01/28/generating-random-sentences\
--from-a-context-free-grammar/"""
+	Cf. http://eli.thegreenplace.net/2010/01/28/generating-random-sentences-from-a-context-free-grammar/
+	"""
 	if prodcounts is None:
 		prodcounts = [1] * grammar.numrules
 	if not grammar.bylhs[start]:

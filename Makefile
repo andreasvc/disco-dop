@@ -51,7 +51,7 @@ test: discodop
 	&& python3 -bb -tt tests.py \
 	&& cd tests/ && sh run.sh
 
-# pylint: R=refactor, C0103 == Invalid name
+# pylint: R=refactor, I=informational, e.g. "I0011: Locally disabling %s"
 # pep8: W503 line break before binary operator; E402 module level import not at top of file
 lint: discodop
 	# Any files with more than 999 lines?

@@ -43,8 +43,7 @@ cdef RankedEdgeAgenda[Prob] getcandidates(Chart chart, ItemNo v, int k):
 				prob += chart.subtreeprob(chart._right(v, e))
 			else:
 				right = -1
-		re = RankedEdge(  # v,
-				e, left, right)
+		re = RankedEdge(e, left, right)
 		entry.first = re
 		entry.second = prob
 		entries.push_back(entry)
@@ -81,12 +80,10 @@ cdef lazykthbest(ItemNo v, int k, int k1, agendas_type& cand, Chart chart,
 			for i in range(2):  # add the |e| neighbors
 				if i == 0 and ej.left >= 0:
 					ei = chart.left(v, ej)
-					ej1 = RankedEdge(  # v,
-							ej.edge, ej.left + 1, ej.right)
+					ej1 = RankedEdge(ej.edge, ej.left + 1, ej.right)
 				elif i == 1 and ej.right >= 0:
 					ei = chart.right(v, ej)
-					ej1 = RankedEdge(  # v,
-							ej.edge, ej.left, ej.right + 1)
+					ej1 = RankedEdge(ej.edge, ej.left, ej.right + 1)
 				else:
 					break
 				ji = ej1.left if i == 0 else ej1.right
@@ -252,7 +249,7 @@ def lazykbest(Chart chart, int k, bint derivs=True):
 	cdef vector[pair[RankedEdge, Prob]] tmp
 	cdef ItemNo root = chart.root()
 	cdef int n = 0
-	if root == 0:
+	if root not in chart:
 		raise ValueError('kbest: no complete derivation in chart')
 	chart.rankededges.clear()
 	chart.rankededges.resize(chart.parseforest.size())
@@ -265,8 +262,6 @@ def lazykbest(Chart chart, int k, bint derivs=True):
 			break
 	chart.rankededges[root] = tmp
 	if derivs:
-		# for entry in chart.rankededges[root]:
-		# 	chart.derivations.push_back(getderiv(root, entry.first, chart))
 		return [(getderiv(root, entry.first, chart).decode('utf8'),
 				entry.second) for entry in chart.rankededges[root]]
 	return None

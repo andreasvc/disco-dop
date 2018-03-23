@@ -18,8 +18,8 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libc.math cimport HUGE_VAL as INFINITY
 from libcpp.utility cimport pair
 from .bit cimport nextset, nextunset, bitcount, bitlength, testbit
-from .containers cimport SmallChartItemAgenda, Agenda, Chart, Grammar, \
-		Label, Prob, ProbRule, LexicalRule, SmallChartItem
+from .containers cimport (SmallChartItemAgenda, Agenda, Chart, Grammar,
+		Label, Prob, ProbRule, LexicalRule, SmallChartItem)
 
 # from libc.math cimport isnan, isfinite  # conflicts with C++ std::isfinite
 cdef extern from "<cmath>" namespace "std" nogil:
@@ -772,14 +772,14 @@ def test():
 	print(estchart)
 	print('items avoided:', chart.numitems() - estchart.numitems())
 
-	trees = [Tree(a) for a in '''\
-			(ROOT (A (a 0) (b 1)))
-			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (C (a 0) (b 1)) (c 2))'''.splitlines()]
+	trees = [Tree(a) for a in (
+			'(ROOT (A (a 0) (b 1)))\n'
+			'(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))\n'
+			'(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))\n'
+			'(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))\n'
+			'(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))\n'
+			'(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))\n'
+			'(ROOT (C (a 0) (b 1)) (c 2))\n').splitlines()]
 	sents =[["a", "b"],
 			["a", "b", "c"],
 			["a", "b", "c"],

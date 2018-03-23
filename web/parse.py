@@ -21,8 +21,8 @@ from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
-from discodop.tree import Tree, DrawTree, DrawDependencies, \
-		writediscbrackettree
+from discodop.tree import (Tree, DrawTree, DrawDependencies,
+		writediscbrackettree)
 from discodop.parser import Parser, readparam, readgrammars, probstr
 from discodop.util import tokenize
 
@@ -253,9 +253,9 @@ def replacemorph(tree):
 
 
 logging.basicConfig()
-for log in (logging.getLogger(), APP.logger):
-	log.setLevel(logging.DEBUG)
-	log.handlers[0].setFormatter(logging.Formatter(
+for logger in (logging.getLogger(), APP.logger):
+	logger.setLevel(logging.DEBUG)
+	logger.handlers[0].setFormatter(logging.Formatter(
 			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 loadparsers()
 

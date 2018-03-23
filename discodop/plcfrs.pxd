@@ -4,12 +4,12 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from cpython.set cimport PySet_Contains
-from .containers cimport Chart, Grammar, Prob, Label, ItemNo, \
-		ProbRule, LexicalRule, SmallChartItem, FatChartItem, Edge, \
-		Whitelist, Agenda, SmallChartItemBtreeMap, FatChartItemBtreeMap, \
-		BITSIZE, CFGtoSmallChartItem, CFGtoFatChartItem, compactcellidx
-from .bit cimport nextset, nextunset, bitcount, bitlength, \
-	testbit, anextset, anextunset, abitcount, abitlength, setunion
+from .containers cimport (Chart, Grammar, Prob, Label, ItemNo,
+		ProbRule, LexicalRule, SmallChartItem, FatChartItem, Edge,
+		Whitelist, Agenda, SmallChartItemBtreeMap, FatChartItemBtreeMap,
+		BITSIZE, CFGtoSmallChartItem, CFGtoFatChartItem, compactcellidx)
+from .bit cimport (nextset, nextunset, bitcount, bitlength,
+	testbit, anextset, anextunset, abitcount, abitlength, setunion)
 
 cdef extern from "macros.h":
 	int BITSLOT(int b)

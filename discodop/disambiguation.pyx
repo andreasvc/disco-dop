@@ -17,13 +17,13 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import Tree, ParentedTree, ImmutableTree, writediscbrackettree, \
-		brackettree
+from .tree import (Tree, ParentedTree, ImmutableTree, writediscbrackettree,
+		brackettree)
 from .kbest import lazykbest
 from .kbest cimport getderiv
 from .grammar import lcfrsproductions, spinal, REMOVEDEC
-from .treetransforms import addbitsets, unbinarize, canonicalize, \
-		collapseunary, mergediscnodes, binarize
+from .treetransforms import (addbitsets, unbinarize, canonicalize,
+		collapseunary, mergediscnodes, binarize)
 from .bit import pyintnextset, pyintbitcount
 
 cimport cython
@@ -35,9 +35,9 @@ from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from .bit cimport abitcount
-from .containers cimport Prob, Grammar, ProbRule, LexicalRule, Chart, \
-		SmallChartItem, FatChartItem, Edge, RankedEdge, Whitelist, Label, \
-		ItemNo, sparse_hash_map, logprobadd, logprobsum, yieldranges
+from .containers cimport (Prob, Grammar, ProbRule, LexicalRule, Chart,
+		SmallChartItem, FatChartItem, Edge, RankedEdge, Whitelist, Label,
+		ItemNo, sparse_hash_map, logprobadd, logprobsum, yieldranges)
 
 
 cdef extern from "macros.h":

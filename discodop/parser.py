@@ -417,25 +417,30 @@ class Parser(object):
 					print('sum of probabilities: %g\n' % sum(exp(-prob)
 							for _, prob in chart.derivations[:100]))
 				if stage.objective == 'shortest':
-					stage.grammar.switch('default' if stage.estimator == 'rfe'
+					stage.grammar.switch('default'
+							if stage.estimator == 'rfe'
 							else stage.estimator, True)
 				parsetrees, msg1 = disambiguation.marginalize(
 						stage.objective if stage.dop else 'mpd',
 						chart, sent=sent, tags=tags,
 						k=stage.m, sldop_n=stage.sldop_n,
-						mcplambda=stage.mcplambda, mcplabels=stage.mcplabels,
+						mcplambda=stage.mcplambda,
+						mcplabels=stage.mcplabels,
 						ostag=stage.dop == 'ostag',
 						require=set(require or ()),
 						block=set(block or ()))
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 				if self.verbosity >= 3:
-					besttrees = nlargest(100, parsetrees, key=itemgetter(1))
+					besttrees = nlargest(
+							100, parsetrees, key=itemgetter(1))
 					print('100-best parse trees:\n%s' % '\n'.join(
 							'%d. %s %s' % (n + 1, probstr(prob), treestr)
-							for n, (treestr, prob, _) in enumerate(besttrees)))
+							for n, (treestr, prob, _)
+							in enumerate(besttrees)))
 					print('sum of probabilities: %g\n' %
-							sum((prob[1] if isinstance(prob, tuple) else prob)
+							sum((prob[1]
+								if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
 				if not stage.prune and tree is not None:
 					totalgolditems = sum(1 for node in tree.subtrees())

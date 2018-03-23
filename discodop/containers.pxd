@@ -2,8 +2,8 @@ from math import isinf, exp, fsum, log
 from libc.stdlib cimport malloc, calloc, realloc, free, abort, atol, strtod
 from libc.math cimport fabs, log, exp
 from libc.string cimport memcmp, memset, memcpy
-from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int16_t, \
-		int32_t
+from libc.stdint cimport (uint8_t, uint16_t, uint32_t, uint64_t, int16_t,
+		int32_t)
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
 from libcpp.string cimport string
@@ -11,8 +11,8 @@ from libcpp.algorithm cimport sort as stdsort
 from libcpp cimport bool
 from cpython.array cimport array
 from libc.stdio cimport FILE, fopen, fwrite, fclose
-from cpython.buffer cimport PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer, \
-		PyObject_GetBuffer, PyBuffer_Release
+from cpython.buffer cimport (PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer,
+		PyObject_GetBuffer, PyBuffer_Release)
 cimport cython
 from cpython.array cimport array, clone
 from .bit cimport nextset, nextunset, anextset, anextunset

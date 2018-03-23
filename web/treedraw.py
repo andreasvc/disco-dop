@@ -135,8 +135,8 @@ def drawtrees(form, dts):
 		for ext in ('aux', 'log', 'pdf'):
 			os.remove('/tmp/dtree.' + ext)
 	if form.get('output', 'text') == 'png':
-		proc = Popen('/usr/bin/convert -density 125 /tmp/dtree.pdf \
-				/tmp/dtree.png'.split(),  # -trim
+		proc = Popen('/usr/bin/convert -density 125 /tmp/dtree.pdf'
+				' /tmp/dtree.png'.split(),  # -trim
 				stdin=None, stdout=PIPE, stderr=PIPE, shell=False)
 		proc.wait()
 		# set Expires one day ahead (according to server time)

@@ -145,11 +145,13 @@ def bitext():
 	Translation would require a special decoder (instead of normal k-best
 	derivations where the whole sentence is given)."""
 	print("bitext parsing with a synchronous CFG")
-	trees = [Tree(a) for a in '''\
-	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\
-		(PP (IN (a` 6)) (NP (NNP (Mary 2) (Mary 4)))))) (SEP (| 3)))
-	(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) (aimes 5))\
-		(NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))'''.split('\n')]
+	trees = [Tree(a) for a in (
+			'(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) '
+			'(manque 5)) (PP (IN (a` 6)) (NP (NNP (Mary 2) (Mary 4)))))) '
+			'(SEP (| 3)))\n'
+			'(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) '
+			'(aimes 5)) (NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) '
+			'(SEP (| 3)))\n').splitlines()]
 	sents = [["0"] * len(a.leaves()) for a in trees]
 	for a in trees:
 		treetransforms.binarize(a)

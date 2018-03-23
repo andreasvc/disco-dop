@@ -22,10 +22,10 @@ from .treedist import treedist, newtreedist
 
 SHORTUSAGE = 'Usage: discodop eval <gold> <parses> [param] [options]'
 
-HEADER = '''
-   Sentence                 Matched   Brackets            Corr   POS
-  ID Length  Recall  Precis Bracket   gold   cand  Words  POS  Accur.\
-'''.splitlines()
+HEADER = (
+		'   Sentence                 Matched   Brackets            Corr POS\n'
+		'  ID Length  Recall  Precis Bracket   gold   cand  Words  POS  Accur.'
+		).splitlines()
 
 
 class Evaluator(object):

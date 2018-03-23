@@ -4,10 +4,10 @@ from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
-from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
-		Edge, RankedEdge, Idx, Prob, Label, ItemNo, cellidx, compactcellidx, \
-		sparse_hash_map, sparse_hash_set, Agenda, Whitelist, \
-		SmallChartItem, FatChartItem, CFGtoSmallChartItem, CFGtoFatChartItem
+from .containers cimport (Chart, Grammar, ProbRule, LexicalRule,
+		Edge, RankedEdge, Idx, Prob, Label, ItemNo, cellidx, compactcellidx,
+		sparse_hash_map, sparse_hash_set, Agenda, Whitelist,
+		SmallChartItem, FatChartItem, CFGtoSmallChartItem, CFGtoFatChartItem)
 
 cdef extern from "<cmath>" namespace "std" nogil:
 	bint isfinite(double v)

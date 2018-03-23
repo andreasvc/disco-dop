@@ -203,9 +203,9 @@ where input and output are treebanks; standard in/output is used if not given.
 	from getopt import gnu_getopt, GetoptError
 	from itertools import islice
 	from . import treebank, treebanktransforms
-	from .treetransforms import canonicalize, binarize, \
-			unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes, \
-			introducepreterminals, markovthreshold
+	from .treetransforms import (canonicalize, binarize,
+			unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes,
+			introducepreterminals, markovthreshold)
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
 			'introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
@@ -377,13 +377,13 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 	from .util import openread
 	from .treebank import READERS
 	from .treetransforms import addfanoutmarkers, canonicalize
-	from .grammar import treebankgrammar, dopreduction, doubledop, dop1, \
-			compiletsg, writegrammar, grammarinfo, grammarstats, \
-			splitweight, merge, sumfrags, sumrules, sumlex, stripweight, \
-			addindices
+	from .grammar import (treebankgrammar, dopreduction, doubledop, dop1,
+			compiletsg, writegrammar, grammarinfo, grammarstats,
+			splitweight, merge, sumfrags, sumrules, sumlex, stripweight,
+			addindices)
 	from .parser import readparam
-	from .runexp import loadtraincorpus, getposmodel, dobinarization, \
-			getgrammars
+	from .runexp import (loadtraincorpus, getposmodel, dobinarization,
+			getgrammars)
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 'hs:'
 	options = ('help', 'gzip', 'packed', 'inputfmt=', 'inputenc=',

@@ -7,8 +7,8 @@ from operator import mul, itemgetter
 from itertools import count, islice, repeat
 from collections import defaultdict, Counter, OrderedDict
 import numpy as np
-from .tree import Tree, ParentedTree, ImmutableTree, DiscTree, \
-		escape, unescape, brackettree, writediscbrackettree
+from .tree import (Tree, ParentedTree, ImmutableTree, DiscTree,
+		escape, unescape, brackettree, writediscbrackettree)
 from .treebank import LEAVESRE
 from .util import openread, merge as utilmerge
 from functools import reduce  # pylint: disable=redefined-builtin
@@ -389,14 +389,14 @@ def inducetagfromtsg(elemtrees):
 	"""Given elementary trees from a TSG, heuristically extract a TAG.
 
 	:param elemtrees: a sequence of tuples ``(tree, weight)``.
-	:returns: a tuple ``(init, aux)``, where ``init`` and ``aux`` are
-		a sequence of strings ``tree<TAB>weight`` where ``tree`` is a string in
-		discbracket format and ``weight`` is the weight of the TSG
-		elementary tree of which this TAG elementary tree was extracted from.
+	:returns: a pair of dictionaries ``(init, aux)`` both consisting of
+		``tree, weight`` pairs, where ``tree`` is a string in discbracket
+		format and ``weight`` is the weight of the TSG elementary tree of which
+		this TAG elementary tree was extracted from.
 
-	>>> inducetagfromtsg([('(S (NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) \
-(NP (DT 3=a) (NN 4=plan)))))', 3)])
-	... # doctest: +NORMALIZE_WHITESPACE
+	>>> inducetagfromtsg([(
+	... '(S (NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) (NP (DT 3=a) '
+	... '(NN 4=plan)))))', 3)])  # doctest: +NORMALIZE_WHITESPACE
 	(OrderedDict([('(S (NP (DT 0=a) (NN 1=man)))', 3),
 		('(S (NP (DT 0=a) (NN 1=plan)))', 3)]),
 	OrderedDict([('(NP (NP 0=*) (PP (IN 1=with) (NP (DT 2=a) (NN 3=plan))))',
@@ -411,9 +411,8 @@ def inducetagfromtsg(elemtrees):
 		tree, sent = brackettree(tree)
 		extractedadjunction = False
 		if not all(token is None for token in sent):
-			for footcand in tree.subtrees(lambda n: isinstance(n[0], Tree)):
-				if footcand is tree:
-					continue
+			for footcand in tree.subtrees(
+					lambda n: isinstance(n[0], Tree) and n is not tree):
 				rootcand = footcand
 				while rootcand is not tree:
 					rootcand = rootcand.parent

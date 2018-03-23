@@ -1676,6 +1676,7 @@ class DrawTree(object):
 
 
 class DrawDependencies(object):
+	"""Visualize labeled, directed dependency structures."""
 	def __init__(self, sent, pos, deps):
 		self.sent = sent
 		self.pos = pos
@@ -1683,6 +1684,7 @@ class DrawDependencies(object):
 
 	@classmethod
 	def fromconll(cls, data):
+		""":param data: a string with a dependency structure in CoNLL format."""
 		lines = [line.split() for line in data.strip().splitlines()]
 		return cls(
 			[a[1] for a in lines],

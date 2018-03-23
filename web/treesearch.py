@@ -62,7 +62,7 @@ GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
 EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
 
-COLORS = dict(enumerate('''\
+COLORS = dict(enumerate('''
 		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
 		Aquamarine BlanchedAlmond Brown Burlywood CadetBlue Chartreuse
 		Chocolate Coral Crimson Cyan Firebrick ForestGreen Fuchsia Gainsboro

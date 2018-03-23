@@ -26,8 +26,7 @@ from . import _fragments
 from .util import workerfunc
 from .containers import Vocabulary
 
-SHORTUSAGE = '''\
-Usage: discodop fragments <treebank1> [treebank2] [options]
+SHORTUSAGE = '''Usage: discodop fragments <treebank1> [treebank2] [options]
   or: discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]'''
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'alt',
 		'relfreq', 'adjacent', 'debin', 'debug', 'quiet', 'help')

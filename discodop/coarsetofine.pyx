@@ -6,9 +6,9 @@ from libcpp.algorithm cimport sort
 import re
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
-from .containers cimport Grammar, Chart, Edge, RankedEdge, LexicalRule, \
-		Label, ItemNo, compactcellidx, CFGtoSmallChartItem, \
-		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist
+from .containers cimport (Grammar, Chart, Edge, RankedEdge, LexicalRule,
+		Label, ItemNo, compactcellidx, CFGtoSmallChartItem,
+		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist)
 from .bit cimport nextset, nextunset, anextset, anextunset
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart, CFGItem
 from .plcfrs cimport SmallLCFRSChart, FatLCFRSChart
@@ -58,7 +58,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		map to the discontinuous node NP_2.
 	:param require: optionally, a list of tuples ``(label, indices)``; only
 		k-best derivations containing these labeled spans will be selected.
-		For example. ``('NP', [0, 1, 2])``; expects ``k > 1``.
+		For example, ``('NP', [0, 1, 2])``; expects ``k > 1``.
 	:param block: optionally, a list of tuples ``(label, indices)``;
 		these labeled spans will be pruned.
 	:returns: ``(whitelist, msg)``

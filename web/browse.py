@@ -27,7 +27,7 @@ APP = Flask(__name__)
 STANDALONE = __name__ == '__main__'
 CORPUS_DIR = "corpus/"
 
-COLORS = dict(enumerate('''\
+COLORS = dict(enumerate('''
 		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
 		Aquamarine BlanchedAlmond Brown Burlywood CadetBlue Chartreuse
 		Chocolate Coral Crimson Cyan Firebrick ForestGreen Fuchsia Gainsboro

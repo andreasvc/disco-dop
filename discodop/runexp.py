@@ -18,8 +18,8 @@ import pickle
 from itertools import zip_longest  # pylint: disable=E0611
 import numpy as np
 from . import eval as evalmod
-from . import __version__, treebank, treebanktransforms, treetransforms, \
-		grammar, lexicon, parser, estimates
+from . import (__version__, treebank, treebanktransforms, treetransforms,
+		grammar, lexicon, parser, estimates)
 from .treetransforms import binarizetree
 from .util import workerfunc
 from .containers import Grammar
