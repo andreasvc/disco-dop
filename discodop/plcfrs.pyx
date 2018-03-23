@@ -100,9 +100,10 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		return SmallChartItem(self.start, (1UL << self.lensent) - 1)
 
 	def root(self):
-		if self.itemindex.find(self._root()) == self.itemindex.end():
+		it = self.itemindex.find(self._root())
+		if it == self.itemindex.end():
 			return 0
-		return self.itemindex[self._root()]
+		return dereference(it).second
 
 	cdef Label label(self, ItemNo itemidx):
 		return self.items[itemidx].label
@@ -204,9 +205,10 @@ cdef class FatLCFRSChart(LCFRSChart):
 
 	def root(self):
 		cdef FatChartItem tmp = self._root()
-		if self.itemindex.find(tmp) == self.itemindex.end():
+		it = self.itemindex.find(tmp)
+		if it == self.itemindex.end():
 			return 0
-		return self.itemindex[tmp]
+		return dereference(it).second
 
 	cdef Label label(self, ItemNo itemidx):
 		return self._label(itemidx)  # somehow needed

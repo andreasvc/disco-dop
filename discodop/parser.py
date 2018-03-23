@@ -247,8 +247,14 @@ class Parser(object):
 		:param sent: a sequence of tokens.
 		:param tags: optionally, a list of POS tags as strings to be given
 			to the parser instead of trying all possible tags.
+		:param root: optionally, specify a non-default root label.
 		:param goldtree: if given, will be used to evaluate pruned parse
-			forests."""
+			forests.
+		:param require: optionally, a list of tuples ``(label, indices)``; only
+			parse trees containing these labeled spans will be returned.
+			For example, ``('NP', [0, 1, 2])``.
+		:param block: optionally, a list of tuples ``(label, indices)``;
+			these labeled spans will be pruned."""
 		if 'PUNCT-PRUNE' in (self.transformations or ()):
 			origsent = sent[:]
 			punctprune(None, sent)
@@ -326,7 +332,7 @@ class Parser(object):
 					pass
 				elif stage.mode == 'pcfg':
 					chart, msg1 = pcfg.parse(
-							sent, stage.grammar, tags=tags,
+							sent, stage.grammar, tags=tags, start=root,
 							whitelist=whitelist if stage.prune else None,
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta,
@@ -335,7 +341,7 @@ class Parser(object):
 							postagging=self.postagging)
 				elif stage.mode == 'plcfrs':
 					chart, msg1 = plcfrs.parse(
-							sent, stage.grammar, tags=tags,
+							sent, stage.grammar, tags=tags, start=root,
 							exhaustive=stage.dop or (
 								n + 1 != len(self.stages)
 								and self.stages[n + 1].prune),

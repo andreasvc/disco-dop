@@ -138,6 +138,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 	cdef str treestr, deriv
 	cdef Prob prob, maxprob
 	cdef size_t n
+	cdef ItemNo root = chart.root()
 
 	if method == 'sl-dop':
 		return sldop(chart, sent, tags, k, sldop_n)
@@ -149,13 +150,13 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 		# filter out all derivations which are not shortest
 		if not dopreduction:
 			maxprob = INFINITY
-			for entry in chart.rankededges[chart.root()]:
+			for entry in chart.rankededges[root]:
 				if entry.second < maxprob:
 					maxprob = entry.second
-			for entry in chart.rankededges[chart.root()]:
+			for entry in chart.rankededges[root]:
 				if entry.second == maxprob:
 					entries.push_back(entry)
-			chart.rankededges[chart.root()] = entries
+			chart.rankededges[root] = entries
 		elif chart.derivations:
 			_, maxprob = min(chart.derivations, key=itemgetter(1))
 			chart.derivations = [(deriv, prob)
@@ -163,22 +164,22 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 					if prob == maxprob]
 
 	if not dopreduction:  # Double-DOP
-		for n in range(chart.rankededges[chart.root()].size()):
-			entry = chart.rankededges[chart.root()][n]
+		for n in range(chart.rankededges[root].size()):
+			entry = chart.rankededges[root][n]
 			prob = entry.second
 			try:
-				treestr = recoverfragments_re(
-						entry.first, chart, backtransform)
+				treestr = recoverfragments(
+						root, entry.first, chart, backtransform)
 			except:
 				continue
 				# print(getderiv(
-				# 		chart.root(), entry.first, chart).decode('utf8'))
+				# 		root, entry.first, chart).decode('utf8'))
 				# raise
 			if shortest:
 				# for purposes of tie breaking, calculate the derivation
 				# probability in a different model.
 				newprob = exp(-getderivprob(
-						chart.root(), entry.first, chart, sent))
+						root, entry.first, chart, sent))
 				score = (int(prob / log(0.5)), newprob)
 				if treestr not in derivlen or score > derivlen[treestr]:
 					derivlen[treestr] = score
@@ -194,7 +195,6 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 					derivs[treestr] = n
 	else:  # DOP reduction
 		for n, (deriv, prob) in enumerate(chart.derivations):
-			entry = chart.rankededges[chart.root()][n]
 			if ostag:
 				deriv = removeadjunaries(deriv)
 				treestr = REMOVEDEC.sub('@1' if mpd or shortest else '', deriv)
@@ -203,7 +203,8 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 			else:
 				raise ValueError
 			if shortest:
-				newprob = getderivprob(chart.root(), entry.first, chart, sent)
+				entry = chart.rankededges[root][n]
+				newprob = getderivprob(root, entry.first, chart, sent)
 				score = (int(prob / log(0.5)), exp(-newprob))
 				if treestr not in derivlen or (not dopreduction
 						and score > derivlen[treestr]):
@@ -237,7 +238,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 		else:
 			results = [(treestr, (-a, b),
 					fragmentsinderiv_re(
-						chart.rankededges[chart.root()][derivs[treestr]].first,
+						root, chart.rankededges[root][derivs[treestr]].first,
 						chart, backtransform))
 					for treestr, (a, b) in derivlen.items()]
 	elif mpd:
@@ -248,7 +249,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 		else:
 			results = [(treestr, exp(prob),
 					fragmentsinderiv_re(
-						chart.rankededges[chart.root()][derivs[treestr]].first,
+						root, chart.rankededges[root][derivs[treestr]].first,
 						chart, backtransform))
 					for treestr, prob in mpdtrees.items()]
 	elif dopreduction:
@@ -265,12 +266,12 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 			probs = it.second
 			results.append((treestr, logprobsum(probs),
 					fragmentsinderiv_re(
-						chart.rankededges[chart.root()][derivs[treestr]].first,
+						root, chart.rankededges[root][derivs[treestr]].first,
 						chart, backtransform)))
 
 	msg = '%d derivations, %d parsetrees' % (
 			len(chart.derivations) if dopreduction
-				else chart.rankededges[chart.root()].size(),
+				else chart.rankededges[root].size(),
 			len(mpdtrees) or len(derivlen) or mpptrees.size())
 	if require or block:
 		results = [(treestr, score, frags) for treestr, score, frags in results
@@ -309,6 +310,7 @@ cdef maxconstituentsparse(Chart chart, double labda, set labels=None):
 	cdef object span, leftspan, rightspan, maxleft  # bitsets as Python ints
 	cdef list backtransform = chart.grammar.backtransform
 	cdef list derivations = []
+	cdef ItemNo root = chart.root()
 	# FIXME: optimize datastructures
 	# table[start][spanlen][span][label] = prob
 	table = [[defaultdict(dict)
@@ -319,10 +321,10 @@ cdef maxconstituentsparse(Chart chart, double labda, set labels=None):
 		for deriv, prob in chart.derivations:
 			derivations.append((REMOVEIDS.sub('', deriv), prob))
 	else:
-		for n in range(chart.rankededges[chart.root()].size()):
-			entry = chart.rankededges[chart.root()][n]
+		for n in range(chart.rankededges[root].size()):
+			entry = chart.rankededges[root][n]
 			derivations.append((
-					recoverfragments_re(entry.first, chart, backtransform),
+					recoverfragments(root, entry.first, chart, backtransform),
 					entry.second))
 	# get marginal probabilities
 	for treestr, prob in derivations:
@@ -430,6 +432,7 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 	cdef pair[RankedEdge, Prob] entry
 	cdef Chart chart2
 	cdef int n
+	cdef ItemNo root = chart.root()
 	# collect derivations for each parse tree
 	derivsfortree = defaultdict(set)
 	if backtransform is None:
@@ -437,11 +440,11 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 		for deriv in derivations:
 			derivsfortree[REMOVEIDS.sub('', deriv)].add(deriv)
 	else:
-		for entry in chart.rankededges[chart.root()]:
-			deriv = <bytes>getderiv(chart.root(), entry.first, chart).decode('utf8')
+		for entry in chart.rankededges[root]:
+			deriv = <bytes>getderiv(root, entry.first, chart).decode('utf8')
 			derivations[deriv] = entry.second
-			derivsfortree[recoverfragments_re(entry.first, chart,
-					backtransform)].add(deriv)
+			derivsfortree[recoverfragments(
+					root, entry.first, chart, backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
 	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
 			for tree, ds in derivsfortree.items()}
@@ -455,12 +458,14 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 	if not chart2:
 		return [], 'SL-DOP couldn\'t find parse for tree'
 	result = {}
+	root = chart2.root()
 	for n, (deriv, s) in enumerate(shortestderivations):
-		entry = chart2.rankededges[chart2.root()][n]
+		entry = chart2.rankededges[root][n]
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
-			treestr = recoverfragments_re(entry.first, chart2, backtransform)
+			treestr = recoverfragments(
+					root, entry.first, chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (-abs(int(s / log(0.5))), parsetreeprob[treestr])
 			if backtransform is None:
@@ -468,7 +473,7 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 						deriv, chart2, backtransform)
 			else:
 				derivs[treestr] = fragmentsinderiv_re(
-						entry.first, chart2, backtransform)
+						root, entry.first, chart2, backtransform)
 			if len(result) > sldop_n:
 				break
 	chart.grammar.switch(model, logprob=True)
@@ -492,6 +497,7 @@ cdef sldop_simple(int sldop_n, Chart chart):
 	cdef dict derivs = {}, keys = {}
 	cdef list backtransform = chart.grammar.backtransform
 	cdef int n
+	cdef ItemNo root = chart.root()
 	derivsfortree = defaultdict(set)
 	# collect derivations for each parse tree
 	if backtransform is None:
@@ -500,11 +506,11 @@ cdef sldop_simple(int sldop_n, Chart chart):
 			tree = REMOVEIDS.sub('', deriv)
 			derivsfortree[tree].add(deriv)
 	else:
-		for n in range(<signed>chart.rankededges[chart.root()].size()):
-			entry = chart.rankededges[chart.root()][n]
-			deriv = <bytes>getderiv(chart.root(), entry.first, chart).decode('utf8')
+		for n in range(<signed>chart.rankededges[root].size()):
+			entry = chart.rankededges[root][n]
+			deriv = <bytes>getderiv(root, entry.first, chart).decode('utf8')
 			deriv = str(unbinarize(Tree(deriv), childchar='}'))
-			tree = recoverfragments_re(entry.first, chart, backtransform)
+			tree = recoverfragments(root, entry.first, chart, backtransform)
 			keys[deriv] = n
 			derivations[deriv] = entry.second
 			derivsfortree[tree].add(deriv)
@@ -530,15 +536,15 @@ cdef sldop_simple(int sldop_n, Chart chart):
 					chart, backtransform)
 		else:
 			derivs[tree] = fragmentsinderiv_re(
-					chart.rankededges[chart.root()][keys[deriv]].first,
+					root, chart.rankededges[root][keys[deriv]].first,
 					chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return [(tree, result[tree], derivs[tree]) for tree in result], msg
 
 
-cdef str recoverfragments_re(
-		RankedEdge deriv, Chart chart, list backtransform):
+cdef str recoverfragments(ItemNo root, RankedEdge deriv, Chart chart,
+		list backtransform):
 	"""Reconstruct a DOP derivation from a derivation with flattened fragments.
 
 	:param deriv: a RankedEdge representing a derivation.
@@ -554,11 +560,16 @@ cdef str recoverfragments_re(
 	(containing the string '}<'). Note that this means getmapping() has to have
 	been called on `chart.grammar`, even when not doing coarse-to-fine
 	parsing."""
-	result = recoverfragments_re_(chart.root(), deriv, chart, backtransform)
+	if deriv.edge.rule is NULL:
+		return '(%s %d)' % (
+				chart.grammar.tolabel[chart.label(root)],
+				chart.lexidx(deriv.edge))
+	else:
+		result = recoverfragments_(root, deriv, chart, backtransform)
 	return REMOVEWORDTAGS.sub('', result)
 
 
-cdef str recoverfragments_re_(ItemNo v, RankedEdge deriv, Chart chart,
+cdef str recoverfragments_(ItemNo v, RankedEdge deriv, Chart chart,
 		list backtransform):
 	cdef RankedEdge child
 	cdef list children = []
@@ -602,7 +613,7 @@ cdef str recoverfragments_re_(ItemNo v, RankedEdge deriv, Chart chart,
 					chart.lexidx(child.edge)))
 		else:
 			children.append(
-					recoverfragments_re_(v, child, chart, backtransform))
+					recoverfragments_(v, child, chart, backtransform))
 
 	# substitute results in template
 	try:  # FIXME for debugging only
@@ -633,12 +644,14 @@ cdef str recoverfragments_re_(ItemNo v, RankedEdge deriv, Chart chart,
 	# 	result += frag[n + 1]
 
 
-cdef fragmentsinderiv_re(RankedEdge deriv, chart, list backtransform):
+cdef fragmentsinderiv_re(ItemNo root, RankedEdge deriv, chart,
+		list backtransform):
 	"""Extract the list of fragments that were used in a given derivation.
 
 	:returns: a list of (fragment, weight) in discbracket format."""
 	result = []
-	fragmentsinderiv_re_(chart.root(), deriv, chart, backtransform, result)
+	if deriv.edge.rule is not NULL:
+		fragmentsinderiv_re_(root, deriv, chart, backtransform, result)
 	return [(_fragments.pygetsent(frag), w) for frag, w in result]
 
 
@@ -719,16 +732,21 @@ cdef fragmentsinderiv_re_(ItemNo v, RankedEdge deriv, Chart chart,
 		if child.edge.rule is not NULL:
 			fragmentsinderiv_re_(v, child, chart, backtransform, result)
 		elif '@' not in chart.grammar.tolabel[chart.label(v)]:
-			lexruleno = chart.lexruleno(v, child.edge)
+			try:
+				lexruleno = chart.lexruleno(v, child.edge)
+				lexcount = chart.grammar.lexcounts[lexruleno]
+				lexprob = chart.lexprob(v, child.edge)
+			except ValueError:
+				lexcount = lexprob = 0
 			result.append((
 				'(%s %d=%s)' % (
 					chart.grammar.tolabel[chart.label(v)],
 					chart.lexidx(child.edge),
 					chart.sent[chart.lexidx(child.edge)]),
 				'rel. freq: %g/%g; weight: %g' % (
-					chart.grammar.lexcounts[lexruleno],
+					lexcount,
 					chart.grammar.freqmass[chart.label(v)],
-					chart.lexprob(v, child.edge))))
+					lexprob)))
 
 
 def frontiernt(node):
@@ -836,10 +854,7 @@ cdef Prob getderivprob(ItemNo v, RankedEdge deriv, Chart chart, list sent):
 	cdef Prob result
 	cdef ItemNo v1
 	if deriv.edge.rule is NULL:  # is terminal
-		label = chart.label(v)
-		word = sent[chart.lexidx(deriv.edge)]
-		return chart.grammar.lexical[
-				chart.grammar.lexicalbylhs[label][word.encode('utf8')]].prob
+		return chart.lexprob(v, deriv.edge)
 	result = deriv.edge.rule.prob
 	v1 = chart.left(v, deriv)
 	result += getderivprob(
@@ -916,7 +931,6 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 		if it == fine.lexicalbyword.end():
 			cell[fine.toid[pos]] = -0.0
 			continue
-		# for lexruleno in fine.lexicalbyword[word]:
 		for lexruleno in dereference(it).second:
 			lexrule = fine.lexical[lexruleno]
 			if (fine.tolabel[lexrule.lhs] == pos
