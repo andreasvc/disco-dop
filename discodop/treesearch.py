@@ -512,9 +512,11 @@ class FragmentSearcher(CorpusSearcher):
 		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
 
 	def close(self):
-		del self.vocab
-		del self.files
-		self.files = None
+		if hasattr(self.vocab, 'close'):
+			self.vocab.close()
+		for a in self.files:
+			a.close()
+		self.vocab = self.files = None
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
 			breakdown=False):
@@ -807,7 +809,8 @@ class RegexSearcher(CorpusSearcher):
 				fileno, buf = val
 				buf.close()
 				os.close(fileno)
-		del self.lineindex
+		if hasattr(self.lineindex, 'close'):
+			self.lineindex.close()
 		self.files = None
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
@@ -1049,6 +1052,8 @@ def _regex_run_query(pattern, filename, fileno, lineidxpath,
 		finally:
 			if isinstance(data, mmap.mmap):
 				data.close()
+			if hasattr(mrb, 'close'):
+				mrb.close()
 			del mrb
 	return result
 
@@ -1094,6 +1099,8 @@ def _regex_run_batch(patterns, filename, fileno, lineidxpath,
 								data, startidx, endidx)))
 		finally:
 			data.close()
+			if hasattr(mrb, 'close'):
+				mrb.close()
 			del mrb
 	return result
 
