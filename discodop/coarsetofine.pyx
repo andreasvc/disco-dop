@@ -119,14 +119,14 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		items = [n for n in range(coarsechart.parseforest.size())
 				if coarsechart.parseforest[n].size() != 0]
 		msg = ('coarse items before pruning: %d; after filter: %d'
-				% (coarsechart.parseforest.size(), len(items)))
+				% (coarsechart.numitems(), len(items)))
 	elif k >= 1:  # construct a list of the k-best chart items to prune with
 		lazykbest(coarsechart, k, derivs=False)
 		items = [n for n in range(coarsechart.rankededges.size())
 				if coarsechart.rankededges[n].size() != 0]
 		msg = ('coarse items before pruning: %d; after: %d, '
 				'based on %d/%d derivations' % (
-				coarsechart.parseforest.size(), len(items),
+				coarsechart.numitems(), len(items),
 				min(coarsechart.rankededges[coarsechart.root()].size(), k), k))
 	else:
 		raise ValueError('invalid value for k parameter.')
@@ -199,9 +199,9 @@ def posteriorthreshold(Chart chart, double threshold):
 			in range(chart.inside.size())
 			if chart.inside[itemidx] * chart.outside[itemidx] > threshold]
 
-	unfiltered = chart.numitems() - 1
+	unfiltered = chart.numitems()
 	numitems = 0
-	for itemidx in range(1, chart.numitems()):
+	for itemidx in range(1, chart.numitems() + 1):
 		numitems += chart.outside[itemidx] != 0.0
 	numremain = len(posterior)
 	msg = ('coarse items before pruning=%d; filtered: %d;'
@@ -227,7 +227,7 @@ def getinside(Chart chart):
 	chart.inside.resize(chart.probs.size(), 0.0)
 
 	# traverse items in bottom-up order
-	for n in range(1, chart.numitems()):
+	for n in range(1, chart.numitems() + 1):
 		item = chart.getitemidx(n)
 		for edge in chart.parseforest[item]:
 			if edge.rule is NULL:
@@ -255,7 +255,7 @@ def getoutside(Chart chart):
 	# traverse items in top-down order
 	chart.outside.resize(chart.probs.size(), 0.0)
 	chart.outside[chart.root()] = 1.0
-	for n in range(chart.numitems() - 1, 0, -1):
+	for n in range(chart.numitems(), 0, -1):
 		item = chart.getitemidx(n)
 		# can we define outside[item] simply as sentprob - inside[item] ?
 		# chart.outside[item] = sentprob - chart.inside[item]

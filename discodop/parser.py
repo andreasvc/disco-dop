@@ -389,8 +389,7 @@ class Parser(object):
 							' '.join(sent), n, stage.name)
 					# raise ValueError('ERROR: expected successful parse. '
 					# 		'sent %s, %s.' % (nsent, stage.name))
-			numitems = (chart.numitems() - 1
-					if hasattr(chart, 'numitems') else 0)
+			numitems = chart.numitems() if hasattr(chart, 'numitems') else 0
 
 			if self.verbosity >= 3 and chart:
 				print('sent: %s\nstage: %s' % (' '.join(sent), stage.name))

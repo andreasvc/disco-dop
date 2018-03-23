@@ -70,7 +70,7 @@ cdef class DenseCFGChart(CFGChart):
 
 	def root(self):
 		return cellidx(0, self.lensent, self.lensent,
-				self.grammar.nonterminals) + self.start
+			self.grammar.nonterminals) + self.start
 
 	cdef void addedge(self, uint64_t item, Idx mid, ProbRule *rule):
 		"""Add new edge to parse forest."""
@@ -156,7 +156,7 @@ cdef class DenseCFGChart(CFGChart):
 		return '%s[%d:%d]' % (self.grammar.tolabel[lhs], start, end)
 
 	def numitems(self):
-		return self.items.size()
+		return self.items.size() - 1
 
 	cdef ItemNo getitemidx(self, uint64_t n):
 		"""Get itemidx of n'th item.

@@ -142,8 +142,8 @@ cdef class Chart:
 		return 0 if self.logprob else 1
 
 	def numitems(self):
-		"""Number of items in chart; NB: this includes 1 sentinel item."""
-		return self.parseforest.size()
+		"""Number of items in chart."""
+		return self.parseforest.size() - 1
 
 	def itemid(self, str label, indices, Whitelist whitelist=None):
 		"""Get integer ID for labeled span in the chart (0 if non-existent)."""
@@ -168,7 +168,7 @@ cdef class Chart:
 		if self.parseforest.size() == 0:
 			return
 		_filtersubtree(self, self.root(), itemstokeep)
-		for item in {self.getitemidx(n) for n in range(1, self.numitems())
+		for item in {self.getitemidx(n) for n in range(1, self.numitems() + 1)
 				} - itemstokeep:
 			self.parseforest[item].clear()
 
@@ -194,8 +194,10 @@ cdef class Chart:
 		cdef uint64_t n, m
 		cdef ItemNo item
 		result = []
-		for n in range(1, self.numitems()):
+		for n in range(1, self.numitems() + 1):
 			item = self.getitemidx(n)
+			# if self.parseforest[item].size() == 0:
+			# 	continue
 			result.append(' '.join((
 					self.itemstr(item).ljust(20),
 					('vitprob=%g' % (
@@ -209,7 +211,7 @@ cdef class Chart:
 				result.append('\t=> %s' % self.edgestr(item, edge))
 		if self.rankededges.size():
 			result.append('\nranked edges:')
-			for n in range(1, self.numitems()):
+			for n in range(1, self.numitems() + 1):
 				item = self.getitemidx(n)
 				if self.rankededges[item].size() == 0:
 					continue
@@ -228,11 +230,11 @@ cdef class Chart:
 	def stats(self):
 		"""Return a short string with counts of items, edges."""
 		return 'items %d, edges %d' % (
-				self.numitems() - 1,
+				self.numitems(),
 				sum([self.parseforest[self.getitemidx(n)].size()
-					for n in range(1, self.numitems())]))
+					for n in range(1, self.numitems() + 1)]))
 		# more stats:
-		# labels: len({self.label(item) for item in range(1, self.numitems())}),
+		# labels: len({self.label(item) for item in range(1, self.numitems() + 1)}),
 		# spans: ...
 
 
