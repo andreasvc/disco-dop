@@ -283,7 +283,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 def testconstraints(treestr, require, block):
 	"""Test whether tree satisfies constraints of required/blocked sets of
 	labeled spans."""
-	spans = {(node.label, tuple(node.leaves()))
+	spans = {(node.label, tuple(sorted(node.leaves())))
 			for node in ImmutableTree(
 				REMOVESTATESPLITS.sub(r'\1 ', treestr)).subtrees()}
 	return spans.issuperset(require) and spans.isdisjoint(block)
