@@ -239,9 +239,26 @@ struct RuleHasher {
 };
 
 struct LexicalRule {
-	// std::string word;
 	Prob prob;
 	Label lhs;
+};
+// comparison function instantiated with a vector of LexicalRules to sort a
+// list of indices to that vector by the lhs attributes of the rules.
+class LexCmp {
+	std::vector<LexicalRule>& lexical;
+public:
+    LexCmp(std::vector<LexicalRule>& v) : lexical(v) {}
+    bool operator()(uint32_t a, uint32_t b) {
+        return lexical[a].lhs < lexical[b].lhs;
+    }
+};
+class LexLabelCmp {
+	std::vector<LexicalRule>& lexical;
+public:
+    LexLabelCmp(std::vector<LexicalRule>& v): lexical(v) {}
+    bool operator()(uint32_t a, Label b) {
+        return lexical[a].lhs < b;
+    }
 };
 
 // Given an edge in a particular cell, the left child position is enough to

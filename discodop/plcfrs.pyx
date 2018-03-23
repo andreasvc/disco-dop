@@ -757,8 +757,7 @@ cdef populatepos(Grammar grammar,
 		# NB: use gold tags if given, even if (word, tag) was not part of
 		# training data, modulo state splits etc.
 		if not recognized and tag is not None:
-			for x in grammar.lexicalbylhs:
-				lhs = x.first
+			for lhs in grammar.lexicallhs:
 				if tagre.match(grammar.tolabel[lhs]) is not None:
 					score = 0.0
 					if estimatetype == SX:

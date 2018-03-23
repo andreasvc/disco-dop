@@ -112,6 +112,204 @@ cdef class Grammar:
 		self.addrules(rules, lexicon, init=True)
 		del rules, lexicon
 
+	def tobinfile(self, filename):
+		"""Store grammar in a binary format for faster loading."""
+		cdef array buf
+		cdef char *ptr
+		cdef ProbRule *ruleptr
+		cdef uint64_t *header
+		cdef size_t idx, n
+		cdef string word
+		cdef size_t buflen = (4 * sizeof(uint64_t)  # header
+				+ sum(label.size() + 1 for label in self.tolabel.ob)
+				+ (self.freqmass.size()) * sizeof(Prob)  # freqmass
+				+ self.numrules * sizeof(ProbRule)
+				+ self.lexical.size() * sizeof(LexicalRule)
+				+ sum(it.first.size() + 1
+					+ (it.second.size() + 1) * sizeof(uint32_t)
+					for it in self.lexicalbyword))
+		buf = clone(chararray, buflen,
+				False)
+		ptr = buf.data.as_chars
+		header = <uint64_t *>ptr
+		# header: numlabels, numrules, numlex
+		header[0] = self.tolabel.ob.size()
+		header[1] = self.numrules
+		header[2] = self.lexical.size()
+		header[3] = self.lexicalbyword.size()
+		idx = 4 * sizeof(uint64_t)
+		# copy freq mass
+		memcpy(&ptr[idx], &self.freqmass[0],
+				self.freqmass.size() * sizeof(Prob))
+		idx += self.freqmass.size() * sizeof(Prob)
+		# copy bylhs; change prob to freq
+		memcpy(&ptr[idx], &self._bylhs[0], self.numrules * sizeof(ProbRule))
+		ruleptr = <ProbRule *>&ptr[idx]
+		for n in range(self.numrules):
+			ruleptr[n].prob = self.rulecounts[ruleptr[n].no]
+		idx += self.numrules * sizeof(ProbRule)
+		# copy lexicon; change prob to freq; add word
+		# flat list of lexical prods
+		memcpy(&ptr[idx], &self.lexical[0],
+				self.lexical.size() * sizeof(LexicalRule))
+		lexruleptr = <LexicalRule *>&ptr[idx]
+		for n in range(self.lexical.size()):
+			lexruleptr[n].prob = self.lexcounts[n]
+		idx += self.lexical.size() * sizeof(LexicalRule)
+		# copy labels
+		for label in self.tolabel.ob:
+			memcpy(&ptr[idx], label.c_str(), label.size() + 1)
+			idx += label.size() + 1
+		# list of words
+		for it in self.lexicalbyword:
+			word = it.first
+			memcpy(&ptr[idx], word.c_str(), word.size() + 1)
+			idx += word.size() + 1
+		# for each word #rules, lex rulenos
+		for it in self.lexicalbyword:
+			(<uint32_t *>&ptr[idx])[0] = it.second.size()
+			idx += sizeof(uint32_t)
+			for n in it.second:
+				(<uint32_t *>&ptr[idx])[0] = n
+				idx += sizeof(uint32_t)
+		assert idx == buflen, (idx, buflen)
+		buf.frombytes(pickle.dumps(self.tblabelmapping))
+		with open(filename, 'wb') as outfile:
+			buf.tofile(outfile)
+
+	@classmethod
+	def frombinfile(cls, filename, rulesfile, lexiconfile, backtransform=None):
+		"""Load grammar from cached binary file.
+
+		:param filename: file produced by tobinfile() method; format subject to
+			change, recreate as needed.
+		:param rulesfile: original grammar file, used only when pickling."""
+		cdef Grammar ob = Grammar.__new__(Grammar)
+		cdef bytes data
+		cdef char *ptr
+		cdef uint64_t *header
+		cdef size_t idx, n
+		cdef string word
+		cdef ProbRule cur
+		cdef Rule key
+		cdef vector[string] words
+
+		# initialization
+		ob.rulesfile = rulesfile
+		ob.lexiconfile = lexiconfile
+		ob.backtransform = backtransform
+		ob.toid = StringIntDict()
+		ob.tolabel = StringList()
+		ob.numunary = ob.numbinary = 0
+		ob.maxfanout = 1
+		ob.logprob = True
+		ob.bitpar = False
+		ob.models = {}
+		ob.altweightsfile = ob.ruletuples = None
+		# read file
+		with open(filename, 'rb') as inp:
+			data = inp.read()
+			buflen = inp.tell()
+		ptr = <char *>data
+		header = <uint64_t *>ptr
+		idx = 4 * sizeof(uint64_t)
+		ob.nonterminals = header[0]
+		ob.fanout.push_back(0)
+		ob.fanout.resize(ob.nonterminals, 1)
+		# copy freq mass
+		ob.numrules = header[1]
+		ob.freqmass.resize(ob.nonterminals)
+		memcpy(&ob.freqmass[0], &ptr[idx], ob.freqmass.size() * sizeof(Prob))
+		idx += ob.freqmass.size() * sizeof(Prob)
+		# copy bylhs; change prob to freq
+		ob._bylhs.resize(ob.numrules)
+		ob.rulecounts.resize(ob.numrules)
+		memcpy(&ob._bylhs[0], &ptr[idx], ob.numrules * sizeof(ProbRule))
+		idx += ob.numrules * sizeof(ProbRule)
+		for n in range(ob.numrules):
+			ob.rulecounts[ob._bylhs[n].no] = ob._bylhs[n].prob
+			ob._bylhs[n].prob = fabs(log(ob._bylhs[n].prob
+					/ ob.freqmass[ob._bylhs[n].lhs]))
+			ob.fanout[ob._bylhs[n].lhs] = bit_popcount(
+					<uint64_t>ob._bylhs[n].lengths)
+			if ob.fanout[ob._bylhs[n].lhs] > ob.maxfanout:
+				ob.maxfanout = ob.fanout[ob._bylhs[n].lhs]
+			if ob._bylhs[n].rhs2:
+				ob._lbinary.push_back(ob._bylhs[n])
+				ob._rbinary.push_back(ob._bylhs[n])
+				ob.numbinary += 1
+			elif ob._bylhs[n].rhs1:
+				ob._unary.push_back(ob._bylhs[n])
+				ob.numunary += 1
+		assert ob.numrules == ob.numunary + ob.numbinary
+		# sentinel rules
+		cur.lhs = cur.rhs1 = cur.rhs2 = cur.prob = cur.lengths = cur.args = 0
+		ob._bylhs.push_back(cur)
+		ob._unary.push_back(cur)
+		ob._lbinary.push_back(cur)
+		ob._rbinary.push_back(cur)
+		# copy lexical rules
+		ob.lexical.resize(header[2])
+		ob.lexcounts.resize(header[2])
+		memcpy(&ob.lexical[0], &ptr[idx], header[2] * sizeof(LexicalRule))
+		idx += header[2] * sizeof(LexicalRule)
+		for n in range(ob.lexical.size()):
+			ob.lexcounts[n] = ob.lexical[n].prob
+			ob.lexical[n].prob = fabs(log(ob.lexical[n].prob
+					/ ob.freqmass[ob.lexical[n].lhs]))
+		# copy labels
+		ob.tolabel.ob.resize(header[0])
+		ob.toid.ob.reserve(header[0])
+		for n in range(header[0]):
+			ob.tolabel.ob[n] = string(&ptr[idx])
+			ob.toid.ob[ob.tolabel.ob[n]] = n
+			idx += ob.tolabel.ob[n].size() + 1
+		ob.start = ob.tolabel[1]
+		# copy words
+		for n in range(header[3]):
+			word = string(&ptr[idx])
+			idx += word.size() + 1
+			words.push_back(word)
+		ob.lexicalbyword.reserve(header[3])
+		for n in range(header[3]):
+			numlexrules = (<uint32_t *>&ptr[idx])[0]
+			idx += sizeof(uint32_t)
+			word = words[n]
+			ob.lexicalbyword[word].reserve(numlexrules)
+			for _ in range(numlexrules):
+				lexruleno = (<uint32_t *>&ptr[idx])[0]
+				idx += sizeof(uint32_t)
+				ob.lexicalbyword[word].push_back(lexruleno)
+				ob.lexicallhs.insert(ob.lexical[lexruleno].lhs)
+		ob.currentmodel = 'default'
+
+		ob.bylhs.resize(ob.nonterminals)
+		ob.unary.resize(ob.nonterminals)
+		ob.lbinary.resize(ob.nonterminals)
+		ob.rbinary.resize(ob.nonterminals)
+		ob.bylhs[0] = &(ob._bylhs[0])
+		ob.unary[0] = &(ob._unary[0])
+		ob.lbinary[0] = &(ob._lbinary[0])
+		ob.rbinary[0] = &(ob._rbinary[0])
+
+		ob._indexrules(ob.bylhs, 0, 0, ob.numrules)  # already sorted
+		ob._indexrules(ob.unary, 1, 2, 0)
+		ob._indexrules(ob.lbinary, 1, 3, 0)
+		ob._indexrules(ob.rbinary, 2, 3, 0)
+
+		ob.revrulemap.resize(ob.numrules)
+		for n in range(ob.numrules):
+			ob.revrulemap[ob._bylhs[n].no] = n
+		ob.rulenos.reserve(ob.numrules)
+		for n in range(ob.numrules):
+			cur = ob._bylhs[n]
+			key.lhs, key.rhs1, key.rhs2 = cur.lhs, cur.rhs1, cur.rhs2
+			key.args, key.lengths = cur.args, cur.lengths
+			ob.rulenos[key] = cur.no
+
+		ob.tblabelmapping = pickle.loads(data[idx:])
+		return ob
+
 	def addrules(self, bytes rules, bytes lexicon, backtransform=None,
 			init=False):
 		"""Update weights and add new rules."""
@@ -164,7 +362,7 @@ cdef class Grammar:
 		# check whether RHS labels occur as LHS of phrasal and/or lexical rule
 		for lhs in range(1, self.nonterminals):
 			if (self.bylhs[lhs][0].lhs != lhs and
-					self.lexicalbylhs.find(lhs) == self.lexicalbylhs.end()):
+					self.lexicallhs.find(lhs) == self.lexicallhs.end()):
 				raise ValueError('symbol %r has not been seen as LHS '
 					'in any rule.' % self.tolabel[lhs])
 		self._indexrules(self.unary, 1, 2, orignumunary)
@@ -359,7 +557,6 @@ cdef class Grammar:
 			lineno += 1
 
 		self.numrules = self.numunary + self.numbinary
-		self.phrasalnonterminals = self.toid.ob.size()
 		# sentinel rules
 		cur.lhs = cur.rhs1 = cur.rhs2 = cur.prob = cur.lengths = cur.args = 0
 		self._bylhs.push_back(cur)
@@ -379,7 +576,9 @@ cdef class Grammar:
 		cdef string tag, weight
 		cdef string word
 		cdef LexicalRule lexrule
-		cdef uint32_t lexruleno
+		cdef uint32_t lexruleno, m
+		cdef vector[uint32_t].iterator first
+		cdef size_t orignumrules
 
 		while True:
 			fields.clear()
@@ -397,6 +596,7 @@ cdef class Grammar:
 					!= self.lexicalbyword.end()):
 				raise ValueError('word %r appears more than once '
 						'in lexicon file' % unescape(word.decode('utf8')))
+			orignumrules = self.lexicalbyword[word].size()
 			for n in range(1, fields.size()):
 				x = fields[n].find_first_of(ord(b' '))
 				if x > fields[n].size():
@@ -425,20 +625,33 @@ cdef class Grammar:
 					raise ValueError('weights should be positive '
 							'and non-zero:\n%r'
 							% prev[:buf - prev].decode('utf8'))
-				it1 = self.lexicalbylhs[lexrule.lhs].find(word)
-				if it1 == self.lexicalbylhs[lexrule.lhs].end():  # new rule
+				it1 = self.lexicalbyword.find(word)
+				found = False
+				if it1 != self.lexicalbyword.end():
+					for lexruleno in dereference(it1).second:
+						if self.lexical[lexruleno].lhs == lexrule.lhs:
+							# update weight
+							self.lexcounts[lexruleno] += w
+							found = True
+							break
+				if not found:
 					lexruleno = self.lexical.size()
 					lexrule.prob = w  # fabs(log(w))
 					self.lexcounts.push_back(w)
 					self.lexical.push_back(lexrule)
+					self.lexicallhs.insert(lexrule.lhs)
 					self.lexicalbyword[word].push_back(lexruleno)
-					self.lexicalbylhs[lexrule.lhs][word] = lexruleno
-				else:  # update weight
-					lexruleno = dereference(it1).second
-					self.lexcounts[lexruleno] += w
 				self.freqmass[lexrule.lhs] += w
-			if self.lexical.size() == 0:
-				raise ValueError('no lexical rules found.')
+			first = self.lexicalbyword[word].begin()
+			m = self.lexicalbyword[word].size()
+			# sort new rules for this word
+			stdsort(first + orignumrules, first + m, LexCmp(self.lexical))
+			# merge sorted new rules with existing sorted rules
+			inplace_merge(
+					first, first + orignumrules, first + m,
+					LexCmp(self.lexical))
+		if self.lexical.size() == 0:
+			raise ValueError('no lexical rules found.')
 
 	cdef _indexrules(Grammar self, vector[ProbRule *]& dest, int idx,
 			int filterlen, int orignumrules):
@@ -796,15 +1009,19 @@ cdef class Grammar:
 
 	def getpos(self):
 		"""Return POS tags in lexicon as list."""
-		return [self.tolabel.ob[it.first].decode('utf8')
-				for it in self.lexicalbylhs]
+		return [self.tolabel.ob[lhs].decode('utf8')
+				for lhs in self.lexicallhs]
 
 	def getwords(self):
 		"""Return words in lexicon as list."""
 		return [x.first.decode('utf8') for x in self.lexicalbyword]
 
+	def getlabels(self):
+		"""Return grammar labels as list."""
+		return [x.decode('utf8') for x in self.tolabel.ob][1:]
+
 	def getlexprobs(self, str word):
-		"""Return a list of probabilities for a word."""
+		"""Return the list of probabilities of rules for a word."""
 		it = self.lexicalbyword.find(word.encode('utf8'))
 		if it == self.lexicalbyword.end():
 			return []

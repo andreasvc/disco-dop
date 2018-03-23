@@ -4,6 +4,7 @@ import io
 import os
 import re
 import mmap
+import pickle
 import logging
 import numpy as np
 from array import array
@@ -16,6 +17,11 @@ cimport cython
 from cython.operator cimport dereference
 from libc.string cimport strchr
 from libc.stdio cimport FILE, fopen, fread, fclose
+
+cdef extern from "<algorithm>" namespace "std" nogil:
+	Iter lower_bound[Iter, T, Compare](
+			Iter first, Iter last, const T& value, Compare comp)
+
 include "constants.pxi"
 
 cdef array chararray = array('b')
@@ -112,12 +118,20 @@ cdef class Chart:
 		"""Return lexical rule number given a lexical edge."""
 		cdef Label label = self.label(itemidx)
 		cdef string word = self.sent[self.lexidx(edge)].encode('utf8')
-		it = self.grammar.lexicalbylhs.find(label)
-		if it != self.grammar.lexicalbylhs.end():
-			it2 = dereference(it).second.find(word)
-			if it2 != dereference(it).second.end():
-				return dereference(it2).second
-		raise ValueError
+		it = self.grammar.lexicalbyword.find(word)
+		if it == self.grammar.lexicalbyword.end():
+			raise ValueError('unknown word: %r' % word)
+		# do binary search among rules for word for rule with given lhs
+		it2 = lower_bound(
+				dereference(it).second.begin(),
+				dereference(it).second.end(),
+				label,
+				LexLabelCmp(self.grammar.lexical))
+		if it2 != dereference(it).second.end():
+			n = dereference(it2)
+			if self.grammar.lexical[n].lhs == label:
+				return n
+		raise ValueError('no lexical rule found for %r, %r' % (label, word))
 
 	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1:
 		"""Return lexical probability given a lexical edge."""

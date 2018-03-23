@@ -187,7 +187,12 @@ cdef extern from "_containers.h" nogil:
 	cdef cppclass LexicalRule:
 		Prob prob
 		Label lhs
-		string word
+	cdef cppclass LexCmp:
+		LexCmp(vector[LexicalRule]& v)
+		bool operator()(uint32_t a, uint32_t b)
+	cdef cppclass LexLabelCmp:
+		LexLabelCmp(vector[LexicalRule]& v)
+		bool operator()(uint32_t a, Label b)
 	cdef union Position:
 		short mid
 		uint64_t lvec
@@ -535,7 +540,7 @@ cdef class Grammar:
 	cdef RuleHashMap[uint32_t] rulenos
 	cdef vector[LexicalRule] lexical
 	cdef sparse_hash_map[string, vector[uint32_t]] lexicalbyword
-	cdef sparse_hash_map[Label, sparse_hash_map[string, uint32_t]] lexicalbylhs
+	cdef sparse_hash_set[uint32_t] lexicallhs
 	cdef readonly list backtransform
 	cdef vector[uint64_t] mask
 	cdef vector[uint8_t] fanout
@@ -548,7 +553,7 @@ cdef class Grammar:
 	cdef vector[vector[Label]] revmap
 	cdef readonly list rulemapping, selfrulemapping
 	cdef readonly dict tblabelmapping
-	cdef readonly size_t nonterminals, phrasalnonterminals
+	cdef readonly size_t nonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
 	cdef readonly bint logprob, bitpar
 	cdef readonly str start
@@ -664,6 +669,7 @@ cdef packed struct NodeArray:  # a tree as an array of Node structs
 cdef class Ctrees:
 	cdef Node *nodes
 	cdef NodeArray *trees
+	cdef bint allocated
 	cdef long nodesleft, max
 	cdef readonly size_t numnodes, numwords
 	cdef readonly short maxnodes

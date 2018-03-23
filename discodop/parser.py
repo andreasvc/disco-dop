@@ -641,7 +641,7 @@ class Parser(object):
 
 
 def readgrammars(resultdir, stages, postagging=None,
-		transformations=None, top='ROOT'):
+		transformations=None, top='ROOT', cache=False):
 	"""Read the grammars from a previous experiment.
 
 	Expects a directory ``resultdir`` which contains the relevant grammars and
@@ -672,8 +672,14 @@ def readgrammars(resultdir, stages, postagging=None,
 			if stage.dop in ('doubledop', 'dop1'):
 				backtransform = openread('%s/%s.backtransform.gz' % (
 						resultdir, stage.name)).read().splitlines()
-			gram = Grammar(rules, lexicon, start=top, altweights=probsfile,
-					backtransform=backtransform)
+			if cache and os.path.exists('%s/%s.g' % (resultdir, stage.name)):
+				gram = Grammar.frombinfile('%s/%s.g' % (resultdir, stage.name),
+						rules, lexicon, backtransform=backtransform)
+			else:
+				gram = Grammar(rules, lexicon, start=top, altweights=probsfile,
+						backtransform=backtransform)
+				if cache:
+					gram.tobinfile('%s/%s.g' % (resultdir, stage.name))
 		if n and stage.prune:
 			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.mode == 'mc-rerank':

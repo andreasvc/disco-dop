@@ -99,12 +99,9 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 	cdef ProbRule rule
 	cdef size_t i
 	cdef uint64_t vec
-	for lhsrules in grammar.lexicalbylhs:
-		agenda.setitem(
-				SmallChartItem(lhsrules.first, 1),
-				min([grammar.lexical[wordlexrule.second].prob
-					for wordlexrule in lhsrules.second]))
-		# 			for lexruleno in grammar.lexicalbylhs[i].values()]))
+	cdef LexicalRule lexrule
+	for lexrule in grammar.lexical:
+		agenda.setifbetter(SmallChartItem(lexrule.lhs, 1), lexrule.prob)
 	while not agenda.empty():
 		entry = agenda.pop()
 		I = entry.first
@@ -161,13 +158,9 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 	cdef SmallChartItemAgenda[double] agenda
 	cdef pair[SmallChartItem, double] entry
 	cdef size_t i
-
-	for lhsrules in grammar.lexicalbylhs:
-		agenda.setitem(
-				SmallChartItem(lhsrules.first, 1),
-				min([grammar.lexical[wordlexrule.second].prob
-					for wordlexrule in lhsrules.second]))
-
+	cdef LexicalRule lexrule
+	for lexrule in grammar.lexical:
+		agenda.setifbetter(SmallChartItem(lexrule.lhs, 1), lexrule.prob)
 	while not agenda.empty():
 		entry = agenda.pop()
 		I = entry.first
@@ -416,11 +409,9 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 	cdef ProbRule rule
 	cdef double x
 	cdef list insidescores = [{} for _ in range(maxlen + 1)]
-	for lhsrules in grammar.lexicalbylhs:
-		agenda.setitem(
-				SmallChartItem(lhsrules.first, 1),
-				min([grammar.lexical[wordlexrule.second].prob
-					for wordlexrule in lhsrules.second]))
+	cdef LexicalRule lexrule
+	for lexrule in grammar.lexical:
+		agenda.setifbetter(SmallChartItem(lexrule.lhs, 1), lexrule.prob)
 	while not agenda.empty():
 		entry = agenda.pop()
 		I = entry.first
@@ -529,8 +520,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, Label goal,
 				grammar, insidescores, goal, span)
 	for lspan in range(maxlen + 1):
 		for rspan in range(maxlen - lspan + 1):
-			for lhsrules in grammar.lexicalbylhs:
-				lhs = lhsrules.first
+			for lhs in grammar.lexicallhs:
 				if (lhs, lspan, rspan) in outsidescores:
 					continue
 				outsidescores[lhs, lspan, rspan] = pcfgoutsidesxrec(grammar,
@@ -581,10 +571,10 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, Label state,
 	cdef ProbRule rule
 	if span == 0:
 		return 0 if state == 0 else INFINITY
-	it = grammar.lexicalbylhs.find(state)
-	if span == 1 and it != grammar.lexicalbylhs.end():
-		score = min([grammar.lexical[wordruleno.second].prob
-				for wordruleno in dereference(it).second])
+	it = grammar.lexicallhs.find(state)
+	if span == 1 and it != grammar.lexicallhs.end():
+		score = min([lexrule.prob for lexrule in grammar.lexical
+				if lexrule.lhs == state])  # FIXME: slow
 	else:
 		score = INFINITY
 	for split in range(1, span + 1):
