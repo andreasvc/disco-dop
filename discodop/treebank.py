@@ -7,12 +7,12 @@ from itertools import count, chain, islice
 from collections import defaultdict
 import xml.etree.ElementTree as ElementTree
 from collections import OrderedDict
-from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
-		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE
+from .tree import (Tree, ParentedTree, brackettree, escape, unescape,
+		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE, HEAD)
 from .treetransforms import removeemptynodes
 from .punctuation import applypunct
-from .heads import applyheadrules, readheadrules
-from .util import openread, ishead
+from .heads import applyheadrules, readheadrules, readmodifierrules
+from .util import openread
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -40,7 +40,8 @@ class CorpusReader(object):
 
 	def __init__(self, path, encoding='utf8', ensureroot=None, punct=None,
 			headrules=None, removeempty=False,
-			functions=None, morphology=None, lemmas=None):
+			functions=None, morphology=None, lemmas=None,
+			modifierrules=None):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
 		:param ensureroot: add root node with given label if necessary.
@@ -90,6 +91,8 @@ class CorpusReader(object):
 		self.morphology = morphology
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
+		self.modifierrules = (readmodifierrules(modifierrules)
+				if modifierrules else None)
 		self._encoding = encoding
 		try:
 			self._filenames = (sorted(glob(path), key=numbase)
@@ -182,7 +185,7 @@ class CorpusReader(object):
 		if self.punct:
 			applypunct(self.punct, item.tree, item.sent)
 		if self.headrules:
-			applyheadrules(item.tree, self.headrules)
+			applyheadrules(item.tree, self.headrules, self.modifierrules)
 		return item
 
 	def _word(self, block):
@@ -216,12 +219,12 @@ class BracketCorpusReader(CorpusReader):
 			print(block)
 			raise
 		for node in tree.subtrees():
+			if node.source is None:
+				node.source = ['--'] * len(FIELDS)
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
 				x = node.label.find(char)
 				if x > 0:
 					if char == '-' and not node.label[x + 1:].isdigit():
-						if node.source is None:
-							node.source = [None] * len(FIELDS)
 						node.source[FUNC] = node.label[x + 1:].rstrip(
 								'=0123456789')
 					if self.functions == 'remove':
@@ -265,6 +268,18 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 			raise ValueError('All leaves must be in the interval 0..n with '
 					'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
 					len(sent), tree.leaves(), sent))
+
+		for node in tree.subtrees():
+			if node.source is None:
+				node.source = ['--'] * len(FIELDS)
+			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
+				x = node.label.find(char)
+				if x > 0:
+					if char == '-' and not node.label[x + 1:].isdigit():
+						node.source[FUNC] = node.label[x + 1:].rstrip(
+								'=0123456789')
+					if self.functions == 'remove':
+						node.label = node.label[:x]
 		return Item(tree, sent, comment, block)
 
 
@@ -445,7 +460,7 @@ class FTBXMLCorpusReader(CorpusReader):
 				'flmf7ae1ep.cat.xml': 3,
 				'flmf7af2ep.cat.xml': 4,
 				'flmf7ag1exp.cat.xml': 5}
-		self._filenames.sort(key=lambda x: order.get(x, 99))
+		self._filenames.sort(key=lambda x: order.get(os.path.basename(x), 99))
 
 	def blocks(self):
 		"""
@@ -489,10 +504,11 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 		for n, source in children.get(parent, []):
 			# n is the index in the block to record word indices
 			m = EXPORTNONTERMINAL.match(source[WORD])
+			label = source[TAG].replace('(', '[').replace(')', ']')
 			if m:
-				child = ParentedTree(source[TAG], getchildren(m.group(1)))
+				child = ParentedTree(label, getchildren(m.group(1)))
 			else:  # POS + terminal
-				child = ParentedTree(source[TAG], [n])
+				child = ParentedTree(label, [n])
 				handlemorphology(morphology, lemmas, child, source, sent)
 			child.source = tuple(source)
 			results.append(child)
@@ -587,7 +603,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 
 def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in FTB format given as etree XML object."""
-	def getsubtree(node, parentid):
+	def getsubtree(node):
 		"""Parse a subtree of an FTB tree."""
 		source = [''] * len(FIELDS)
 		nodeid = next(nodeids)
@@ -596,64 +612,26 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 		source[MORPH] = node.get('ee') or ''
 		source[FUNC] = node.get('fct') or ''
 		if node.tag == 'w':
-			if node.get('compound') == 'yes':
+			# Could rely on compound="yes" attribute here, but there are a few
+			# cases (annotation errors) where it is inconsistent with the
+			# actual structure.
+			if len(node) == 0:  # regular word token
+				source[TAG] = node.get('cat') or node.get('catint')
+				result = ParentedTree(source[TAG], [len(sent)])
+				sent.append(re.sub(r'\s+', '', (node.text or '')))
+				handlemorphology(morphology, lemmas, result, source, sent)
+			else:  # compound node, has <w> child nodes with actual terminals.
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
-				"""handle a few cases in FTB where we have a compound consisting
-				 of just one word, e.g. like in sentence number 1497 
-				 in file flmf3_01000_01499ep.aa.xml:
-				 <w cat="CL" compound="yes" ee="CL-suj-3ms" ei="CL3ms"
-				 lemma="il" mph="3ms" subcat="suj">-t-il</w>
-				 otherwise we get an empty node like (MWCL ) instead of (MWCL -t-il)"""
-				if len(node) == 0:
-					result = ParentedTree(source[TAG], [len(sent)])
-					sent.append(node.text)
-					handlemorphology(morphology, lemmas, result, source, sent)
-				else:
-					for child in node:
-						subtree = getsubtree(child, nodeid)
-						subtree.source[PARENT] = nodeid
-						result.append(subtree)
-						sent.append(child.text)
-			else:
-				source[TAG] = node.get('cat') or node.get('catint')
-				result = ParentedTree(source[TAG], [])
-				if not node.text:
-					"""handle a few cases in FTB where - because of the differences
-					in annotations - we have a non-compound consisting of several words
-					e.g. like in sentence number 6bis in file flmf7as1ep.cat.xml:
-						 <w cat="ADV" ee="ADV" ei="ADV" lemma="aujourd'hui"> 
-								<w catint="P">Aujourd'</w> 
-								<w catint="N">hui</w>
-						  </w>
-					 otherwise we get an empty node like (ADV ) instead of (ADV (P Aujourd') (N hui))"""
-					if len(node) == 0:
-						result = ParentedTree(source[TAG], [len(sent)])
-						sent.append('')
-						handlemorphology(morphology, lemmas, result, source,
-										 sent)
-					else:
-						for child in node:
-							subtree = getsubtree(child, nodeid)
-							subtree.source[PARENT] = nodeid
-							result.append(subtree)
-							sent.append(child.text)
-				elif (len(node) > 0 and re.match(r"((\s)+\n(\s)+)|((\n)+(\t)*)|((\s)+)", node.text)):
-					for child in node:
-						subtree = getsubtree(child, nodeid)
-						subtree.source[PARENT] = nodeid
-						result.append(subtree)
-						sent.append(child.text)
-				else:
-					result = ParentedTree(source[TAG], [len(sent)])
-					sent.append(node.text.strip())
-					handlemorphology(morphology, lemmas, result, source, sent)
-
-		else:
+				for child in node:
+					subtree = getsubtree(child)
+					subtree.source[PARENT] = nodeid
+					result.append(subtree)
+		else:  # non-terminal node
 			source[TAG] = label = node.tag
 			result = ParentedTree(label, [])
 			for child in node:
-				subtree = getsubtree(child, nodeid)
+				subtree = getsubtree(child)
 				subtree.source[PARENT] = nodeid
 				result.append(subtree)
 			if not result:
@@ -664,9 +642,9 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 
 	sent = []
 	nodeids = count(500)
-	tree = getsubtree(block, 0)
+	tree = getsubtree(block)
 	comment = ' '.join('%s=%r' % (a, block.get(a))
-					   for a in ('argument', 'author', 'date'))
+			for a in ('nb', 'textid', 'argument', 'author', 'date'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
@@ -756,7 +734,7 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		postag = node.label.replace('$[', '$(') or '--'
 		func = morphtag = '--'
 		secedges = []
-		if getattr(node, 'source', None):
+		if node.source:
 			lemma = node.source[LEMMA] or '--'
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
@@ -777,7 +755,7 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		label = node.label or '--'
 		func = morphtag = '--'
 		secedges = []
-		if getattr(node, 'source', None):
+		if node.source:
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
 			for rel, pid in zip(node.source[6::2], node.source[7::2]):
@@ -800,7 +778,7 @@ def writealpinotree(tree, sent, key, commentstr):
 		node.set('id', str(next(cnt)))
 		node.set('begin', str(min(tree.leaves())))
 		node.set('end', str(max(tree.leaves()) + 1))
-		if getattr(tree, 'source', None):
+		if tree.source:
 			node.set('rel', tree.source[FUNC] or '--')
 		if isinstance(tree[0], Tree):
 			node.set('cat', tree.label.lower())
@@ -809,7 +787,7 @@ def writealpinotree(tree, sent, key, commentstr):
 			assert isinstance(tree[0], int)
 			node.set('pos', tree.label.lower())
 			node.set('word', sent[tree[0]])
-			if getattr(tree, 'source', None):
+			if tree.source:
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')
 				# FIXME: split features in multiple attributes
@@ -868,14 +846,14 @@ def _makedep(node, deps):
 	"""Traverse a head-marked tree and extract dependencies."""
 	if isinstance(node[0], int):
 		return node[0] + 1
-	headchild = next(iter(a for a in node if ishead(a)))
+	headchild = next(iter(a for a in node if a.type == HEAD))
 	lexhead = _makedep(headchild, deps)
 	for child in node:
 		if child is headchild:
 			continue
 		lexheadofchild = _makedep(child, deps)
 		func = '-'
-		if (getattr(child, 'source', None)
+		if (child.source
 				and child.source[FUNC] and child.source[FUNC] != '--'):
 			func = child.source[FUNC]
 		deps.append((lexheadofchild, func, lexhead))
@@ -913,8 +891,7 @@ def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 		elif pos or isinstance(a[0], Tree):
 			# test for non-empty function tag ('--' is considered empty)
 			func = None
-			if (getattr(a, 'source', None)
-					and a.source[FUNC] and a.source[FUNC] != '--'):
+			if a.source and a.source[FUNC] and a.source[FUNC] != '--':
 				func = a.source[FUNC]
 			if func and action == 'add':
 				a.label += '-%s' % func
@@ -931,7 +908,7 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 	if not source:
 		return
 	# escape any parentheses to avoid hassles w/bracket notation of trees
-	tag = source[TAG].replace('(', '[').replace(')', ']')
+	# tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']').replace(' ', '_')
 	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(
 			' ', '_') or '--')
@@ -949,14 +926,14 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 		raise ValueError('unrecognized action: %r' % lemmaaction)
 
 	if action in (None, 'no'):
-		preterminal.label = tag
+		pass  # preterminal.label = tag
 	elif action == 'add':
-		preterminal.label = '%s/%s' % (tag, morph)
+		preterminal.label = '%s/%s' % (preterminal.label, morph)
 	elif action == 'replace':
 		preterminal.label = morph
 	elif action == 'between':
 		preterminal[:] = [preterminal.__class__(morph, [preterminal.pop()])]
-		preterminal.label = tag
+		# preterminal.label = tag
 	elif action not in (None, 'no'):
 		raise ValueError('unrecognized action: %r' % action)
 	return preterminal
