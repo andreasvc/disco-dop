@@ -7,12 +7,12 @@ from itertools import count, chain, islice
 from collections import defaultdict
 import xml.etree.ElementTree as ElementTree
 from collections import OrderedDict
-from .tree import (Tree, ParentedTree, brackettree, escape, unescape,
-		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE, HEAD)
+from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
+		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE
 from .treetransforms import removeemptynodes
 from .punctuation import applypunct
-from .heads import applyheadrules, readheadrules, readmodifierrules
-from .util import openread
+from .heads import applyheadrules, readheadrules
+from .util import openread, ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -40,8 +40,7 @@ class CorpusReader(object):
 
 	def __init__(self, path, encoding='utf8', ensureroot=None, punct=None,
 			headrules=None, removeempty=False,
-			functions=None, morphology=None, lemmas=None,
-			modifierrules=None):
+			functions=None, morphology=None, lemmas=None):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
 		:param ensureroot: add root node with given label if necessary.
@@ -50,6 +49,7 @@ class CorpusReader(object):
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
 		:param punct: one of ...
+
 			:None: leave punctuation as is [default].
 			:'move': move punctuation to appropriate constituents
 					using heuristics.
@@ -61,6 +61,7 @@ class CorpusReader(object):
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
+
 			:None, 'leave': leave syntactic labels as is [default].
 			:'add': concatenate grammatical function to syntactic label,
 				separated by a hypen: e.g., ``NP => NP-SBJ``.
@@ -69,6 +70,7 @@ class CorpusReader(object):
 			:'replace': replace syntactic label with grammatical function,
 				e.g., ``NP => SBJ``.
 		:param morphology: one of ...
+
 			:None, 'no': use POS tags as preterminals [default].
 			:'add': concatenate morphological information to POS tags,
 				e.g., ``DET/sg.def``.
@@ -76,6 +78,7 @@ class CorpusReader(object):
 			:'between': add node with morphological information between
 				POS tag and word, e.g., ``(DET (sg.def the))``.
 		:param lemmas: one of ...
+
 			:None: ignore lemmas [default].
 			:'add': concatenate lemma to terminals, e.g., men/man.
 			:'replace': use lemmas as terminals.
@@ -87,8 +90,6 @@ class CorpusReader(object):
 		self.morphology = morphology
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
-		self.modifierrules = (readmodifierrules(modifierrules)
-				if modifierrules else None)
 		self._encoding = encoding
 		try:
 			self._filenames = (sorted(glob(path), key=numbase)
@@ -181,7 +182,7 @@ class CorpusReader(object):
 		if self.punct:
 			applypunct(self.punct, item.tree, item.sent)
 		if self.headrules:
-			applyheadrules(item.tree, self.headrules, self.modifierrules)
+			applyheadrules(item.tree, self.headrules)
 		return item
 
 	def _word(self, block):
@@ -193,7 +194,9 @@ class CorpusReader(object):
 
 class BracketCorpusReader(CorpusReader):
 	"""Corpus reader for phrase-structures in bracket notation.
+
 	For example::
+
 		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
 
 	def blocks(self):
@@ -213,12 +216,12 @@ class BracketCorpusReader(CorpusReader):
 			print(block)
 			raise
 		for node in tree.subtrees():
-			if node.source is None:
-				node.source = ['--'] * len(FIELDS)
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
 				x = node.label.find(char)
 				if x > 0:
 					if char == '-' and not node.label[x + 1:].isdigit():
+						if node.source is None:
+							node.source = [None] * len(FIELDS)
 						node.source[FUNC] = node.label[x + 1:].rstrip(
 								'=0123456789')
 					if self.functions == 'remove':
@@ -229,9 +232,12 @@ class BracketCorpusReader(CorpusReader):
 
 class DiscBracketCorpusReader(BracketCorpusReader):
 	"""A corpus reader for discontinuous trees in bracket notation.
+
 	Leaves are consist of an index and a word, with the indices indicating
 	the word order of the sentence. For example::
+
 		(S (NP 1=John) (VP (VB 0=is) (JJ 2=rich)) (? 3=?))
+
 	There is one tree per line. Optionally, the tree may be followed by a
 	comment, separated by a TAB. Compared to Negra's export format, this format
 	lacks morphology, lemmas and functional edges. On the other hand, it is
@@ -259,18 +265,6 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 			raise ValueError('All leaves must be in the interval 0..n with '
 					'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
 					len(sent), tree.leaves(), sent))
-
-		for node in tree.subtrees():
-			if node.source is None:
-				node.source = ['--'] * len(FIELDS)
-			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
-				x = node.label.find(char)
-				if x > 0:
-					if char == '-' and not node.label[x + 1:].isdigit():
-						node.source[FUNC] = node.label[x + 1:].rstrip(
-								'=0123456789')
-					if self.functions == 'remove':
-						node.label = node.label[:x]
 		return Item(tree, sent, comment, block)
 
 
@@ -398,6 +392,7 @@ class TigerXMLCorpusReader(CorpusReader):
 
 class AlpinoCorpusReader(CorpusReader):
 	"""Corpus reader for the Dutch Alpino treebank in XML format.
+
 	Expects a corpus in directory format, where every sentence is in a single
 	``.xml`` file."""
 
@@ -450,7 +445,7 @@ class FTBXMLCorpusReader(CorpusReader):
 				'flmf7ae1ep.cat.xml': 3,
 				'flmf7af2ep.cat.xml': 4,
 				'flmf7ag1exp.cat.xml': 5}
-		self._filenames.sort(key=lambda x: order.get(os.path.basename(x), 99))
+		self._filenames.sort(key=lambda x: order.get(x, 99))
 
 	def blocks(self):
 		"""
@@ -485,6 +480,7 @@ class FTBXMLCorpusReader(CorpusReader):
 
 def exporttree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sentence from tree in export format given as list of lines.
+
 	:param block: a list of lines
 	:returns: Item object, with tree, sent, command, block fields."""
 	def getchildren(parent):
@@ -493,11 +489,10 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 		for n, source in children.get(parent, []):
 			# n is the index in the block to record word indices
 			m = EXPORTNONTERMINAL.match(source[WORD])
-			label = source[TAG].replace('(', '[').replace(')', ']')
 			if m:
-				child = ParentedTree(label, getchildren(m.group(1)))
+				child = ParentedTree(source[TAG], getchildren(m.group(1)))
 			else:  # POS + terminal
-				child = ParentedTree(label, [n])
+				child = ParentedTree(source[TAG], [n])
 				handlemorphology(morphology, lemmas, child, source, sent)
 			child.source = tuple(source)
 			results.append(child)
@@ -522,7 +517,9 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 
 def exportsplit(line):
 	"""Take a line in export format and split into fields.
+
 	Strip comments. Add dummy field for lemma if absent.
+
 	:returns: a list with >= 6 elements; if > 6, length is even since
 		secondary edges are defined by pairs of (label, parentid) fields.
 	"""
@@ -590,7 +587,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 
 def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in FTB format given as etree XML object."""
-	def getsubtree(node):
+	def getsubtree(node, parentid):
 		"""Parse a subtree of an FTB tree."""
 		source = [''] * len(FIELDS)
 		nodeid = next(nodeids)
@@ -599,26 +596,64 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 		source[MORPH] = node.get('ee') or ''
 		source[FUNC] = node.get('fct') or ''
 		if node.tag == 'w':
-			# Could rely on compound="yes" attribute here, but there are a few
-			# cases (annotation errors) where it is inconsistent with the
-			# actual structure.
-			if len(node) == 0:  # regular word token
-				source[TAG] = node.get('cat') or node.get('catint')
-				result = ParentedTree(source[TAG], [len(sent)])
-				sent.append(re.sub(r'\s+', '', (node.text or '')))
-				handlemorphology(morphology, lemmas, result, source, sent)
-			else:  # compound node, has <w> child nodes with actual terminals.
+			if node.get('compound') == 'yes':
 				source[TAG] = label = 'MW' + node.get('cat')
 				result = ParentedTree(label, [])
-				for child in node:
-					subtree = getsubtree(child)
-					subtree.source[PARENT] = nodeid
-					result.append(subtree)
-		else:  # non-terminal node
+				"""handle a few cases in FTB where we have a compound consisting
+				 of just one word, e.g. like in sentence number 1497 
+				 in file flmf3_01000_01499ep.aa.xml:
+				 <w cat="CL" compound="yes" ee="CL-suj-3ms" ei="CL3ms"
+				 lemma="il" mph="3ms" subcat="suj">-t-il</w>
+				 otherwise we get an empty node like (MWCL ) instead of (MWCL -t-il)"""
+				if len(node) == 0:
+					result = ParentedTree(source[TAG], [len(sent)])
+					sent.append(node.text)
+					handlemorphology(morphology, lemmas, result, source, sent)
+				else:
+					for child in node:
+						subtree = getsubtree(child, nodeid)
+						subtree.source[PARENT] = nodeid
+						result.append(subtree)
+						sent.append(child.text)
+			else:
+				source[TAG] = node.get('cat') or node.get('catint')
+				result = ParentedTree(source[TAG], [])
+				if not node.text:
+					"""handle a few cases in FTB where - because of the differences
+					in annotations - we have a non-compound consisting of several words
+					e.g. like in sentence number 6bis in file flmf7as1ep.cat.xml:
+						 <w cat="ADV" ee="ADV" ei="ADV" lemma="aujourd'hui"> 
+								<w catint="P">Aujourd'</w> 
+								<w catint="N">hui</w>
+						  </w>
+					 otherwise we get an empty node like (ADV ) instead of (ADV (P Aujourd') (N hui))"""
+					if len(node) == 0:
+						result = ParentedTree(source[TAG], [len(sent)])
+						sent.append('')
+						handlemorphology(morphology, lemmas, result, source,
+										 sent)
+					else:
+						for child in node:
+							subtree = getsubtree(child, nodeid)
+							subtree.source[PARENT] = nodeid
+							result.append(subtree)
+							sent.append(child.text)
+				elif (len(node) > 0 and re.match(r"((\s)+\n(\s)+)|((\n)+(\t)*)|((\s)+)", node.text)):
+					for child in node:
+						subtree = getsubtree(child, nodeid)
+						subtree.source[PARENT] = nodeid
+						result.append(subtree)
+						sent.append(child.text)
+				else:
+					result = ParentedTree(source[TAG], [len(sent)])
+					sent.append(node.text.strip())
+					handlemorphology(morphology, lemmas, result, source, sent)
+
+		else:
 			source[TAG] = label = node.tag
 			result = ParentedTree(label, [])
 			for child in node:
-				subtree = getsubtree(child)
+				subtree = getsubtree(child, nodeid)
 				subtree.source[PARENT] = nodeid
 				result.append(subtree)
 			if not result:
@@ -629,9 +664,9 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 
 	sent = []
 	nodeids = count(500)
-	tree = getsubtree(block)
+	tree = getsubtree(block, 0)
 	comment = ' '.join('%s=%r' % (a, block.get(a))
-			for a in ('nb', 'textid', 'argument', 'author', 'date'))
+					   for a in ('argument', 'author', 'date'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
@@ -640,6 +675,7 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 		sentid=False):
 	"""Convert a tree to a string representation in the given treebank format.
+
 	:param tree: should have indices as terminals
 	:param sent: contains the words corresponding to the indices in ``tree``
 	:param key: an identifier for this tree; part of the output with some
@@ -655,6 +691,7 @@ def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 		line preceded by a tab (``discbracket``); ignored by other formats.
 		Should be a single line.
 	:param sentid: for line-based formats, prefix output by ``key|``.
+
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
 	if fmt == 'bracket':
@@ -719,7 +756,7 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		postag = node.label.replace('$[', '$(') or '--'
 		func = morphtag = '--'
 		secedges = []
-		if node.source:
+		if getattr(node, 'source', None):
 			lemma = node.source[LEMMA] or '--'
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
@@ -740,7 +777,7 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		label = node.label or '--'
 		func = morphtag = '--'
 		secedges = []
-		if node.source:
+		if getattr(node, 'source', None):
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
 			for rel, pid in zip(node.source[6::2], node.source[7::2]):
@@ -763,7 +800,7 @@ def writealpinotree(tree, sent, key, commentstr):
 		node.set('id', str(next(cnt)))
 		node.set('begin', str(min(tree.leaves())))
 		node.set('end', str(max(tree.leaves()) + 1))
-		if tree.source:
+		if getattr(tree, 'source', None):
 			node.set('rel', tree.source[FUNC] or '--')
 		if isinstance(tree[0], Tree):
 			node.set('cat', tree.label.lower())
@@ -772,7 +809,7 @@ def writealpinotree(tree, sent, key, commentstr):
 			assert isinstance(tree[0], int)
 			node.set('pos', tree.label.lower())
 			node.set('word', sent[tree[0]])
-			if tree.source:
+			if getattr(tree, 'source', None):
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')
 				# FIXME: split features in multiple attributes
@@ -815,7 +852,9 @@ def writedependencies(tree, sent, fmt):
 
 def dependencies(root):
 	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers.
+
 	http://ijcai.org/Proceedings/95-2/Papers/052.pdf
+
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
 	for child in root:
@@ -829,14 +868,14 @@ def _makedep(node, deps):
 	"""Traverse a head-marked tree and extract dependencies."""
 	if isinstance(node[0], int):
 		return node[0] + 1
-	headchild = next(iter(a for a in node if a.type == HEAD))
+	headchild = next(iter(a for a in node if ishead(a)))
 	lexhead = _makedep(headchild, deps)
 	for child in node:
 		if child is headchild:
 			continue
 		lexheadofchild = _makedep(child, deps)
 		func = '-'
-		if (child.source
+		if (getattr(child, 'source', None)
 				and child.source[FUNC] and child.source[FUNC] != '--'):
 			func = child.source[FUNC]
 		deps.append((lexheadofchild, func, lexhead))
@@ -845,6 +884,7 @@ def _makedep(node, deps):
 
 def deplen(deps):
 	"""Compute dependency length from result of ``dependencies()``.
+
 	:returns: tuple ``(totaldeplen, numdeps)``."""
 	total = sum(abs(a - b) for a, label, b in deps
 			if label != 'ROOT')
@@ -853,6 +893,7 @@ def deplen(deps):
 
 def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 	"""Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
+
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
 	:param top: whether to add function tags to the top node.
@@ -872,7 +913,8 @@ def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 		elif pos or isinstance(a[0], Tree):
 			# test for non-empty function tag ('--' is considered empty)
 			func = None
-			if a.source and a.source[FUNC] and a.source[FUNC] != '--':
+			if (getattr(a, 'source', None)
+					and a.source[FUNC] and a.source[FUNC] != '--'):
 				func = a.source[FUNC]
 			if func and action == 'add':
 				a.label += '-%s' % func
@@ -889,7 +931,7 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 	if not source:
 		return
 	# escape any parentheses to avoid hassles w/bracket notation of trees
-	# tag = source[TAG].replace('(', '[').replace(')', ']')
+	tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']').replace(' ', '_')
 	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(
 			' ', '_') or '--')
@@ -907,14 +949,14 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 		raise ValueError('unrecognized action: %r' % lemmaaction)
 
 	if action in (None, 'no'):
-		pass  # preterminal.label = tag
+		preterminal.label = tag
 	elif action == 'add':
-		preterminal.label = '%s/%s' % (preterminal.label, morph)
+		preterminal.label = '%s/%s' % (tag, morph)
 	elif action == 'replace':
 		preterminal.label = morph
 	elif action == 'between':
 		preterminal[:] = [preterminal.__class__(morph, [preterminal.pop()])]
-		# preterminal.label = tag
+		preterminal.label = tag
 	elif action not in (None, 'no'):
 		raise ValueError('unrecognized action: %r' % action)
 	return preterminal
@@ -926,8 +968,10 @@ NEWLB = re.compile(r'(?:.*[\n\r])?\s*')
 def incrementaltreereader(treeinput, morphology=None, functions=None,
 		strict=False, robust=True, othertext=False):
 	"""Incremental corpus reader.
+
 	Supports brackets, discbrackets, export and alpino-xml format.
 	The format is autodetected.
+
 	:param treeinput: an iterator giving one line at a time.
 	:param strict: if True, raise ValueError on malformed data.
 	:param robust: if True, only return trees with more than 2 brackets;
@@ -972,11 +1016,14 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 
 def segmentbrackets(strict=False, robust=True):
 	"""Co-routine that accepts one line at a time.
+
 	Yields tuples ``(result, status)`` where ...
+
 	- result is None or one or more S-expressions as a list of
 		tuples (tree, sent, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0.
+
 	:param strict: if True, raise ValueError for improperly nested brackets.
 	:param robust: if True, only return trees with at least 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
@@ -1051,6 +1098,7 @@ def segmentbrackets(strict=False, robust=True):
 def segmentalpino(morphology, functions):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
+
 	- result is ``None`` or a segment delimited by
 		``<alpino_ds>`` and ``</alpino_ds>`` as a list of lines;
 	- status is 1 if the line was consumed, else 0."""
@@ -1083,6 +1131,7 @@ def segmentalpino(morphology, functions):
 def segmentexport(morphology, functions, strict=False):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
+
 	- result is ``None`` or a segment delimited by
 		``#BOS`` and ``#EOS`` as a list of lines;
 	- status is 1 if the line was consumed, else 0."""
