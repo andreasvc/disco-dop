@@ -764,6 +764,101 @@ def ftbtransforms(name, tree, sent):
 				and sent[n[1][0]] == "-"
 				and strip(n[2].label) == "N"):
 			t.label += STATESPLIT + "mwn3"
+
+	elif name == 'ftbmakegoldpos':
+		""" replace original POS tags in FTB (13 POS tags) through 27 
+			golden POS tags described in: Crabbé, Candito.(2010).
+			"Expériences d'analyse syntaxique statistique du français" 
+			https://hal.archives-ouvertes.fr/hal-00341093			
+			27 POS-tags: ADVWH, NC, P, VINF, V, CLO, CLS, CC, 
+			I, CLR, VS, ADV, ADJWH, PROWH, ET, NPP, CS, 
+			PROREL, VIMP, PRO, DET, ADJ, VPR, VPP, DETWH, 
+			PONCT, PREF"""
+
+		for child in tree.subtrees():
+			if child.source is not None and not child.label.startswith('MW'):
+				if child.source[MORPH].upper().split('-')[0] == 'A':
+					if child.source[MORPH].upper().split('-')[1] == 'INT':
+						child.label = 'ADJWH'
+					else:
+						child.label = 'ADJ'
+				elif child.source[MORPH].upper().split('-')[0] == 'ADV':
+					if (len(child.source[MORPH].split('-')) > 1 \
+						and child.source[MORPH].upper().split('-')[1] == 'INT'):
+						child.label = 'ADVWH'
+					else:
+						child.label = 'ADV'
+				elif child.source[MORPH].upper().split('-')[0] == 'C':
+					if child.source[MORPH].upper().split('-')[1] == 'S':
+						child.label = 'CS'
+					else:
+						child.label = 'CC'
+				elif child.source[MORPH].upper().split('-')[0] == 'CL':
+					if child.source[MORPH].upper().split('-')[1] == 'OBJ':
+						child.label = 'CLO'
+					elif child.source[MORPH].upper().split('-')[1] == 'REFL':
+						child.label = 'CLR'
+					else:
+						child.label = 'CLS'
+				elif child.source[MORPH].upper().split('-')[0] == 'D':
+					if child.source[MORPH].upper().split('-')[1] == 'IND':
+						child.label = 'DETWH'
+					else:
+						child.label = 'DET'
+				elif child.source[MORPH].upper().split('-')[0] == 'ET':
+					child.label = 'ET'
+				elif child.source[MORPH].upper().split('-')[0] == 'I':
+					child.label = 'I'
+				elif child.source[MORPH].upper().split('-')[0] == 'N':
+					if child.source[MORPH].upper().split('-')[1] == 'P':
+						child.label = 'NPP'
+					else:
+						child.label = 'NC'
+				elif child.source[MORPH].upper().split('-')[0] == 'P':
+					child.label = 'P'
+				elif child.source[MORPH].upper().split('-')[0] == 'PONCT':
+					child.label = 'PONCT'
+				elif child.source[MORPH].upper().split('-')[0] == 'PREF':
+					child.label = 'PREF'
+				elif child.source[MORPH].upper().split('-')[0] == 'PRO':
+					if child.source[MORPH].upper().split('-')[1] == 'INT':
+						child.label = 'PROWH'
+					elif child.source[MORPH].upper().split('-')[1] == 'REL':
+						child.label = 'PROREL'
+					else:
+						child.label = 'PRO'
+				elif child.source[MORPH].upper().split('-')[0] == 'V':
+					if child.source[MORPH].upper().split('-')[1] == 'G':
+						child.label = 'VPR'
+					elif child.source[MORPH].upper().split('-')[1] == 'K':
+						child.label = 'VPP'
+					elif child.source[MORPH].upper().split('-')[1] == 'S':
+						child.label = 'VS'
+					elif child.source[MORPH].upper().split('-')[1] == 'W':
+						child.label = 'VINF'
+					elif child.source[MORPH].upper().split('-')[1] == 'Y':
+						child.label = 'VIMP'
+					else:
+						child.label = 'V'
+			elif child.source is not None and child.label.startswith('MW'):
+				for t in child:
+					t.label = {
+						'N': 'NC',
+						'D': 'DET',
+						'A': 'ADJ',
+						'C': 'CC',
+						'CL': 'CLS',
+						'PONCT': 'PONCT',
+						'P': 'P',
+						'ADV': 'ADV',
+						'PRO': 'PRO',
+						'V': 'V',
+						'ET': 'ET',
+						'I': 'I',
+						'PREF': 'PREF'
+					}[t.label]
+
+
 	# Candito et al (LREC 2010). Statistical French dependency parsing:
 	# treebank conversion and first results.
 	# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
@@ -795,6 +890,7 @@ def ftbtransforms(name, tree, sent):
 					sbtree[i:] = []
 					new_tree = ParentedTree('Sint', [ch for ch in children])
 					sbtree.append(new_tree)
+
 	elif name == 'ftbundocompounds':
 		# The "undo compounds" step as described in Candito, M., Crabbé, B.,
 		# & Denis, P. (2010). Statistical French dependency parsing:
