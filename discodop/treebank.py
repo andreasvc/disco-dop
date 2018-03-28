@@ -50,7 +50,6 @@ class CorpusReader(object):
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
 		:param punct: one of ...
-
 			:None: leave punctuation as is [default].
 			:'move': move punctuation to appropriate constituents
 					using heuristics.
@@ -62,7 +61,6 @@ class CorpusReader(object):
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
-
 			:None, 'leave': leave syntactic labels as is [default].
 			:'add': concatenate grammatical function to syntactic label,
 				separated by a hypen: e.g., ``NP => NP-SBJ``.
@@ -71,7 +69,6 @@ class CorpusReader(object):
 			:'replace': replace syntactic label with grammatical function,
 				e.g., ``NP => SBJ``.
 		:param morphology: one of ...
-
 			:None, 'no': use POS tags as preterminals [default].
 			:'add': concatenate morphological information to POS tags,
 				e.g., ``DET/sg.def``.
@@ -79,7 +76,6 @@ class CorpusReader(object):
 			:'between': add node with morphological information between
 				POS tag and word, e.g., ``(DET (sg.def the))``.
 		:param lemmas: one of ...
-
 			:None: ignore lemmas [default].
 			:'add': concatenate lemma to terminals, e.g., men/man.
 			:'replace': use lemmas as terminals.
@@ -197,9 +193,7 @@ class CorpusReader(object):
 
 class BracketCorpusReader(CorpusReader):
 	"""Corpus reader for phrase-structures in bracket notation.
-
 	For example::
-
 		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
 
 	def blocks(self):
@@ -235,12 +229,9 @@ class BracketCorpusReader(CorpusReader):
 
 class DiscBracketCorpusReader(BracketCorpusReader):
 	"""A corpus reader for discontinuous trees in bracket notation.
-
 	Leaves are consist of an index and a word, with the indices indicating
 	the word order of the sentence. For example::
-
 		(S (NP 1=John) (VP (VB 0=is) (JJ 2=rich)) (? 3=?))
-
 	There is one tree per line. Optionally, the tree may be followed by a
 	comment, separated by a TAB. Compared to Negra's export format, this format
 	lacks morphology, lemmas and functional edges. On the other hand, it is
@@ -407,7 +398,6 @@ class TigerXMLCorpusReader(CorpusReader):
 
 class AlpinoCorpusReader(CorpusReader):
 	"""Corpus reader for the Dutch Alpino treebank in XML format.
-
 	Expects a corpus in directory format, where every sentence is in a single
 	``.xml`` file."""
 
@@ -495,7 +485,6 @@ class FTBXMLCorpusReader(CorpusReader):
 
 def exporttree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sentence from tree in export format given as list of lines.
-
 	:param block: a list of lines
 	:returns: Item object, with tree, sent, command, block fields."""
 	def getchildren(parent):
@@ -533,9 +522,7 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 
 def exportsplit(line):
 	"""Take a line in export format and split into fields.
-
 	Strip comments. Add dummy field for lemma if absent.
-
 	:returns: a list with >= 6 elements; if > 6, length is even since
 		secondary edges are defined by pairs of (label, parentid) fields.
 	"""
@@ -653,7 +640,6 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 		sentid=False):
 	"""Convert a tree to a string representation in the given treebank format.
-
 	:param tree: should have indices as terminals
 	:param sent: contains the words corresponding to the indices in ``tree``
 	:param key: an identifier for this tree; part of the output with some
@@ -669,7 +655,6 @@ def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 		line preceded by a tab (``discbracket``); ignored by other formats.
 		Should be a single line.
 	:param sentid: for line-based formats, prefix output by ``key|``.
-
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
 	if fmt == 'bracket':
@@ -830,9 +815,7 @@ def writedependencies(tree, sent, fmt):
 
 def dependencies(root):
 	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers.
-
 	http://ijcai.org/Proceedings/95-2/Papers/052.pdf
-
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
 	for child in root:
@@ -862,7 +845,6 @@ def _makedep(node, deps):
 
 def deplen(deps):
 	"""Compute dependency length from result of ``dependencies()``.
-
 	:returns: tuple ``(totaldeplen, numdeps)``."""
 	total = sum(abs(a - b) for a, label, b in deps
 			if label != 'ROOT')
@@ -871,7 +853,6 @@ def deplen(deps):
 
 def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 	"""Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
-
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
 	:param top: whether to add function tags to the top node.
@@ -945,10 +926,8 @@ NEWLB = re.compile(r'(?:.*[\n\r])?\s*')
 def incrementaltreereader(treeinput, morphology=None, functions=None,
 		strict=False, robust=True, othertext=False):
 	"""Incremental corpus reader.
-
 	Supports brackets, discbrackets, export and alpino-xml format.
 	The format is autodetected.
-
 	:param treeinput: an iterator giving one line at a time.
 	:param strict: if True, raise ValueError on malformed data.
 	:param robust: if True, only return trees with more than 2 brackets;
@@ -993,14 +972,11 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 
 def segmentbrackets(strict=False, robust=True):
 	"""Co-routine that accepts one line at a time.
-
 	Yields tuples ``(result, status)`` where ...
-
 	- result is None or one or more S-expressions as a list of
 		tuples (tree, sent, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0.
-
 	:param strict: if True, raise ValueError for improperly nested brackets.
 	:param robust: if True, only return trees with at least 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
@@ -1075,7 +1051,6 @@ def segmentbrackets(strict=False, robust=True):
 def segmentalpino(morphology, functions):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
-
 	- result is ``None`` or a segment delimited by
 		``<alpino_ds>`` and ``</alpino_ds>`` as a list of lines;
 	- status is 1 if the line was consumed, else 0."""
@@ -1108,7 +1083,6 @@ def segmentalpino(morphology, functions):
 def segmentexport(morphology, functions, strict=False):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
-
 	- result is ``None`` or a segment delimited by
 		``#BOS`` and ``#EOS`` as a list of lines;
 	- status is 1 if the line was consumed, else 0."""
