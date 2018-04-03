@@ -877,6 +877,10 @@ def ftbtransforms(name, tree, sent):
 						[ch for ch in children])
 				new_tree.type = COMPLEMENT
 				sbtree[0].type = HEAD
+				for ch in children:
+					if ch.label == 'VN':
+						ch.type = HEAD
+						break
 				sbtree.append(new_tree)
 			elif strip(sbtree.label) == 'Ssub':
 				# raising the complements (CS or C-S) of the Ssub constituents:
