@@ -70,7 +70,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		for head in heads:
 			for child in children:
 				if (isinstance(child, Tree)
-						and child.label.split('[')[0] == head):
+						and child.label.split('[')[0].upper() == head):
 					return child
 
 	def invfind(heads, children):
@@ -78,7 +78,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		for child in children:
 			for head in heads:
 				if (isinstance(child, Tree)
-						and child.label.split('[')[0] == head):
+						and child.label.split('[')[0].upper() == head):
 					return child
 
 	# check if we already have head information:
@@ -153,13 +153,14 @@ def markmodifiers(tree, modifierrules):
 		if child.type == HEAD:
 			continue
 		child.type = COMPLEMENT
-		for mod in modifierrules.get(tree.label.split('-', 1)[0], []
-				) + modifierrules.get('*', []):
-			if ((child.label.split('-', 1)[0] == mod.split('-', 1)[0]
+		applicablerules = modifierrules.get(tree.label.split('-', 1)[0], []
+				) + modifierrules.get('*', [])
+		for mod in applicablerules:
+			if ((child.label.split('-', 1)[0].upper() == mod.split('-', 1)[0]
 					or mod.split('-', 1)[0] == '*')
 					and ('-' not in mod
 						or mod.split('-', 1)[1] == '*'
-						or function(child) == mod.split('-', 1)[1])):
+						or function(child).upper() == mod.split('-', 1)[1])):
 				child.type = MODIFIER
 				break
 		if child.label == prev:  # mark enumerations/lists as modifiers
