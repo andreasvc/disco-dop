@@ -209,7 +209,6 @@ cdef class Grammar:
 		# read file
 		with open(filename, 'rb') as inp:
 			data = inp.read()
-			buflen = inp.tell()
 		ptr = <char *>data
 		header = <uint64_t *>ptr
 		idx = 4 * sizeof(uint64_t)
@@ -977,6 +976,7 @@ cdef class Grammar:
 		NB: need to re-normalize after this; alternative weights not affected.
 		"""
 		self.rulecounts[ruleno] += freq
+		self.freqmass[self._bylhs[self.revrulemap[ruleno]].lhs] += freq
 
 	cpdef rulestr(self, int n):
 		"""Return a string representation of a specific rule in this grammar."""
@@ -1030,11 +1030,13 @@ cdef class Grammar:
 	def __str__(self):
 		rules = '\n'.join(filter(None,
 			[self.rulestr(n) for n in range(self.numrules)]))
-		lexical = '\n'.join(['%.2f %s => %s' % (
-				exp(-self.lexical[n].prob) if self.logprob
-				else self.lexical[n].prob,
-				self.tolabel[self.lexical[n].lhs],
-				word.decode('utf8'))
+		lexical = '\n'.join(['%s    %d/%d' % (
+				('%.4f %s => %s' % (
+					exp(-self.lexical[n].prob) if self.logprob
+					else self.lexical[n].prob,
+					self.tolabel[self.lexical[n].lhs],
+					word.decode('utf8'))).ljust(40),
+				self.lexcounts[n], self.freqmass[self.lexical[n].lhs])
 			for word in sorted([x.first for x in self.lexicalbyword])
 			for n in sorted([y for y in self.lexicalbyword[word]],
 			key=lambda n: self.lexical[n].lhs)])

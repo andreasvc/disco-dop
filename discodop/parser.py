@@ -600,7 +600,8 @@ class Parser(object):
 					ids = grammar.UniqueIDs(prefix='%d_' % self.cnt)
 					self.cnt += 1
 					# get grammar
-					(xgrammar, backtransform, _, _) = grammar.dopgrammar(
+					(xgrammar, backtransform, _, newfragments
+								) = grammar.dopgrammar(
 								traintrees, combined, ids=ids)
 				else:
 					raise NotImplementedError
@@ -610,10 +611,13 @@ class Parser(object):
 			rules, lex = grammar.writegrammar(
 					xgrammar, bitpar=stage.grammar.bitpar)
 			orignumlabels = stage.grammar.nonterminals
+			orignumrules = stage.grammar.numrules
 			stage.grammar.addrules(
 					rules.encode('utf8'), lex.encode('utf8'), backtransform)
 			if stage.dop:
 				if stage.dop in ('doubledop', 'dop1'):
+					stage.fragments.update((a, orignumrules + n)
+							for n, (a, _) in enumerate(newfragments))
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes. treeparsing() relies on this as well.
 					stage.grammar.getmapping(

@@ -350,8 +350,7 @@ def compiletsg(fragments):
 
 def doubleostagfromtsg(trees, sents, numproc=None,
 		packedgraph=False, extrarules=None, maxnodes=10):
-	"""Extract recurring fragments from a treebank, restrict fragments,
-	and extract an osTAG grammar.
+	"""Extract recurring fragments from a treebank and create osTAG.
 
 	:param trees, sents: a continuous treebank.
 	:param maxnodes: restrict recurring fragments to up to ``maxnodes``
@@ -766,7 +765,8 @@ def flatten(frag, ids, backtransform):
 	# mark substitution sites and ensure string.
 	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], frag)
 	prod = prods[0]
-	if prod in backtransform:
+	# if prod in backtransform:
+	if len(prod_) <= 2:
 		# normally, rules of fragments are disambiguated by binarization IDs.
 		# In case there's a fragment with only one or two frontier nodes,
 		# we add an artificial node.
@@ -882,11 +882,12 @@ class TreeDecorator(object):
 
 
 class SpinedTreeDecorator(TreeDecorator):
-	"""Like TreeDecorator, but optionally add '$' to spine nodes,
-	and address to root."""
+	"""TreeDecorator that adds address to root and can mark spine nodes '$'.
+	"""
 	def decorate(self, tree, sent, spine=False):
-		"""Return a copy of tree where non-root, non-substitution site node
-		labels are decorated with IDs.
+		"""Return a copy of tree where selected nodes are decorated with IDs.
+
+		Specifically, decorate non-root, non-substitution site node labels.
 
 		:param spine: if True, add 's' postfix to labels on the spine (the path
 			from above the foot node marked with a '*' terminal up to the root

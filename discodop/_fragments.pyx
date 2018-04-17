@@ -149,13 +149,14 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		dict fragments = {}
 		set inter = set(), contentwordprods = None, lexicalprods = None
 		list tmp = []
+		bint singletb = trees2 is None
 	if twoterms:
 		contentword = re.compile(twoterms)
 		contentwordprods = {n for n in range(len(vocab.prods))
 				if contentword.match(vocab.getlabel(n))}
 		lexicalprods = {n for n in range(len(vocab.prods))
 				if vocab.islexical(n)}
-	if trees2 is None:
+	if singletb:  # if trees2 not given, consider all (n,m) s.t. n<m in trees1
 		trees2 = trees1
 	if maxnodes:
 		SLOTS = BITNSLOTS(maxnodes + 1)
@@ -179,7 +180,7 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		elif twoterms:
 			for m in twoterminals(a, anodes, trees2,
 					contentwordprods, lexicalprods):
-				if trees1 is trees2 and m <= n:
+				if singletb and m <= n:
 					continue
 				elif start2 > m or m > end2:
 					continue
@@ -188,7 +189,7 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 				extractfrompair(a, anodes, trees2, n, m, debug,
 						vocab, inter, minterms, matrix, scratch, SLOTS)
 		else:  # all pairs
-			if trees1 is trees2:
+			if singletb:
 				start2 = max(n + 1, start2)
 			for m in range(start2, end2):
 				extractfrompair(a, anodes, trees2, n, m,
@@ -1158,7 +1159,12 @@ def getctrees(items1, items2=None, Vocabulary vocab=None, bint index=True):
 			cnt = 0
 			prodsintree = []
 			for r, yf in lcfrsproductions(tree, sent, frontiers=True):
-				prodsintree.append(vocab.getprod(r, yf))
+				try:
+					prodsintree.append(vocab.getprod(r, yf))
+				except ValueError:
+					print(tree)
+					print(sent)
+					raise
 				cnt += 1
 			if cnt > maxnodes:
 				maxnodes = cnt
