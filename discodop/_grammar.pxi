@@ -1030,7 +1030,7 @@ cdef class Grammar:
 	def __str__(self):
 		rules = '\n'.join(filter(None,
 			[self.rulestr(n) for n in range(self.numrules)]))
-		lexical = '\n'.join(['%s    %d/%d' % (
+		lexical = '\n'.join(['%s    %g/%g' % (
 				('%.4f %s => %s' % (
 					exp(-self.lexical[n].prob) if self.logprob
 					else self.lexical[n].prob,
