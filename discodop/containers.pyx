@@ -952,23 +952,23 @@ cdef class FixedVocabulary(Vocabulary):
 		cdef char *tmp = <char *>&rule
 		res = self.labels.get(r[0], None)
 		if res is None:
-			return None
+			return -1
 		rule.lhs = res
 		res = self.labels.get(r[1], None) if len(r) > 1 else 0
 		if res is None:
-			return None
+			return -1
 		rule.rhs1 = res
 		if len(r) > 2:
 			res = self.labels.get(r[2], None)
 			if res is None:
-				return None
+				return -1
 			rule.rhs2 = res
 		else:
 			rule.rhs2 = 0
 		if rule.rhs1 == 0 and len(r) > 1:
 			res = self.labels.get(yf[0], None)
 			if res is None:
-				return None
+				return -1
 			rule.args = res
 			rule.lengths = 0
 		else:
