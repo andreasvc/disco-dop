@@ -192,7 +192,7 @@ cdef inline _getderiv(string &result, ItemNo v, RankedEdge& ej, Chart chart):
 		retval = sprintf(buf, ' %d)', chart.lexidx(ej.edge))
 		if retval <= 0:
 			raise ValueError('sprintf error; return value %d' % retval)
-		result.append(buf)
+		result.append(<char *>buf)
 	else:
 		result.append(b' ')
 		item = chart.left(v, ej)
