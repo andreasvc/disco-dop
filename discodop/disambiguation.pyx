@@ -281,8 +281,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 
 
 def testconstraints(treestr, require, block):
-	"""Test whether tree satisfies constraints of required/blocked sets of
-	labeled spans."""
+	"""Test if tree satisfies constraints of required/blocked labeled spans."""
 	spans = {(node.label, tuple(sorted(node.leaves())))
 			for node in ImmutableTree(
 				REMOVESTATESPLITS.sub(r'\1 ', treestr)).subtrees()}
@@ -454,7 +453,8 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 	model = chart.grammar.currentmodel
 	chart.grammar.switch(u'shortest', logprob=True)
 	shortestderivations, msg, chart2 = treeparsing(
-			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
+			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags=tags,
+			maskrules=False)
 	if not chart2:
 		return [], 'SL-DOP couldn\'t find parse for tree'
 	result = {}
@@ -561,7 +561,7 @@ cdef str recoverfragments(ItemNo root, RankedEdge deriv, Chart chart,
 	been called on `chart.grammar`, even when not doing coarse-to-fine
 	parsing."""
 	if deriv.edge.rule is NULL:
-		return '(%s %d)' % (
+		result = '(%s %d)' % (
 				chart.grammar.tolabel[chart.label(root)],
 				chart.lexidx(deriv.edge))
 	else:
@@ -789,7 +789,6 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	cdef FatChartItem fitem
 	cdef Whitelist whitelist = Whitelist()
 	cdef int n, lensent = len(sent)
-	# cdef int selected = 0
 	if <unsigned>lensent < sizeof(uint64_t) * 8:
 		whitelist.small.resize(grammar.nonterminals)
 	else:
@@ -829,9 +828,6 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 				else:
 					for n in grammar.selfrulemapping[ruleno]:
 						CLEARBIT(&(grammar.mask[0]), n)
-						# if TESTBIT(&(grammar.mask[0]), n):
-						# 	CLEARBIT(&(grammar.mask[0]), n)
-						# 	selected += 1
 
 	# Finally, parse with the small set of allowed labeled spans & rules.
 	# Do not parse with the PCFG parser even if possible, because that
