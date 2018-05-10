@@ -649,7 +649,6 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
 
-
 def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 		sentid=False):
 	"""Convert a tree to a string representation in the given treebank format.
@@ -869,36 +868,36 @@ def deplen(deps):
 	return (total, float(len(deps) - 1))  # discount ROOT
 
 
-def handlefunctions(action, tree, pos=True, top=False, morphology=None):
+def handlefunctions(action, tree, pos=True, root=False, morphology=None):
 	"""Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
 
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
-	:param top: whether to add function tags to the top node.
+	:param root: whether to add function tags to the root node.
 	:param morphology: if morphology='between', skip those nodes."""
 	if action in (None, 'leave'):
 		return
-	for a in tree.subtrees():
+	for node in tree.subtrees():
 		if action == 'remove':
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
-				x = a.label.find(char)
+				x = node.label.find(char)
 				if x > 0:
-					a.label = a.label[:x]
-		elif morphology == 'between' and not isinstance(a[0], Tree):
+					node.label = node.label[:x]
+		elif morphology == 'between' and not isinstance(node[0], Tree):
 			continue
-		elif (not top or action == 'between') and a is tree:  # skip TOP label
+		elif (not root or action == 'between') and node is tree:  # skip root
 			continue
-		elif pos or isinstance(a[0], Tree):
+		elif pos or isinstance(node[0], Tree):
 			# test for non-empty function tag ('--' is considered empty)
 			func = None
-			if a.source and a.source[FUNC] and a.source[FUNC] != '--':
-				func = a.source[FUNC]
+			if node.source and node.source[FUNC] and node.source[FUNC] != '--':
+				func = node.source[FUNC]
 			if func and action == 'add':
-				a.label += '-%s' % func
+				node.label += '-%s' % func
 			elif action == 'replace':
-				a.label = func or '--'
+				node.label = func or '--'
 			elif action == 'between':
-				parent, idx = a.parent, a.parent_index
+				parent, idx = node.parent, node.parent_index
 				newnode = ParentedTree('-' + (func or '--'), [parent.pop(idx)])
 				parent.insert(idx, newnode)
 
