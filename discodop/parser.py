@@ -465,8 +465,10 @@ class Parser(object):
 						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception:  # pylint: disable=W0703
-					logging.error("something's amiss. %s\n%s", resultstr,
-							''.join(traceback.format_exception(*sys.exc_info())))
+					logging.error(
+							"something's amiss. %s\n%s", resultstr,
+							''.join(traceback.format_exception(
+								*sys.exc_info())))
 					parsetree, prob, noparse = self.noparse(
 							stage, xsent, tags, lastsuccessfulparse, n)
 				else:
@@ -517,7 +519,7 @@ class Parser(object):
 		"""Return parse from previous stage or a dummy parse."""
 		# use successful parse from earlier stage if available
 		if lastsuccessfulparse is not None:
-			parsetree = self.postprocess(lastsuccessfulparse, sent, n)
+			parsetree, _ = self.postprocess(lastsuccessfulparse, sent, n)
 		else:  # Produce a dummy parse for evaluation purposes.
 			default = grammar.defaultparse([(n, t) for n, t
 					in enumerate(tags or (len(sent) * ['NN']))])
@@ -532,6 +534,8 @@ class Parser(object):
 		"""Extract grammar rules from trees and merge with current grammar."""
 		from .runexp import dobinarization
 		from . import _fragments
+		if not newtrees:
+			return
 		prm = self.prm
 		newtrees = [a.copy(True) for a in newtrees]  # will modify in-place
 		for tree, sent in zip(newtrees, newsents):
