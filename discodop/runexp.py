@@ -282,12 +282,14 @@ def getposmodel(postagging, train_tagged_sents):
 	return sents, lexmodel
 
 
-def dobinarization(trees, sents, binarization, relationalrealizational):
+def dobinarization(trees, sents, binarization, relationalrealizational,
+		logmsg=True):
 	"""Apply binarization to treebank."""
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treetransforms.treebankfanout(trees)
-	logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
-			tbfanout, n, trees[n], ' '.join(sents[n]))
+	if logmsg:
+		logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
+				tbfanout, n, trees[n], ' '.join(sents[n]))
 	# binarization
 	begin = time.clock()
 	msg = 'binarization: %s' % binarization.method
@@ -308,10 +310,11 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 				binarization.markovthreshold,
 				binarization.h + binarization.revh - 1,
 				max(binarization.v - 1, 1))
-		logging.info(msg1)
+		if logmsg:
+			logging.info(msg1)
 	trees = [treetransforms.addfanoutmarkers(t) for t in trees]
-	logging.info('%s; cpu time elapsed: %gs',
-			msg, time.clock() - begin)
+	if logmsg:
+		logging.info('%s; cpu time elapsed: %gs', msg, time.clock() - begin)
 	return trees
 
 
