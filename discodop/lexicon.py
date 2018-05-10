@@ -27,13 +27,13 @@ from operator import itemgetter
 from subprocess import Popen, PIPE
 from collections import defaultdict, Counter, OrderedDict
 from fractions import Fraction
-from .treebanktransforms import YEARRE
 from .tree import escape
 from .util import which
 from .containers import REMOVESTATESPLITS
 
 UNK = '_UNK'
 NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
+YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 TREETAGGERHELP = '''tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz

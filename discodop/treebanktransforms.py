@@ -12,6 +12,7 @@ from .tree import (Tree, ParentedTree, escape, unescape, ptbescape,
 from .treebank import writebrackettree, EXPORTNONTERMINAL
 from .treetransforms import addfanoutmarkers, removefanoutmarkers
 from .punctuation import punctprune, PUNCTUATION, PUNCTTAGS
+from .lexicon import YEARRE, FTBREGULARCOMPOUNDPATTERNS, FTBALLOWEDCOMPOUNDS
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -20,7 +21,6 @@ LABELRE = re.compile("[^^|<>,;:_-]+")
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
-YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 PRESETS = {
 		# basic state splits, German, English, Dutch:
 		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
@@ -139,7 +139,7 @@ def transform(tree, sent, transformations):
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees(lambda n: isinstance(n.source, tuple)):
 		a.source = list(a.source)
-	for name in transformations:
+	for name in transformations or ():
 		if name == 'APPEND-FUNC':  # add function to phrasal label
 			for a in tree.subtrees():
 				func = functions(a)
@@ -765,15 +765,14 @@ def ftbtransforms(name, tree, sent):
 			t.label += STATESPLIT + "mwn3"
 
 	elif name == 'ftbmakegoldpos':
-		""" replace original POS tags in FTB (13 POS tags) through 27 
-			golden POS tags described in: Crabbé, Candito.(2010).
-			"Expériences d'analyse syntaxique statistique du français" 
-			https://hal.archives-ouvertes.fr/hal-00341093			
-			27 POS-tags: ADVWH, NC, P, VINF, V, CLO, CLS, CC, 
-			I, CLR, VS, ADV, ADJWH, PROWH, ET, NPP, CS, 
-			PROREL, VIMP, PRO, DET, ADJ, VPR, VPP, DETWH, 
-			PONCT, PREF"""
-
+		# replace original POS tags in FTB (13 POS tags) by
+		# 27 enriched POS tags described in: Crabbé, Candito (2010).
+		# "Expériences d'analyse syntaxique statistique du français"
+		# https://hal.archives-ouvertes.fr/hal-00341093
+		# 27 POS-tags: ADVWH, NC, P, VINF, V, CLO, CLS, CC,
+		# I, CLR, VS, ADV, ADJWH, PROWH, ET, NPP, CS,
+		# PROREL, VIMP, PRO, DET, ADJ, VPR, VPP, DETWH,
+		# PONCT, PREF
 		for child in tree.subtrees():
 			if child.source is not None and not child.label.startswith('MW'):
 				if child.source[MORPH].upper().split('-')[0] == 'A':
@@ -782,8 +781,9 @@ def ftbtransforms(name, tree, sent):
 					else:
 						child.label = 'ADJ'
 				elif child.source[MORPH].upper().split('-')[0] == 'ADV':
-					if (len(child.source[MORPH].split('-')) > 1 \
-						and child.source[MORPH].upper().split('-')[1] == 'INT'):
+					if (len(child.source[MORPH].split('-')) > 1
+							and child.source[MORPH].upper().split('-')[1]
+							== 'INT'):
 						child.label = 'ADVWH'
 					else:
 						child.label = 'ADV'
@@ -856,12 +856,10 @@ def ftbtransforms(name, tree, sent):
 						'I': 'I',
 						'PREF': 'PREF'
 					}[t.label]
-
-
-	# Candito et al (LREC 2010). Statistical French dependency parsing:
-	# treebank conversion and first results.
-	# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
 	elif name == 'ftbraisecompl':
+		# Candito et al (LREC 2010). Statistical French dependency parsing:
+		# treebank conversion and first results.
+		# http://www.lrec-conf.org/proceedings/lrec2010/pdf/392_Paper.pdf
 		for sbtree in tree.subtrees():
 			if (strip(sbtree.label) in ('VPinf', 'VPpart')
 					and strip(sbtree[0].label) in ('P', 'P+D', 'MWP')):
@@ -909,7 +907,6 @@ def ftbtransforms(name, tree, sent):
 		#   (ii) and aren't in the allowed compounds list
 		# Undoing compounds amounts to rewriting selected compounds;
 		# e.g. (MWN (N ..) (N ..)) into regular phrases (NP (N ..) (N ..)).
-		from .lexicon import FTBREGULARCOMPOUNDPATTERNS, FTBALLOWEDCOMPOUNDS
 
 		# the following functions (make_VP, make_PP, make_NP, make_AP,
 		# make_COORD) create the corresponding trees given the sbtrs
@@ -1088,14 +1085,6 @@ def ftbtransforms(name, tree, sent):
 							sbtree_to_append.type = sbtree.type
 							sbtree_to_append.source = sbtree.source
 							parent.append(sbtree_to_append)
-					else:
-						sbtree.label = {
-								'N': 'NP',
-								'V': 'VP',
-								'A': 'AP',
-								'ADV': 'AdP',
-								'P': 'MWP',
-								}[base_label]
 	else:
 		return False
 	return True
@@ -1170,7 +1159,7 @@ def reversetransform(tree, sent, transformations):
 		if isinstance(a.source, tuple):
 			a.source = list(a.source)
 
-	for name in reversed(transformations):
+	for name in reversed(transformations or ()):
 		if name == 'FANOUT':
 			removefanoutmarkers(tree)
 		elif name == 'DP':  # remove DPs
