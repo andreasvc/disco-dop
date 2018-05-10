@@ -554,24 +554,27 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 		int start, int end, short SLOTS):
 	"""Get candidates from productions in fragment ``bitset`` at ``a[i]``."""
 	cdef uint64_t cur = bitset[0]
-	cdef int i, idx = 0
+	cdef int i, idx = 0, prodindexlen = len(trees.prodindex)
 	cdef list indices = []
 	end = end or trees.len
 	while True:
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		if i == -1 or i >= alen:  # FIXME. why is 2nd condition necessary?
 			break
+		if a[i].prod >= prodindexlen:
+			return None
 		indices.append(a[i].prod)
 	if isinstance(trees.prodindex, MultiRoaringBitmap):
-		return trees.prodindex.intersection(
+		result = trees.prodindex.intersection(
 				indices, start=start, stop=end)
 	elif len(indices) == 0:
-		return None
-	elif len(indices) == 1:  # work around bug for older RoaringBitmap
-		return trees.prodindex[indices[0]].clamp(start, end)
+		result = None
 	else:
-		return trees.prodindex[indices[0]].intersection(
-				*[trees.prodindex[i] for i in indices[1:]]).clamp(start, end)
+		result = trees.prodindex[indices[0]].clamp(start, end)
+		if len(indices) > 1:  # work around bug for older RoaringBitmap
+			result = result.intersection(
+					*[trees.prodindex[i] for i in indices[1:]])
+	return result
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
