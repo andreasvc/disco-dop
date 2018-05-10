@@ -234,6 +234,33 @@ cdef collectitems(ItemNo v, RankedEdge& ej, Chart chart, itemset):
 		collectitems(rightitem, ej1, chart, itemset)
 
 
+def partitionincompletechart(
+		Chart chart, start, end):
+	"""Return list of parseable intervals (a, b) of an incomplete chart."""
+	cdef ItemNo item
+	results = []
+	# Greedy approach: get largest subtree, recurse for rest
+	for length in range(end - start, 0, -1):
+		for start1 in range(start, end - length + 1):
+			# most probable span from start with length
+			# (but preferably not a binarization node)
+			item = chart.bestsubtree(start1, start1 + length)
+			if item != 0:
+				if start1 > start:
+					results.extend(
+							partitionincompletechart(chart, start, start1))
+				results.append((chart.grammar.tolabel[chart.label(item)],
+						start1, start1 + length))
+				if start1 + length < end:
+					results.extend(partitionincompletechart(
+							chart, start1 + length, end))
+				return results
+	results.append(('NOPARSE', start, start + 1))
+	if start + 1 < end:
+		results.extend(partitionincompletechart(chart, start + 1, end))
+	return results
+
+
 def lazykbest(Chart chart, int k, bint derivs=True):
 	"""Wrapper function to run ``lazykthbest``.
 

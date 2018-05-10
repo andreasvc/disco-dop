@@ -65,6 +65,11 @@ cdef class Chart:
 		"""Return item with root label spanning the whole sentence."""
 		raise NotImplementedError
 
+	def bestsubtree(self, start, end):
+		"""Return item with most probable subtree for given (continuous) span.
+		"""
+		raise NotImplementedError
+
 	cdef ItemNo _left(self, ItemNo itemidx, Edge edge):
 		"""Return the left item that edge points to."""
 		raise NotImplementedError
@@ -448,9 +453,6 @@ cdef class Ctrees:
 					vocab.getlabel(self.nodes[offset + m].prod),
 					vocab.prodrepr(self.nodes[offset + m].prod)))
 		print()
-		# for a, m in sorted(vocab.prods.items(), key=lambda x: x[1]):
-		# 	print("%d. '%s' '%s' '%s'" % (m, vocab.labels[m], vocab.words[m], a))
-		# print()
 
 	def close(self):
 		"""Close any open files and free memory."""
@@ -657,7 +659,9 @@ cdef inline getyf(tuple yf, uint32_t *args, uint32_t *lengths):
 			if a == 1:
 				args[0] += 1 << m
 			elif a != 0:
-				raise ValueError('expected: 0 or 1; got: %r' % a)
+				raise ValueError(
+						'expected: 0 or 1; got: %r\n'
+						'non-binarized production.' % a)
 			m += 1
 		lengths[0] |= 1 << (m - 1)
 

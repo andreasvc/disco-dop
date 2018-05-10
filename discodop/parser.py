@@ -31,6 +31,7 @@ from .functiontags import applyfunctionclassifier
 from .util import workerfunc, openread
 from .treetransforms import binarizetree, binarize, splitdiscnodes
 from .grammar import UniqueIDs
+from .kbest import partitionincompletechart
 
 SHORTUSAGE = '''
 usage: discodop parser [options] <grammar/> [input [output]]
@@ -57,7 +58,7 @@ DEFAULTS = dict(
 		method='default',  # choices: default, optimal, optimalhead
 		factor='right',
 		headrules=None,  # filename of rules for finding heads of constituents
-		v=1, h=2, revh=0,
+		v=1, h=1, revh=0,
 		markhead=False,  # prepend head to siblings
 		leftmostunary=False,  # start binarization with unary node
 		rightmostunary=False,  # end binarization with unary node
@@ -288,6 +289,7 @@ class Parser(object):
 		prevparsetrees = {}  # stage.name => parsetrees
 		chart = lastsuccessfulparse = None
 		totalgolditems = 0
+		partialparse = False
 		# parse with each coarse-to-fine stage
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
@@ -448,6 +450,45 @@ class Parser(object):
 							if chart.itemid(node.label, node.leaves()))
 					msg += ('%d/%d gold items in derivations\n\t' % (
 							golditems, totalgolditems))
+			elif (sent and not chart
+					and stage.mode not in ('dop-rerank', 'mc-rerank')
+					and not (self.relationalrealizational and stage.split)
+					and not partialparse):  # sentence could not be parsed
+				partition = partitionincompletechart(chart, 0, len(sent))
+				msg = '%spartition: %s\n' % (
+						msg.rstrip('\t'), repr(partition))
+				tmp = []
+				prob = 1
+				for label, a, b in partition:
+					if label == 'NOPARSE':
+						tmp.append('(NN %d)' % a)
+					else:
+						parts = list(self.parse(
+								sent[a:b],
+								tags=tags[a:b] if tags else None,
+								root=label))
+						part = parts[-1]
+						parttree, partprob, _partfrags = max(
+								part.parsetrees, key=itemgetter(1))
+						prob *= partprob
+						parttree = ParentedTree(parttree)
+						for node in parttree.subtrees(
+								lambda n: isinstance(n[0], int)):
+							node[0] += a
+						tmp.append(str(parttree))
+						if self.verbosity >= 3:
+							print('part:', parttree)
+						# msg += 'part %s %g\n%s' % ((label, a, b), partprob,
+						# 		''.join(part.msg for part in parts))
+						msg += 'part %s %g\n%s' % ((label, a, b), partprob,
+								part.msg)
+				tree = ParentedTree('(ROOT %s)' % ' '.join(tmp))
+				from .runexp import dobinarization
+				tree = dobinarization([tree], [sent],
+						self.prm.binarization,
+                        self.prm.relationalrealizational, logmsg=False)[0]
+				parsetrees = [(str(tree), prob, None)]
+				partialparse = True
 			if stage.name in (stage.prune for stage in self.stages):
 				charts[stage.name] = chart
 				prevparsetrees[stage.name] = parsetrees

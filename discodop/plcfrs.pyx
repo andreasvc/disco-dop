@@ -105,6 +105,22 @@ cdef class SmallLCFRSChart(LCFRSChart):
 			return 0
 		return dereference(it).second
 
+	def bestsubtree(self, start, end):
+		cdef Prob bestprob = INFINITY, prob
+		cdef uint64_t bestitem = 0
+		cdef SmallChartItem item = CFGtoSmallChartItem(0, start, end)
+		for itemidx in range(self.items.size()):
+			if (item.vec == self.items[itemidx].vec
+					and '*' not in
+						self.grammar.tolabel[self.items[itemidx].label]
+					and '<' not in
+						self.grammar.tolabel[self.items[itemidx].label]):
+				prob = self.probs[itemidx]
+				if prob < bestprob:
+					bestprob = prob
+					bestitem = itemidx
+		return bestitem
+
 	cdef Label label(self, ItemNo itemidx):
 		return self.items[itemidx].label
 
@@ -209,6 +225,22 @@ cdef class FatLCFRSChart(LCFRSChart):
 		if it == self.itemindex.end():
 			return 0
 		return dereference(it).second
+
+	def bestsubtree(self, start, end):
+		cdef Prob bestprob = INFINITY, prob
+		cdef uint64_t bestitem = 0
+		cdef FatChartItem item = CFGtoFatChartItem(0, start, end)
+		for itemidx in range(self.items.size()):
+			if (memcmp(item.vec, self.items[itemidx].vec, SLOTS * 8) == 0
+					and '*' not in
+						self.grammar.tolabel[self.items[itemidx].label]
+					and '<' not in
+						self.grammar.tolabel[self.items[itemidx].label]):
+				prob = self.probs[itemidx]
+				if prob < bestprob:
+					bestprob = prob
+					bestitem = itemidx
+		return bestitem
 
 	cdef Label label(self, ItemNo itemidx):
 		return self._label(itemidx)  # somehow needed

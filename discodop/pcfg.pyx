@@ -72,6 +72,21 @@ cdef class DenseCFGChart(CFGChart):
 		return cellidx(0, self.lensent, self.lensent,
 			self.grammar.nonterminals) + self.start
 
+	def bestsubtree(self, start, end):
+		cdef Prob bestprob = INFINITY, prob
+		cdef uint64_t bestitem = 0
+		cdef uint64_t cell = cellidx(start, end, self.lensent,
+			self.grammar.nonterminals)
+		for label in range(self.grammar.nonterminals):
+			if ('*' in self.grammar.tolabel[label]
+					or '<' in self.grammar.tolabel[label]):
+				continue
+			prob = self._subtreeprob(cell + label)
+			if prob < bestprob:
+				bestprob = prob
+				bestitem = cell + label
+		return bestitem
+
 	cdef void addedge(self, uint64_t item, Idx mid, ProbRule *rule):
 		"""Add new edge to parse forest."""
 		cdef Edge edge
@@ -238,6 +253,24 @@ cdef class SparseCFGChart(CFGChart):
 
 	def root(self):
 		return self.itemindex[cellstruct(0, self.lensent) + self.start]
+
+	def bestsubtree(self, start, end):
+		cdef Prob bestprob = INFINITY, prob
+		cdef uint64_t bestitem = 0
+		cdef uint64_t cell = cellstruct(start, end)
+		# FIXME: can iterate over all available items in cell
+		# by querying for appropriate range:
+		# range(cellstruct(start, end),
+		# 		cellstruct(start, end) + self.grammar.nonterminals)
+		for label in range(self.grammar.nonterminals):
+			if ('*' in self.grammar.tolabel[label]
+					or '<' in self.grammar.tolabel[label]):
+				continue
+			prob = self._subtreeprob(cell + label)
+			if prob < bestprob:
+				bestprob = prob
+				bestitem = self.itemindex[cell + label]
+		return bestitem
 
 	cdef void addedge(self, uint64_t item, Idx mid, ProbRule *rule):
 		"""Add new edge to parse forest."""
