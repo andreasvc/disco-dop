@@ -1364,12 +1364,11 @@ class DrawTree(object):
 		result += ['</svg>']
 		return '\n'.join(result)
 
-	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
+	def text(self, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red', funccolor='green',
-				funcsep=None, maxwidth=16, nodeprops=None):
+				funcsep=None, morphsep=None, maxwidth=16, nodeprops=None):
 		""":returns: ASCII art for a discontinuous tree.
 
-		:param nodedist: minimum number of horiziontal spaces between nodes
 		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
 		:param html: whether to wrap output in HTML code (default plain text).
@@ -1399,7 +1398,7 @@ class DrawTree(object):
 			horzline = '_'
 			leftcorner = rightcorner = ' '
 			vertline = ' | '
-			tee = 3 * horzline
+			tee = '___'
 			cross = bottom = '_|_'
 
 		def crosscell(cur, x=vertline):
@@ -1408,6 +1407,96 @@ class DrawTree(object):
 			lst = list(cur)
 			lst[splitl:splitl + len(x)] = list(x)
 			return ''.join(lst)
+
+		def formatlabelnodeprops(text, nodeprops):
+			# single line, all nodes 'highlighted', html w/nodeprops,
+			# support morphsep
+			if len(text) > 1:
+				raise ValueError('label too long... increase maxwidth')
+			assert html
+			line = text[0]
+			newtext = []
+			color = nodecolor if isinstance(node, Tree) else leafcolor
+			if (funcsep and isinstance(node, Tree)
+					and node.label not in PTBPUNC
+					and funcsep in line):
+				cat, func = line.rsplit(funcsep, 1)
+			else:
+				cat, func = line, None
+			morph = None
+			if morphsep and isinstance(node, Tree):
+				if func and morphsep in func:
+					func, morph = func.rsplit(morphsep, 1)
+				elif morphsep in cat:  # NB: cat/morph-func order not supported
+					cat, morph = cat.rsplit(morphsep, 1)
+			if isinstance(node, Tree):
+				labeledspan = '%s %s' % (
+						node.label,
+						','.join(str(a[0]) if len(a) == 1
+							else ('%d-%d' % (a[0], a[-1]))
+							for a in ranges(sorted(node.leaves()))))
+				pos = isinstance(node[0], int)
+				newtext.append('<span class=%s '
+						'data-id="%s_%d" data-s="%s">%s' % (
+						'p' if pos else 'n',
+						nodeprops, n, labeledspan, cat))
+			else:
+				newtext.append('<font color="%s">%s</font>' % (
+						color, cat))
+			if func:
+				newtext[-1] += ('%s<span class=f '
+						'data-id="%s_%d" data-s="%s">%s</span>'
+						% (funcsep, nodeprops, n, labeledspan, func))
+			if morph:
+				newtext[-1] += ('%s<span class=m '
+						'data-id="%s_%d" data-s="%s">%s</span>'
+						% (morphsep, nodeprops, n, labeledspan, morph))
+			if isinstance(node, Tree):
+				newtext[-1] += '</span>'
+			return newtext
+
+		def formatlabel(text):
+			newtext = []
+			seensep = False
+			color = nodecolor if isinstance(node, Tree) else leafcolor
+			# Unfortunately it seems this cannot be done in a simpler
+			# way. Long labels are spread over multiple lines. When
+			# highlighting different parts of the labels, must use
+			# separate tags on each line.
+			for line in text:
+				if (funcsep and not seensep and isinstance(node, Tree)
+						and node.label not in PTBPUNC
+						and funcsep in line):
+					cat, func = line.rsplit(funcsep, 1)
+				elif seensep:
+					cat, func = None, line
+				else:
+					cat, func = line, None
+				if cat and (html or ansi) and n in self.highlight:
+					if html:
+						newtext.append('<font color="%s">%s</font>' % (
+								color, cat))
+					elif ansi:
+						newtext.append('\x1b[%d;1m%s\x1b[0m' % (
+								ANSICOLOR[color], cat))
+				elif cat:
+					newtext.append(cat)
+				else:
+					newtext.append('')
+				if func:
+					if not seensep:
+						newtext[-1] += funcsep
+						seensep = True
+					if html and n in self.highlightfunc:
+						newtext[-1] += (
+								'<font color=%s>%s</font>' % (
+								funccolor, func))
+					elif ansi and n in self.highlightfunc:
+						newtext[-1] += '\x1b[%d;1m%s\x1b[0m' % (
+								ANSICOLOR[funccolor], func)
+					else:
+						newtext[-1] += func
+			return newtext
 
 		result = []
 		matrix = defaultdict(dict)
@@ -1470,60 +1559,14 @@ class DrawTree(object):
 					else:  # if n and n in minchildcol:
 						branchrow[col] = crosscell(branchrow[col])
 				text = [a.center(maxnodewith[col]) for a in text]
-				color = nodecolor if isinstance(node, Tree) else leafcolor
 				if html:
 					text = [htmlescape(a) for a in text]
 				if (n in self.highlight or n in self.highlightfunc) and (
 						html or ansi):
-					newtext = []
-					seensep = False
-					# everything before funcsep in nodecolor,
-					# after funcsep use funccolor.
-					for line in text:
-						if (funcsep and not seensep and isinstance(node, Tree)
-								and node.label not in PTBPUNC
-								and funcsep in line):
-							cat, func = line.rsplit(funcsep, 1)
-						elif seensep:
-							cat, func = None, line
-						else:
-							cat, func = line, None
-						if cat and (html or ansi) and n in self.highlight:
-							if html:
-								if nodeprops and isinstance(node, Tree):
-									labeledspan = '%s %s' % (
-											node.label,
-											','.join(str(a[0]) if len(a) == 1
-												else ('%d-%d' % (a[0], a[-1]))
-												for a in ranges(node.leaves())))
-									pos = isinstance(node[0], int)
-									newtext.append('<span id=%s_%d class=%s '
-											'data-s="%s">%s</span>' % (
-											nodeprops, n, 'p' if pos else 'n',
-											labeledspan, cat))
-								else:
-									newtext.append('<font color="%s">%s</font>' % (
-											color, cat))
-							elif ansi:
-								newtext.append('\x1b[%d;1m%s\x1b[0m' % (
-										ANSICOLOR[color], cat))
-						elif cat:
-							newtext.append(cat)
-						else:
-							newtext.append('')
-						if func:
-							if not seensep:
-								newtext[-1] += funcsep
-								seensep = True
-							if html and n in self.highlightfunc:
-								newtext[-1] += '<font color=%s>%s</font>' % (
-										funccolor, func)
-							elif ansi and n in self.highlightfunc:
-								newtext[-1] += '\x1b[%d;1m%s\x1b[0m' % (
-										ANSICOLOR[funccolor], func)
-							else:
-								newtext[-1] += func
-					text = newtext
+					if nodeprops and isinstance(node, Tree):
+						text = formatlabelnodeprops(text, nodeprops)
+					else:
+						text = formatlabel(text)
 				for x in range(maxnodeheight[row]):
 					# draw vertical lines in partially filled multiline node
 					# labels, but only if it's not a frontier node.
@@ -1540,10 +1583,10 @@ class DrawTree(object):
 						if col not in matrix[row]:
 							for noderow in noderows:
 								noderow[col] = crosscell(noderow[col])
-				branchrow = [a + ((a[-1] if a[-1] != ' ' else b[0]) * nodedist)
+				branchrow = [a + (a[-1] if a[-1] != ' ' else b[0])
 						for a, b in zip(branchrow, branchrow[1:] + [' '])]
 				result.append(''.join(branchrow))
-			result.extend((' ' * nodedist).join(noderow)
+			result.extend(' '.join(noderow)
 					for noderow in reversed(noderows))
 		return '\n'.join(reversed(result)) + '\n'
 
@@ -1722,14 +1765,14 @@ class DrawDependencies(object):
 				'ROOT</text>' % (0, xpos[0], height - wordheight)]
 		for word, pos, (n, _, _) in zip(self.sent, self.pos, self.deps):
 			result.append('<text class="word w%d" x=%d y=%d '
-					'fill=red  text-anchor=middle '
+					'fill=red text-anchor=middle '
 					'onmouseover="highlightdep(\'w%d\'); " '
 					'onmouseout="nohighlightdep(); "'
 					'>%s</text>' % (
 					n, xpos[n], height - wordheight, n, word))
 			result.append('<text class="tag w%d" x=%d y=%d '
 					'onmouseover="highlightdep(\'w%d\'); " '
-					'onmouseout="nohighlightdep(); "'
+					'onmouseout="nohighlightdep(); " '
 					'fill=blue text-anchor=middle>%s</text>' % (
 					n, xpos[n], height - 4, n, pos))
 
