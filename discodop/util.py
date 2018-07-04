@@ -10,6 +10,7 @@ from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections import Set, Iterable
 
+
 def which(program):
 	"""Return first match for program in search path."""
 	for path in os.environ.get('PATH', os.defpath).split(":"):
