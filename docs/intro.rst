@@ -166,11 +166,11 @@ Alternatively, it is possible to achieve similar results with separate commands:
     $ discodop parser filename/ sentences.txt --fmt=export >filename/dop.export
     $ discodop eval alpinosample.export filename/dop.export proper.prm
 
-IPython notebooks
+Jupyter notebooks
 -----------------
 
-- `A tutorial on using tree fragments for text classification <http://nbviewer.ipython.org/gist/andreasvc/9467e27680d8950045b2/treefragments.ipynb>`_
-- `Getting tree fragments from TSG derivations <http://nbviewer.ipython.org/gist/andreasvc/f6f626aadb7fd7fb4954>`_
+- `A tutorial on using tree fragments for text classification <https://gist.github.com/andreasvc/9467e27680d8950045b2>`_
+- `Getting tree fragments from TSG derivations <https://gist.github.com/andreasvc/f6f626aadb7fd7fb4954>`_
 
 
 Overview

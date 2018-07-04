@@ -58,7 +58,7 @@ lint: discodop
 	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}' | sort -n
 	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^].\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
-	pep8 --ignore=E1,W1,E402,W503 \
+	pep8 --ignore=E1,W1,E402,E501,W503 \
 		discodop/*.py web/*.py tests/*.py \
 	&& pep8 --ignore=F,W1,W503,E1,E211,E225,E226,E227,E402,E901 \
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \

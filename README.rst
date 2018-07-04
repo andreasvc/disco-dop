@@ -54,20 +54,20 @@ Requirements:
 
 Debian, Ubuntu based systems
 ----------------------------
-To compile the latest development version on an `Ubuntu <http://www.ubuntu.com>`_ system,
-run the following sequence of commands::
+The following instructions employ the ``--user`` option which means that Python
+packages will be installed to your home directory. Make sure that
+``~/.local/bin`` is in your PATH, or add it as follows
+(and restart terminal for it to take effect)::
+
+    echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
+
+To compile the latest development version of discodop, issue the following commands::
 
     sudo apt-get install build-essential python3-dev python3-pip git
     git clone --recursive git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip3 install --user -r requirements.txt
     make install
-
-The ``--user`` option means the packages will be installed to your home
-directory which does not require root privileges. Make sure that
-``~/.local/bin`` is in your PATH, or add it as follows::
-
-    echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
 
 Other Linux systems
 -------------------
