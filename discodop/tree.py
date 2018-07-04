@@ -293,6 +293,13 @@ class Tree(object):
 				agenda.extend(node[::-1])
 				visited.add(id(node))
 
+	def find(self, condition):
+		"""Return first child s.t. ``condition(child)`` is True, or None."""
+		for child in self:
+			if condition(child):
+				return child
+		return None
+
 	def pos(self, nodes=False):
 		"""Collect preterminals (part-of-speech nodes).
 
@@ -891,6 +898,20 @@ class ParentedTree(Tree):
 		if isinstance(self[index], Tree):
 			self._delparent(self[index], index)
 		super(ParentedTree, self).remove(child)
+
+	def detach(self):
+		"""Remove this node from its parent node, if it has one.
+
+		:returns: self, s.t. self.parent is None."""
+		if self.parent is None:
+			return self
+		return self.parent.pop(self.parent_index)
+
+	def disown(self):
+		"""Detach children of this node and return as list."""
+		children = [child for child in self]
+		self[:] = []
+		return children
 
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):

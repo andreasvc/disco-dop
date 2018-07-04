@@ -280,8 +280,8 @@ def negratransforms(name, tree, sent):
 				# introduce a VP unless it would lead to a unary
 				# VP -> VP production
 				if len(vp) != 1 or vp[0].label != 'VP':
-					s[:] = [pop(a) for a in s if function(a) not in addtovp
-							] + [pop(a) for a in vp]
+					s[:] = [a.detach() for a in s if function(a) not in addtovp
+							] + [a.detach() for a in vp]
 		toplevel_s = []
 		if 'S' in labels(tree):
 			toplevel_s = [a for a in tree if a.label == 'S']
@@ -301,8 +301,9 @@ def negratransforms(name, tree, sent):
 			svp = [x for x in a if function(x) == 'SVP'].pop()
 			# apparently there can be a _verb_ particle without a verb.
 			# headlines? annotation mistake?
-			if any(x.type == HEAD for x in a):
-				hd = [x for x in a if x.type == HEAD].pop()
+			if any(isinstance(x, Tree) and x.type == HEAD for x in a):
+				hd = [x for x in a
+						if isinstance(x, Tree) and x.type == HEAD].pop()
 				if hd.label != a.label:
 					particleverb = ParentedTree(hd.label, [hd, svp])
 					a[:] = [particleverb if x.type == HEAD else x
@@ -382,7 +383,7 @@ def negratransforms(name, tree, sent):
 			node.label += STATESPLIT + annot
 			if strip(node.label) == 'AVP':  # propagate to head child
 				for child in node:
-					if child.type == HEAD:
+					if isinstance(child, Tree) and child.type == HEAD:
 						child.label += STATESPLIT + annot
 						break
 	elif name == 'relPath':  # mark path from relative clause to rel. pronoun
@@ -417,7 +418,8 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: base(n, 'AP')):
 			if any(base(a, 'ADJD') for a in node.subtrees()):
 				node.label += STATESPLIT + 'pred'
-			if any(child.type == HEAD and strip(child.label) in {'NN', 'NP'}
+			if any(isinstance(child, Tree) and child.type == HEAD
+					and strip(child.label) in {'NN', 'NP'}
 					for child in node):
 				node.label += STATESPLIT + 'nom'
 	elif name == 'subConjType':  # mark type of subordinating conj.
@@ -431,7 +433,7 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: base(n, 'VP')
 				and function(n) == 'OC'):
 			for child in node:
-				if child.type == HEAD:
+				if isinstance(child, Tree) and child.type == HEAD:
 					node.label += STATESPLIT + strip(child.label)
 					break
 	elif name == 'noHead':  # constituents without head child
@@ -464,7 +466,7 @@ def ptbtransforms(name, tree, sent):
 					s.label += STATESPLIT + 'WH'
 	elif name == 'VP-HD':  # VP category split based on head
 		for vp in tree.subtrees(lambda n: n.label == 'VP'):
-			hd = [x for x in vp if x.type == HEAD].pop()
+			hd = [x for x in vp if isinstance(x, Tree) and x.type == HEAD].pop()
 			if hd.label == 'VB':
 				vp.label += STATESPLIT + 'HINF'
 			elif hd.label == 'TO':
@@ -473,7 +475,7 @@ def ptbtransforms(name, tree, sent):
 				vp.label += STATESPLIT + 'HPART'
 	elif name == 'S-INF':
 		for s in tree.subtrees(lambda n: n.label == 'S'):
-			hd = [x for x in s if x.type == HEAD].pop()
+			hd = [x for x in s if isinstance(x, Tree) and x.type == HEAD].pop()
 			if hd.label in ('VP' + STATESPLIT + 'HINF',
 					'VP' + STATESPLIT + 'HTO'):
 				s.label += STATESPLIT + 'INF'
@@ -592,7 +594,7 @@ def ptbtransforms(name, tree, sent):
 	elif name == 'splitVP':  # Stanford Parser splitVP=2
 		for node in tree.subtrees(lambda n: base(n, 'VP')):
 			for child in node:
-				if child.type == HEAD:
+				if isinstance(child, Tree) and child.type == HEAD:
 					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
 						node.label += STATESPLIT + 'VBF'
 					else:
@@ -601,7 +603,7 @@ def ptbtransforms(name, tree, sent):
 	elif name == 'splitVP3':  # Stanford Parser splitVP=3
 		for node in tree.subtrees(lambda n: base(n, 'VP')):
 			for child in node:
-				if child.type == HEAD:
+				if isinstance(child, Tree) and child.type == HEAD:
 					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
 						node.label += STATESPLIT + 'VBF'
 					elif strip(child.label) in {'TO', 'VBG', 'VBN', 'VB'}:
@@ -631,7 +633,7 @@ def ptbtransforms(name, tree, sent):
 			while node and isinstance(node[0], Tree):
 				try:
 					i, hd = next((n, a) for n, a in enumerate(child)
-							if a.type == HEAD)
+							if isinstance(a, Tree) and a.type == HEAD)
 				except StopIteration:
 					break
 				if strip(hd) == 'POS' and i > 0:
@@ -656,7 +658,8 @@ def ptbtransforms(name, tree, sent):
 				base(n, 'NP') and 'ADV' in functions(n)):
 			node.label += STATESPLIT + 'ADV'
 			try:
-				hd = next(a for a in node if a.type == HEAD)
+				hd = next(a for a in node
+						if isinstance(a, Tree) and a.type == HEAD)
 			except StopIteration:
 				continue
 			if base(hd, 'POS') and hd.parent_index > 0:
@@ -664,7 +667,8 @@ def ptbtransforms(name, tree, sent):
 			while base(hd, 'NP'):
 				hd.label += STATESPLIT + 'ADV'
 				try:
-					hd = next(a for a in hd if a.type == HEAD)
+					hd = next(a for a in hd if
+							isinstance(a, Tree) and a.type == HEAD)
 				except StopIteration:
 					break
 	elif name == 'markDitransV':  # Stanford Parser markDitransV=2
@@ -1623,16 +1627,6 @@ def labels(tree):
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
-def pop(node):
-	"""Remove this node from its parent node, if it has one.
-
-	Convenience function for ParentedTrees."""
-	try:
-		return node.parent.pop(node.parent_index)
-	except AttributeError:
-		return node
-
-
 def base(node, match):
 	"""Test whether ``node.label`` equals ``match`` after stripping features."""
 	return (node.label == match
@@ -1734,6 +1728,6 @@ def getmaxid(tree):
 			default=500)
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
-		'dlevel', 'rrtransform', 'rrbacktransform', 'rindex', 'labels', 'pop',
+		'dlevel', 'rrtransform', 'rrbacktransform', 'rindex', 'labels',
 		'strip', 'ancestors', 'bracketings', 'morphfeats', 'unifymorphfeat',
 		'function', 'functions', 'hassecedge']
