@@ -220,26 +220,3 @@ function nohighlightdep() {
 		}
 	});
 }
-
-var require = [];
-var block = [];
-function togglespan(labeledspan, array1, array2, elem) {
-	/* toggle membership of item in array1; remove item from array2. */
-	var item = JSON.stringify(labeledspan);
-	var i = array2.indexOf(item);
-	if (i != -1) {
-		array2.splice(i, 1);  // remove array2[i]
-	}
-	i = array1.indexOf(item);
-	if (i != -1) {
-		array1.splice(i, 1);  // remove array1[i]
-		elem.style.backgroundColor = 'white';
-		return false;
-	}
-	if (array1 == require)
-		elem.style.backgroundColor = 'lightgreen';
-	else
-		elem.style.backgroundColor = 'lightcoral';
-	array1.push(item); 	// append item to array1
-	return false;
-}
