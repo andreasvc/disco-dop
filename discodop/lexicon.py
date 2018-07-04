@@ -26,7 +26,6 @@ import tempfile
 from operator import itemgetter
 from subprocess import Popen, PIPE
 from collections import defaultdict, Counter, OrderedDict
-from fractions import Fraction
 from .tree import escape
 from .util import which
 from .containers import REMOVESTATESPLITS
@@ -82,14 +81,19 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		# consider POS tags with different function tags together
 		wordsforcollapsedtags = defaultdict(set)
 		for tag, ws in wordsfortag.items():
-			tag1 = REMOVESTATESPLITS.match(tag).group(2)
-			wordsforcollapsedtags[tag1].update(w.lower() for w in ws)
-		openclasstags = {tag: len({w.lower() for w in ws})
-				for tag, ws in wordsfortag.items()
-				# if len({w.lower() for w in ws}) >= openclassthreshold}
-				if len(wordsforcollapsedtags[
-					REMOVESTATESPLITS.match(tag).group(2)])
-					>= openclassthreshold}
+			match = REMOVESTATESPLITS.match(tag)
+			if match is not None:
+				tag1 = match.group(2)
+				wordsforcollapsedtags[tag1].update(w.lower() for w in ws)
+		openclasstags = {}
+		for tag, ws in wordsfortag.items():
+			match = REMOVESTATESPLITS.match(tag)
+			if match is None:
+				if len({w.lower() for w in ws}) >= openclassthreshold:
+					openclasstags[tag] = len({w.lower() for w in ws})
+			elif (len(wordsforcollapsedtags[match.group(2)])
+					>= openclassthreshold):
+				openclasstags[tag] = len({w.lower() for w in ws})
 		closedclasstags = {tag: len({w.lower() for w in wordsfortag[tag]})
 				for tag in tags if tag not in openclasstags}
 		closedclasswords = {word for tag in closedclasstags
