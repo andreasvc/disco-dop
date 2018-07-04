@@ -1,4 +1,12 @@
 % Heuristic rules for distinguishing modifiers from complements
+%
+% The first label specifies a constituent, the rest specifies an unordered list
+% of children which should be considered modifiers.
+% The children may include a function tag separated by a dash;
+% if only the function tag needs to match, specify the category as '*'.
+% A default rule can be specified by using * as the first label, which
+% always matches (in addition to another matching rule, if any).
+% If none of the rules match, a non-terminal is assumed to be a complement.
 
-* *-MOD ADV MWADV
-NP A MWA
+* *-MOD ADV MWADV PONCT SREL VPpart
+NP A MWA NP
