@@ -913,6 +913,26 @@ class ParentedTree(Tree):
 		self[:] = []
 		return children
 
+	def spliceabove(self, label):
+		"""Insert a new node between this node and its parent."""
+		i = self.parent_index
+		parent = self.parent
+		newnode = ParentedTree(label, [self.detach()])
+		parent.insert(i, newnode)
+		return newnode
+
+	def splicebelow(self, label):
+		"""Insert a new node between this node and its children."""
+		newnode = ParentedTree(label, self.disown())
+		self.append(newnode)
+		return newnode
+
+	def prune(self):
+		"""Replace this node with its children."""
+		i = self.parent_index
+		children = self.disown()
+		self.parent[i:i + 1] = children
+
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):
 	"""Combination of an Immutable and Parented Tree."""
