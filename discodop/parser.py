@@ -217,19 +217,21 @@ class Parser(object):
 				m = n
 				break
 		# NB: assumes labels of first stage have not been collapsed
-		pos = [REMOVESTATESPLITS.match(a)
+		# handle POS labels without match like -LRB- or :
+		pos = [(a, REMOVESTATESPLITS.match(a))
 				for a in prm.stages[m].grammar.getpos()]
 		labels = [match for match in (REMOVESTATESPLITS.match(a)
 				for a in prm.stages[m].grammar.getlabels())
 				if match]
-		self.poslabels = {match.group(2) for match in pos if match}
+		self.poslabels = {match.group(2) if match else a for a, match in pos}
 		self.phrasallabels = {match.group(2) for match in labels
 					} - self.poslabels
 		self.functiontags = {match.group(3)[1:]
 				for match in labels if match.group(3)} | {
-				match.group(3)[1:] for match in pos if match.group(3)}
+				match.group(3)[1:] for a, match in pos
+				if match and match.group(3)}
 		self.morphtags = {match.group(4)[1:]
-				for match in pos if match.group(4)}
+				for a, match in pos if match and match.group(4)}
 		for stage in prm.stages:
 			if stage.dop == 'doubledop':
 				# map of fragments to line numbers
