@@ -308,7 +308,8 @@ def counts(form, doexport=False):
 			yield ('%s             %5d %5.2f %%\n\n' % (
 					'TOTAL'.ljust(COLWIDTH),
 					sum(cnts.values()),
-					100.0 * sum(cnts.values()) / sumtotal))
+					(100.0 * sum(cnts.values()) / sumtotal)
+					if sumtotal else float('nan')))
 			yield '</pre></div>'
 			if max(cnts.values()) == 0:
 				continue
@@ -330,7 +331,7 @@ def counts(form, doexport=False):
 	else:
 		def fmt(x):
 			"""Compact float repr."""
-			return '%g' % round(x, 1)
+			return '%g' % round(x, 3)
 
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
@@ -907,6 +908,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 
 		# Convert to PNG
 		figfile = io.BytesIO()
+		plt.tight_layout()
 		plt.savefig(figfile, format='png')
 		import base64
 		result = '<div><img src="data:image/png;base64, %s"/></div>' % (
@@ -1101,7 +1103,7 @@ def getcorpus():
 			)]
 	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
 	# get tokenized sents from trees or ucto
-	for filename in tfiles or txtfiles:
+	for filename in ffiles or tfiles or txtfiles:
 		tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
@@ -1142,7 +1144,7 @@ def getcorpus():
 		if not corpusinfo:
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in tfiles or ffiles or tokfiles]
+				for a in ffiles or tfiles or tokfiles]
 		styletable = getreadabilitymeasures(
 				[a.len for a in next(iter(corpusinfo.values()))])
 		with open(picklefile, 'wb') as out:

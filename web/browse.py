@@ -80,8 +80,8 @@ FILTERS = {
 				key=lambda n: n[0])])
 			), None),
 		'PP/REL modifiers': getmodifiers,
-		'punctuation': lambda i: (
-			max('.,\'"?!(:;'.find(t) + 1 for t in i.sent)),
+		'punctuation': lambda i:
+			(None, max('.,\'"?!(:;'.find(t) + 1 for t in i.sent)),
 		'direct speech': lambda i:
 			(None, re.match(r"^- .*$|(?:^|.* )['\"](?: .*|$)",
 			' '.join(i.sent)) is not None),
