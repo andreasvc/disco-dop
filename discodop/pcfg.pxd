@@ -6,6 +6,7 @@ from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
 from .containers cimport (Chart, Grammar, ProbRule, LexicalRule,
 		Edge, RankedEdge, Idx, Prob, Label, ItemNo, cellidx, compactcellidx,
+		compactcell_to_start, compactcell_to_end,
 		sparse_hash_map, sparse_hash_set, Agenda, Whitelist,
 		SmallChartItem, FatChartItem, CFGtoSmallChartItem, CFGtoFatChartItem)
 
