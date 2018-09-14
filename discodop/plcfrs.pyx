@@ -170,7 +170,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		cdef int end = nextunset(sitem.vec, start)
 		assert nextset(sitem.vec, end) == -1
 		assert 0 <= start < end <= self.lensent
-		return compactcellidx(start, end, self.lensent, 1)
+		return cellidx(start, end, self.lensent, 1)
 
 
 @cython.final
@@ -303,7 +303,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 		cdef int end = anextunset(fitem.vec, start, SLOTS)
 		assert anextset(fitem.vec, end, SLOTS) == -1
 		assert 0 <= start < end <= self.lensent
-		return compactcellidx(start, end, self.lensent, 1)
+		return cellidx(start, end, self.lensent, 1)
 
 
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,

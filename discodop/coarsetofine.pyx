@@ -7,7 +7,7 @@ import re
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
 from .containers cimport (Grammar, Chart, Edge, RankedEdge, LexicalRule,
-		Label, ItemNo, compactcellidx, CFGtoSmallChartItem,
+		Label, ItemNo, cellidx, CFGtoSmallChartItem,
 		CFGtoFatChartItem, SmallChartItem, FatChartItem, Whitelist)
 from .bit cimport nextset, nextunset, anextset, anextunset
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart, CFGItem
@@ -140,7 +140,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		items = [n for n in itemset]
 	if finecfg:  # index items by cell
 		whitelist.cfg.clear()
-		whitelist.cfg.resize(compactcellidx(
+		whitelist.cfg.resize(cellidx(
 				coarsechart.lensent - 1, coarsechart.lensent,
 				coarsechart.lensent, 1) + 1)
 		for item in items:

@@ -724,23 +724,15 @@ cdef class FixedVocabulary(Vocabulary):
 # defined here because circular import.
 cdef inline size_t cellidx(short start, short end, short lensent,
 		Label nonterminals):
-	"""Return an index for a regular three dimensional array.
-
-	``chart[start][end][0] => chart[idx]`` """
-	return (start * lensent + (end - 1)) * nonterminals
-
-
-cdef inline size_t compactcellidx(short start, short end, short lensent,
-		Label nonterminals):
 	"""Return an index to a triangular array, given start < end.
 	The result of this function is the index to chart[start][end][0]."""
 	return nonterminals * (lensent * start
 			- ((start - 1) * start // 2) + end - start - 1)
 
 
-cdef inline short compactcell_to_start(size_t cell, short lensent,
+cdef inline short cellstart(size_t cell, short lensent,
 		Label nonterminals):
-	"""Retrieve start position for a given compact chart cell."""
+	"""Retrieve start position for a given chart cell."""
 	cell = cell // nonterminals
 	cdef short start = 0, idx = 0
 	while idx + lensent <= cell:
@@ -753,16 +745,16 @@ cdef inline short compactcell_to_start(size_t cell, short lensent,
 # alternative implementation in closed form (slower)
 # requires: from libc.math cimport sqrt
 #
-# cdef inline short compactcell_to_start(size_t cell, short lensent,
+# cdef inline short cellstart(size_t cell, short lensent,
 # 		Label nonterminals):
-# 	"""Retrieve start position for a given compact chart cell."""
+# 	"""Retrieve start position for a given chart cell."""
 # 	return int(lensent + 0.5 \
 # 		   - sqrt(0.25 + lensent * (lensent + 1) - 2 * (cell // nonterminals)))
 
 
-cdef inline short compactcell_to_end(size_t cell, short lensent,
+cdef inline short cellend(size_t cell, short lensent,
 		Label nonterminals):
-	"""Retrieve end position for a given compact chart cell."""
+	"""Retrieve end position for a given chart cell."""
 	cell = cell // nonterminals
 	cdef short start = 0, idx = 0
 	while idx + lensent <= cell:
@@ -775,9 +767,9 @@ cdef inline short compactcell_to_end(size_t cell, short lensent,
 # alternative implementation in closed form (slower)
 # requires: from libc.math cimport sqrt, modf
 #
-# cdef inline short compactcell_to_end(size_t cell, short lensent,
+# cdef inline short cellend(size_t cell, short lensent,
 # 		Label nonterminals):
-# 	"""Retrieve end position for a given compact chart cell."""
+# 	"""Retrieve end position for a given chart cell."""
 # 	cdef double fractional, start
 # 	fractional = modf(lensent + 0.5 - sqrt(
 # 				0.25 + lensent * (lensent + 1) - 2 * (cell // nonterminals)),

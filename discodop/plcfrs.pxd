@@ -7,7 +7,7 @@ from cpython.set cimport PySet_Contains
 from .containers cimport (Chart, Grammar, Prob, Label, ItemNo,
 		ProbRule, LexicalRule, SmallChartItem, FatChartItem, Edge,
 		Whitelist, Agenda, SmallChartItemBtreeMap, FatChartItemBtreeMap,
-		BITSIZE, CFGtoSmallChartItem, CFGtoFatChartItem, compactcellidx)
+		BITSIZE, CFGtoSmallChartItem, CFGtoFatChartItem, cellidx)
 from .bit cimport (nextset, nextunset, bitcount, bitlength,
 	testbit, anextset, anextunset, abitcount, abitlength, setunion)
 

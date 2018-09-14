@@ -106,7 +106,7 @@ cdef class Chart:
 		raise NotImplementedError
 
 	cdef size_t asCFGspan(self, ItemNo itemidx):
-		"""Convert item for chart to compact span."""
+		"""Convert item for chart to span."""
 		raise NotImplementedError
 
 	def indices(self, item):
