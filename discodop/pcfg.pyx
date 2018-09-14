@@ -57,11 +57,8 @@ cdef class DenseCFGChart(CFGChart):
 		self.start = grammar.toid[grammar.start if start is None else start]
 		self.logprob = logprob
 		self.viterbi = viterbi
-		# FIXME: use compactcellidx?
-		# entries = compactcellidx(self.lensent - 1, self.lensent,
-		# 		self.lensent, grammar.nonterminals) + grammar.nonterminals
-		entries = cellidx(self.lensent - 1, self.lensent, self.lensent,
-				grammar.nonterminals) + grammar.nonterminals
+		entries = compactcellidx(self.lensent - 1, self.lensent,
+				self.lensent, grammar.nonterminals) + grammar.nonterminals
 		self.items.reserve(entries)
 		self.items.push_back(0)
 		# NB: resize not reserve; will not resize again.
@@ -69,14 +66,14 @@ cdef class DenseCFGChart(CFGChart):
 		self.parseforest.resize(entries)
 
 	def root(self):
-		return cellidx(0, self.lensent, self.lensent,
+		return compactcellidx(0, self.lensent, self.lensent,
 			self.grammar.nonterminals) + self.start
 
 	def bestsubtree(self, start, end):
 		cdef Prob bestprob = INFINITY, prob
 		cdef uint64_t bestitem = 0
-		cdef uint64_t cell = cellidx(start, end, self.lensent,
-			self.grammar.nonterminals)
+		cdef uint64_t cell = compactcellidx(start, end, self.lensent,
+		 	self.grammar.nonterminals)
 		for label in range(self.grammar.nonterminals):
 			if ('*' in self.grammar.tolabel[label]
 					or '<' in self.grammar.tolabel[label]):
@@ -102,9 +99,7 @@ cdef class DenseCFGChart(CFGChart):
 		cdef bint newitem = self.probs[item] == INFINITY
 		if beam:
 			itemx = item - item % self.grammar.nonterminals
-			start = itemx // (self.grammar.nonterminals * self.lensent)
-			end = itemx // self.grammar.nonterminals % self.lensent + 1
-			beamitem = compactcellidx(start, end, self.lensent, 1)
+			beamitem = itemx // self.grammar.nonterminals
 			if prob > self.beambuckets[beamitem]:  # prob falls outside of beam
 				return False
 			elif prob + beam < self.beambuckets[beamitem]:  # shrink beam
@@ -124,8 +119,9 @@ cdef class DenseCFGChart(CFGChart):
 		cdef short start
 		if edge.rule is NULL:
 			return 0
-		start = item // (self.grammar.nonterminals * self.lensent)
-		return cellidx(start, edge.pos.mid, self.lensent,
+		start = compactcell_to_start(item, self.lensent,
+				self.grammar.nonterminals)
+		return compactcellidx(start, edge.pos.mid, self.lensent,
 				self.grammar.nonterminals) + edge.rule.rhs1
 
 	cdef ItemNo _right(self, ItemNo itemidx, Edge edge):
@@ -133,8 +129,9 @@ cdef class DenseCFGChart(CFGChart):
 		cdef short end
 		if edge.rule is NULL or edge.rule.rhs2 == 0:
 			return 0
-		end = item // self.grammar.nonterminals % self.lensent + 1
-		return cellidx(edge.pos.mid, end, self.lensent,
+		end = compactcell_to_end(item, self.lensent,
+				self.grammar.nonterminals)
+		return compactcellidx(edge.pos.mid, end, self.lensent,
 				self.grammar.nonterminals) + edge.rule.rhs2
 
 	cdef Label _label(self, uint64_t item):
@@ -159,15 +156,19 @@ cdef class DenseCFGChart(CFGChart):
 
 	def indices(self, ItemNo itemidx):
 		cdef uint64_t item = itemidx
-		cdef short start = (item // self.grammar.nonterminals) // self.lensent
-		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
+		cdef short start = compactcell_to_start(item, self.lensent,
+				self.grammar.nonterminals)
+		cdef short end = compactcell_to_end(item, self.lensent,
+				self.grammar.nonterminals)
 		return list(range(start, end))
 
 	def itemstr(self, ItemNo itemidx):
 		cdef uint64_t item = itemidx
 		cdef Label lhs = item % self.grammar.nonterminals
-		cdef short start = (item // self.grammar.nonterminals) // self.lensent
-		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
+		cdef short start = compactcell_to_start(item, self.lensent,
+				self.grammar.nonterminals)
+		cdef short end = compactcell_to_end(item, self.lensent,
+				self.grammar.nonterminals)
 		return '%s[%d:%d]' % (self.grammar.tolabel[lhs], start, end)
 
 	def numitems(self):
@@ -195,8 +196,8 @@ cdef class DenseCFGChart(CFGChart):
 	def itemid1(self, Label labelid, indices, Whitelist whitelist=None):
 		cdef short left = min(indices)
 		cdef short right = max(indices) + 1
-		item = cellidx(left, right, self.lensent, self.grammar.nonterminals
-				) + labelid
+		item = compactcellidx(left, right, self.lensent,
+				self.grammar.nonterminals) + labelid
 		if whitelist is not None:
 			return whitelist.cfg[compactcellidx(left, right, self.lensent, 1)
 					].count(whitelist.mapping[labelid]) != 0 and item
@@ -206,28 +207,24 @@ cdef class DenseCFGChart(CFGChart):
 		cdef CFGItem item
 		item.dt = itemidx
 		label = item.dt % self.grammar.nonterminals
-		item.dt //= self.grammar.nonterminals
-		start = item.dt // self.lensent
-		end = item.dt % self.lensent + 1
+		start = compactcell_to_start(itemidx, self.lensent,
+				self.grammar.nonterminals)
+		end = compactcell_to_end(itemidx, self.lensent,
+				self.grammar.nonterminals)
 		return CFGtoSmallChartItem(label, start, end)
 
 	cdef FatChartItem asFatChartItem(self, ItemNo itemidx):
 		cdef CFGItem item
 		item.dt = itemidx
 		label = item.dt % self.grammar.nonterminals
-		item.dt //= self.grammar.nonterminals
-		start = item.dt // self.lensent
-		end = item.dt % self.lensent + 1
+		start = compactcell_to_start(itemidx, self.lensent,
+				self.grammar.nonterminals)
+		end = compactcell_to_end(itemidx, self.lensent,
+				self.grammar.nonterminals)
 		return CFGtoFatChartItem(label, start, end)
 
 	cdef size_t asCFGspan(self, ItemNo itemidx):
-		cdef CFGItem item
-		item.dt = itemidx
-		item.dt //= self.grammar.nonterminals
-		start = item.dt // self.lensent
-		end = item.dt % self.lensent + 1
-		assert 0 <= start < end <= self.lensent
-		return compactcellidx(start, end, self.lensent, 1)
+		return itemidx // self.grammar.nonterminals
 
 
 @cython.final
@@ -454,7 +451,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 		Prob prevprob, prob
 		Label lhs = 0
 		uint32_t n
-		uint64_t item, leftitem, rightitem, cell, blocked = 0
+		uint64_t item, leftitem, rightitem, cell, blocked = 0, pruned = 0
 		ItemNo lastidx
 		size_t nts = grammar.nonterminals
 		bint usemask = grammar.mask.size() != 0
@@ -480,7 +477,7 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 		for left in range(lensent - span + 1):
 			right = left + span
 			if CFGChart_fused is DenseCFGChart:
-				cell = cellidx(left, right, lensent, nts)
+				cell = compactcellidx(left, right, lensent, nts)
 			elif CFGChart_fused is SparseCFGChart:
 				cell = cellstruct(left, right)
 			lastidx = chart.items.size()
@@ -505,9 +502,9 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 					maxmid = wider if wider < narrowl else narrowl
 					for mid in range(minmid, maxmid + 1):
 						if CFGChart_fused is DenseCFGChart:
-							leftitem = rule.rhs1 + cellidx(left, mid,
+							leftitem = rule.rhs1 + compactcellidx(left, mid,
 									lensent, nts)
-							rightitem = rule.rhs2 + cellidx(mid, right,
+							rightitem = rule.rhs2 + compactcellidx(mid, right,
 									lensent, nts)
 						elif CFGChart_fused is SparseCFGChart:
 							leftitem = rule.rhs1 + cellstruct(left, mid)
@@ -531,8 +528,9 @@ cdef parse_grammarloop(sent, CFGChart_fused chart, tags,
 			applyunaryrules[CFGChart_fused](chart, left, right, cell, lastidx,
 					unaryagenda, &midfilter, &blocked, None)
 
-	msg = '%s%s, blocked %s' % (
-			'' if chart else 'no parse; ', chart.stats(), blocked)
+	msg = '%s%s, blocked %s%s' % (
+			'' if chart else 'no parse; ', chart.stats(), blocked,
+			', pruned %s' % pruned if beam_beta else '')
 	return chart, msg
 
 
@@ -642,7 +640,7 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		tagre = re.compile('%s($|[-@^/])' % re.escape(tag)) if tag else None
 		right = left + 1
 		if CFGChart_fused is DenseCFGChart:
-			cell = cellidx(left, right, lensent, nts)
+			cell = compactcellidx(left, right, lensent, nts)
 		elif CFGChart_fused is SparseCFGChart:
 			cell = cellstruct(left, right)
 		ccell = compactcellidx(left, right, lensent, 1)
