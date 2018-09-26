@@ -148,9 +148,13 @@ installed versions of modules are imported.
 
 The documentation can be found at http://discodop.readthedocs.io
 
-Grammars
-========
-Cf. https://lang.science.uva.nl/grammars/
+Grammars, demo
+==============
+A interactive demo of the parser is available at:
+https://lang.science.uva.nl/parser/
+
+The pretrained grammars used in this demo are available at:
+https://lang.science.uva.nl/grammars/
 
 The English, German, and Dutch grammars are described in
 `van Cranenburgh et al., (2016) <http://dx.doi.org/10.15398/jlm.v4i1.100>`_;
