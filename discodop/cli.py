@@ -81,7 +81,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=',
 			'output=')
 	try:
-		opts, args = gnu_getopt(argv[2:], 'hn:', flags + options)
+		opts, args = gnu_getopt(argv[2:], 'hn:fm', flags + options)
 	except GetoptError as err:
 		print('error:', err, file=stderr)
 		print(treedraw.__doc__)
@@ -90,6 +90,10 @@ Pipe the output through 'less -R' to preserve the colors."""
 	limit = opts.get('--numtrees', opts.get('-n'))
 	limit = int(limit) if limit else None
 	output = opts.get('--output', 'text')
+	if '-f' in opts:
+		opts['--functions'] = 'add'
+	if '-m' in opts:
+		opts['--morphology'] = 'add'
 	funcsep = ('-' if opts.get('--functions')
 		in ('add', 'between') else None)
 	ansi = output == 'text' and '--plain' not in opts

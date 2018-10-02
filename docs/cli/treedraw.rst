@@ -10,12 +10,12 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 
 --encoding=enc    Specify input encoding [default: utf-8].
 --functions=x     :'leave': leave syntactic labels as is [default],
+                  :'add': show both syntactic categories and functions (shortcut: -f),
                   :'remove': strip functions off labels,
-                  :'add': show both syntactic categories and functions,
                   :'replace': only show grammatical functions.
 
 --morphology=x    :'no': only show POS tags [default],
-                  :'add': concatenate morphology tags to POS tags,
+                  :'add': concatenate morphology tags to POS tags (shortcut: -m),
                   :'replace': replace POS tags with morphology tags,
                   :'between': add morphological node between POS tag and word.
 
