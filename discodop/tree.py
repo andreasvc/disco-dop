@@ -92,8 +92,8 @@ class Tree(object):
 						"or a single string; got: %s" % (
 						cls.__name__, type(label_or_str)))
 			return cls.parse(label_or_str)
-		if (isinstance(children, str) or
-				not hasattr(children, '__iter__')):
+		if (isinstance(children, str)
+				or not hasattr(children, '__iter__')):
 			raise TypeError("%s() argument 2 should be a list, not a "
 					"string" % cls.__name__)
 		return object.__new__(cls)
@@ -728,8 +728,8 @@ class ParentedTree(Tree):
 		i.e., ptree.root[ptree.treeposition] is ptree."""
 		if self._parent is None:
 			return ()
-		return (self._parent._get_treeposition() +
-				(self._get_parent_index(), ))
+		return (self._parent._get_treeposition()
+				+ (self._get_parent_index(), ))
 
 	def _get_root(self):
 		""":returns: the root of this tree."""
@@ -1240,8 +1240,8 @@ class DrawTree(object):
 				if n < maxdepth - 1 and childcols[m]:
 					_, pivot = min(childcols[m], key=itemgetter(1))
 					if ({a[:-1] for row in matrix[:-1] for a in row[:pivot]
-							if isinstance(a, tuple)} &
-						{a[:-1] for row in matrix[:-1] for a in row[pivot:]
+							if isinstance(a, tuple)}
+						& {a[:-1] for row in matrix[:-1] for a in row[pivot:]
 							if isinstance(a, tuple)}):
 						crossed.add(m)
 
@@ -1524,17 +1524,17 @@ class DrawTree(object):
 					newtext.append(cat)
 				else:
 					newtext.append('')
-				if func:
+				if func or (funcsep and line.endswith(funcsep)):
 					if not seensep:
 						newtext[-1] += funcsep
 						seensep = True
 					if html and n in self.highlightfunc:
 						newtext[-1] += (
 								'<font color=%s>%s</font>' % (
-								funccolor, func))
+								funccolor, func or ''))
 					elif ansi and n in self.highlightfunc:
 						newtext[-1] += '\x1b[%d;1m%s\x1b[0m' % (
-								ANSICOLOR[funccolor], func)
+								ANSICOLOR[funccolor], func or '')
 					else:
 						newtext[-1] += func
 			return newtext
@@ -1618,8 +1618,8 @@ class DrawTree(object):
 			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
 				for n, (childrow, col) in self.coords.items():
-					if (n > 0 and
-							self.coords[self.edges[n]][0] < row < childrow):
+					if (n > 0 and self.coords[
+							self.edges[n]][0] < row < childrow):
 						branchrow[col] = crosscell(branchrow[col])
 						if col not in matrix[row]:
 							for noderow in noderows:
@@ -2021,6 +2021,7 @@ def ranges(seq):
 			rng = [a]
 	if rng:
 		yield rng
+
 
 __all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
 		'DiscTree', 'DrawTree', 'latexlabel', 'frontier', 'brackettree',
