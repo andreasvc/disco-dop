@@ -1276,7 +1276,7 @@ def main():
 	shortoptions = 'e:m:M:stcbnofih'
 	options = ('engine= macros= numproc= max-count= slice= '
 			'trees sents brackets counts indices breakdown only-matching '
-			'line-number file ignore-case csv help')
+			'line-number file ignore-case no-filename csv help')
 	try:
 		opts, args = gnu_getopt(sys.argv[2:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
@@ -1302,6 +1302,8 @@ def main():
 	start, end = (int(start) if start else None), (int(end) if end else None)
 	# FIXME: support negative indices? why 1-based indices?
 	ignorecase = '--ignore-case' in opts or '-i' in opts
+	printfname = (len(corpora) > 1 and '--no-filename' not in opts
+			and '-h' not in opts)
 	if ignorecase and engine != 'regex':
 		raise ValueError('--ignore-case is only supported with --engine=regex')
 	if engine == 'tgrep2':
@@ -1332,10 +1334,10 @@ def main():
 		else:
 			for filename, cnt in searcher.counts(
 					query, start=start, end=end, indices=indices).items():
-				if len(corpora) > 1:
+				if printfname:
 					print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
-				print(cnt)
+				print(list(cnt) if indices else cnt)
 	elif '--trees' in opts or '-t' in opts:
 		results = searcher.trees(
 				query, start=start, end=end, maxresults=maxresults)
@@ -1355,7 +1357,7 @@ def main():
 						len(x.leaves()) if isinstance(x, Tree) else 1)
 			out = DrawTree(tree, sent, highlight=high).text(
 					unicodelines=True, ansi=True)
-			if len(corpora) > 1:
+			if printfname:
 				print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
 			if '--line-number' in opts or '-n' in opts:
@@ -1392,7 +1394,7 @@ def main():
 								for n, char in enumerate(sent))
 					else:
 						out = applyhighlight(sent, high1, high2)
-				if len(corpora) > 1:
+				if printfname:
 					print('\x1b[%dm%s\x1b[0m:' % (
 							ANSICOLOR['magenta'], filename), end='')
 				if '--line-number' in opts or '-n' in opts:
