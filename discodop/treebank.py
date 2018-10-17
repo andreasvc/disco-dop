@@ -203,6 +203,9 @@ class BracketCorpusReader(CorpusReader):
 		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
 
 	def blocks(self):
+		"""
+		:returns: a list of strings containing the raw representation of
+			trees in the original treebank."""
 		return OrderedDict(self._read_blocks())
 
 	def _read_blocks(self):
@@ -287,6 +290,9 @@ class NegraCorpusReader(CorpusReader):
 	"""Read a corpus in the Negra export format."""
 
 	def blocks(self):
+		"""
+		:returns: a list of strings containing the raw representation of
+			trees in the original treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((a, '\n'.join(b) + '\n')
@@ -937,6 +943,7 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 		raise ValueError('unrecognized action: %r' % action)
 	return preterminal
 
+
 CONSUMED = True
 NEWLB = re.compile(r'(?:.*[\n\r])?\s*')
 
@@ -1033,8 +1040,8 @@ def segmentbrackets(strict=False, robust=True):
 		while a != -1 or b != -1:
 			if a != -1 and (a < b or b == -1):  # left bracket
 				# look ahead to see whether this will be a tree with depth > 1
-				if parens == 0 and (b == -1 or
-							(not robust or 0 <= line.find(lb, a + 1) < b)):
+				if parens == 0 and (b == -1
+						or (not robust or 0 <= line.find(lb, a + 1) < b)):
 					rest, prev = line[start:a], line[a:]
 					if result:
 						tryparse(result, rest)
