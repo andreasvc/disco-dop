@@ -1025,7 +1025,7 @@ def main():
 		print('error: incorrect number of arguments', file=sys.stderr)
 		print(SHORTUSAGE)
 		sys.exit(2)
-	for n, filename in enumerate(args):
+	for n, filename in enumerate(args[:3 if '--simple' in opts else 2]):
 		if not os.path.exists(filename):
 			raise ValueError('file %d not found: %r' % (n + 1, filename))
 	opts = dict(opts)
