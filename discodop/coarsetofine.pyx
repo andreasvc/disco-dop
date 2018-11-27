@@ -16,6 +16,7 @@ from .kbest import lazykbest
 from .kbest cimport collectitems, getderiv
 from roaringbitmap import RoaringBitmap
 import numpy as np
+from libc.math cimport exp
 
 include "constants.pxi"
 
@@ -231,7 +232,16 @@ def getinside(Chart chart):
 		item = chart.getitemidx(n)
 		for edge in chart.parseforest[item]:
 			if edge.rule is NULL:
-				prob = chart.lexprob(item, edge)
+				try:
+					prob = chart.lexprob(item, edge)
+				except ValueError:
+					# fall back to Viterbi score from chart
+					# if there is a single incoming edge this is correct
+					assert chart.parseforest[item].size() == 1
+					if chart.logprob:
+						prob = exp(-chart.probs[item])
+					else:
+						prob = chart.probs[item]
 			elif edge.rule.rhs2 == 0:
 				leftitem = chart._left(item, edge)
 				prob = (edge.rule.prob
