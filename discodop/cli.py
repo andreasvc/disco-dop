@@ -438,6 +438,8 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 				prm.transformations, prm.relationalrealizational, resultdir)
 		if prm.postagging and prm.postagging.method == 'unknownword':
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
+		elif not prm.postagging:
+			lexmodel = None
 	elif model == 'ptsg':  # read fragments
 		xfragments = {frag: splitweight(weight) for frag, weight
 				in (line.split('\t') for line in openread(treebankfile,
@@ -518,7 +520,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		print(grammarinfo(xgrammar))
 	try:
 		from .containers import Grammar
-		print(Grammar(rules, lexicon, start=start).testgrammar()[1])
+		print(Grammar(rulesname, lexiconname, start=start).testgrammar()[1])
 	except (ImportError, AssertionError) as err:
 		print(err)
 
