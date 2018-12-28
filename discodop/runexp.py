@@ -8,11 +8,11 @@ import csv
 import sys
 import json
 import gzip
-import time
 import codecs
 import logging
 import multiprocessing
 from math import log
+from time import process_time
 from collections import defaultdict, Counter, OrderedDict
 import pickle
 from itertools import zip_longest  # pylint: disable=E0611
@@ -200,14 +200,15 @@ def startexp(
 	deletelabel = evalparam.get('DELETE_LABEL', ())
 	deleteword = evalparam.get('DELETE_WORD', ())
 
-	begin = time.clock()
+	begin = process_time()
 	theparser = parser.Parser(prm, funcclassifier=funcclassifier)
 	results = doparsing(parser=theparser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=prm.numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=prm.corpusfmt,
 			morphology=prm.morphology, evalparam=evalparam)
 	if prm.numproc == 1:
-		logging.info('time elapsed during parsing: %gs', time.clock() - begin)
+		logging.info(
+				'time elapsed during parsing: %gs', process_time() - begin)
 	for result in results:
 		nsent = len(result.parsetrees)
 		overcutoff = any(len(a) > evalparam['CUTOFF_LEN']
@@ -291,7 +292,7 @@ def dobinarization(trees, sents, binarization, relationalrealizational,
 		logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
 				tbfanout, n, trees[n], ' '.join(sents[n]))
 	# binarization
-	begin = time.clock()
+	begin = process_time()
 	msg = 'binarization: %s' % binarization.method
 	if binarization.fanout_marks_before_bin:
 		trees = [treetransforms.addfanoutmarkers(t) for t in trees]
@@ -314,7 +315,8 @@ def dobinarization(trees, sents, binarization, relationalrealizational,
 			logging.info(msg1)
 	trees = [treetransforms.addfanoutmarkers(t) for t in trees]
 	if logmsg:
-		logging.info('%s; cpu time elapsed: %gs', msg, time.clock() - begin)
+		logging.info(
+				'%s; cpu time elapsed: %gs', msg, process_time() - begin)
 	return trees
 
 
@@ -517,7 +519,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				raise ValueError('SX estimate requires PCFG.')
 			elif stage.mode != 'plcfrs':
 				raise ValueError('estimates require parser w/agenda.')
-			begin = time.clock()
+			begin = process_time()
 			logging.info('computing %s estimates', stage.estimates)
 			if stage.estimates == 'SX':
 				outside = estimates.getpcfgestimates(
@@ -526,7 +528,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				outside = estimates.getestimates(
 						gram, testmaxwords, trees[0].label)
 			logging.info('estimates done. cpu time elapsed: %gs',
-					time.clock() - begin)
+					process_time() - begin)
 			np.savez_compressed('%s/%s.outside.npz' % (
 					resultdir, stage.name), outside=outside)
 			logging.info('saved %s estimates', stage.estimates)
@@ -871,15 +873,12 @@ def parsetepacoc(
 		if cat == 'baseline':
 			continue
 		logging.info('category: %s', cat)
-		begin = time.clock()
+		begin = process_time()
 		results[cat] = doparsing(parser=theparser, testset=testset,
 				resultdir=resultdir, usetags=True, numproc=numproc,
 				category=cat)
 		cnt += len(testset[0])
-		if numproc == 1:
-			logging.info('time elapsed during parsing: %g',
-					time.clock() - begin)
-		# else:  # wall clock time here
+		logging.info('time elapsed during parsing: %g', process_time() - begin)
 	goldbrackets = Counter()
 	totresults = [parser.DictObj(name=stage.name) for stage in stages]
 	for result in totresults:

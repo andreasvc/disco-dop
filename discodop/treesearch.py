@@ -892,7 +892,7 @@ class RegexSearcher(CorpusSearcher):
 			result = array.array('I')
 			for tmp in self._map(_regex_run_batch, chunkedpatterns,
 					filename=filename, fileno=self.fileno[filename],
-					lienidxpath=self.lineidxpath, start=start, end=end):
+					lineidxpath=self.lineidxpath, start=start, end=end):
 				result.extend(tmp)
 			yield filename, result
 

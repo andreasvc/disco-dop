@@ -8,7 +8,7 @@ import codecs
 import traceback
 from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
-from collections import Set, Iterable
+from collections.abc import Set, Iterable
 
 
 def which(program):

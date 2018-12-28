@@ -361,7 +361,7 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 
 def test():
 	import re
-	from time import clock
+	from time import process_time
 	from .treetransforms import splitdiscnodes, binarize, addfanoutmarkers
 	from .treebank import NegraCorpusReader
 	from .grammar import treebankgrammar, dopreduction, subsetgrammar
@@ -424,12 +424,12 @@ def test():
 			continue
 		print("coarse grammar:", msg)
 		fine.getmapping(coarse, re.compile('@[-0-9]+$'), None, split, True)
-		begin = clock()
+		begin = process_time()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen:
 				continue
 			print(n, end=' ')
 			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
-		print("time elapsed", clock() - begin, "s")
+		print("time elapsed", process_time() - begin, "s")
 
 __all__ = ['prunechart', 'posteriorthreshold', 'getinside', 'getoutside']
