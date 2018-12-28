@@ -1,4 +1,5 @@
 """Read and write treebanks."""
+from __future__ import generator_stop
 import os
 import re
 import sys
@@ -978,10 +979,17 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 		res, status = None, CONSUMED
 		for reader in readers:
 			while res is None:
-				res, status = reader.send(line)
+				try:
+					res, status = reader.send(line)
+				except StopIteration:
+					return
 				if status != CONSUMED:
 					break  # there was no tree, or a complete tree was read
-				line = next(treeinput)
+				try:
+					line = next(treeinput)
+				except StopIteration:
+					line = None
+					break
 			if res is not None:
 				for tree, sent, rest in res:
 					x = -1 if rest is None else rest.find('\n')
@@ -992,9 +1000,12 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 						yield tree, sent, rest
 				break
 		if res is None:  # none of the readers accepted this line
-			if othertext:
+			if othertext and line is not None:
 				yield None, None, line.rstrip()
-			line = next(treeinput)
+			try:
+				line = next(treeinput)
+			except StopIteration:
+				return
 
 
 def segmentbrackets(strict=False, robust=True):
