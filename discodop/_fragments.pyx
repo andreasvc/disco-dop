@@ -570,6 +570,8 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 	elif len(indices) == 0:
 		result = None
 	else:
+		if any(trees.prodindex[n] is None for n in indices):
+			return None
 		result = trees.prodindex[indices[0]].clamp(start, end)
 		if len(indices) > 1:  # work around bug for older RoaringBitmap
 			result = result.intersection(

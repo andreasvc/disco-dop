@@ -16,6 +16,7 @@ pre, .mono, .deptree, span.tt {
 		monospace;
 	font-size: 10pt;
 }
+pre { line-height: 11pt; }
 
 .item {
 	white-space: nowrap;

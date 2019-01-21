@@ -23,7 +23,7 @@ Options:
 -s, --sents     Output sentences (default); multiple queries can be given.
 -t, --trees     Output visualizations of trees.
 -b, --brackets  Output raw trees in the original corpus format.
---indices       Report a sentence numebers of matches for each corpus
+--indices       Report sentence numbers of matches instead of counts
 --breakdown     Report counts of types that match query.
 --csv           Report counts in CSV format instead of the default flat format.
 -f, --file      Read queries (one per line) from filename given as first argument.
@@ -32,12 +32,14 @@ Options:
                 M may be left out; slice indexing is 1-based and inclusive.
 -m N, --max-count=N
                 Stop after finding N matches; 0 for no limit.
--n, --line-number
-                Prefix each line of output with the sentence number within
-                its input file.
 -o, --only-matching
                 Only output the matching portion
                 with ``--sents``, ``--trees``, and ``--brackets``.
+-n, --line-number
+                Prefix each line of output with the sentence number within
+                its input file.
+-h, --no-filename
+                Suppress the file name prefix when searching multiple files.
 -i, --ignore-case
                 Ignore case in regex queries.
 -M X, --macros=X

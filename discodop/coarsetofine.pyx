@@ -16,6 +16,7 @@ from .kbest import lazykbest
 from .kbest cimport collectitems, getderiv
 from roaringbitmap import RoaringBitmap
 import numpy as np
+from libc.math cimport exp
 
 include "constants.pxi"
 
@@ -231,7 +232,16 @@ def getinside(Chart chart):
 		item = chart.getitemidx(n)
 		for edge in chart.parseforest[item]:
 			if edge.rule is NULL:
-				prob = chart.lexprob(item, edge)
+				try:
+					prob = chart.lexprob(item, edge)
+				except ValueError:
+					# fall back to Viterbi score from chart
+					# if there is a single incoming edge this is correct
+					assert chart.parseforest[item].size() == 1
+					if chart.logprob:
+						prob = exp(-chart.probs[item])
+					else:
+						prob = chart.probs[item]
 			elif edge.rule.rhs2 == 0:
 				leftitem = chart._left(item, edge)
 				prob = (edge.rule.prob
@@ -351,7 +361,7 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 
 def test():
 	import re
-	from time import clock
+	from time import process_time
 	from .treetransforms import splitdiscnodes, binarize, addfanoutmarkers
 	from .treebank import NegraCorpusReader
 	from .grammar import treebankgrammar, dopreduction, subsetgrammar
@@ -414,12 +424,12 @@ def test():
 			continue
 		print("coarse grammar:", msg)
 		fine.getmapping(coarse, re.compile('@[-0-9]+$'), None, split, True)
-		begin = clock()
+		begin = process_time()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen:
 				continue
 			print(n, end=' ')
 			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
-		print("time elapsed", clock() - begin, "s")
+		print("time elapsed", process_time() - begin, "s")
 
 __all__ = ['prunechart', 'posteriorthreshold', 'getinside', 'getoutside']

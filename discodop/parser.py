@@ -7,11 +7,11 @@ import re
 import sys
 import gzip
 import json
-import time
 import logging
 import traceback
 import multiprocessing
 from math import exp, log
+from time import process_time
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
@@ -294,7 +294,7 @@ class Parser(object):
 		partialparse = False
 		# parse with each coarse-to-fine stage
 		for n, stage in enumerate(self.stages):
-			begin = time.clock()
+			begin = process_time()
 			noparse = False
 			parsetrees = fragments = None
 			golditems = 0
@@ -323,13 +323,13 @@ class Parser(object):
 							goldtree.copy(True), self.stages[prevn].markorigin)
 				if n > 0 and stage.prune and stage.mode not in (
 						'dop-rerank', 'mc-rerank'):
-					beginprune = time.clock()
+					beginprune = process_time()
 					whitelist, msg1 = prunechart(
 							charts[stage.prune], stage.grammar, stage.k,
 							splitprune, self.stages[prevn].markorigin,
 							stage.mode.startswith('pcfg'),
 							set(require or ()), set(block or ()))
-					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
+					msg += '%s; %gs\n\t' % (msg1, process_time() - beginprune)
 				else:
 					whitelist = None
 				if not sent:
@@ -402,7 +402,7 @@ class Parser(object):
 			# do disambiguation of resulting parse forest
 			if (sent and chart and stage.mode not in ('dop-rerank', 'mc-rerank')
 					and not (self.relationalrealizational and stage.split)):
-				begindisamb = time.clock()
+				begindisamb = process_time()
 				disambiguation.getderivations(
 						chart, stage.m,
 						derivstrings=stage.dop not in ('doubledop', 'dop1')
@@ -433,7 +433,7 @@ class Parser(object):
 						require=set(require or ()),
 						block=set(block or ()))
 				msg += 'disambiguation: %s, %gs\n\t' % (
-						msg1, time.clock() - begindisamb)
+						msg1, process_time() - begindisamb)
 				if self.verbosity >= 3:
 					besttrees = nlargest(
 							100, parsetrees, key=itemgetter(1))
@@ -523,7 +523,7 @@ class Parser(object):
 						stage, xsent, tags, lastsuccessfulparse, n)
 				parsetrees = [(lastsuccessfulparse or str(parsetree),
 						prob, None)]
-			elapsedtime = time.clock() - begin
+			elapsedtime = process_time() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
 					parsetrees=parsetrees, fragments=fragments,
@@ -938,7 +938,7 @@ def worker(args):
 	line = line.strip()
 	if not line:
 		return '', True, 0, ''
-	begin = time.clock()
+	begin = process_time()
 	sent = line.split(' ')
 	tags = None
 	if PARAMS.usetags:
@@ -970,7 +970,7 @@ def worker(args):
 					comment=('prob=%.16g' % prob)
 						if PARAMS.printprob else None))
 		output += ''.join(tmp)
-	sec = time.clock() - begin
+	sec = process_time() - begin
 	msg += '\n%g s' % sec
 	return output, result.noparse, sec, msg
 
@@ -1025,7 +1025,7 @@ def main():
 		print('error: incorrect number of arguments', file=sys.stderr)
 		print(SHORTUSAGE)
 		sys.exit(2)
-	for n, filename in enumerate(args):
+	for n, filename in enumerate(args[:3 if '--simple' in opts else 2]):
 		if not os.path.exists(filename):
 			raise ValueError('file %d not found: %r' % (n + 1, filename))
 	opts = dict(opts)
