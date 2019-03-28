@@ -652,6 +652,9 @@ def main():
 		print('parses:', parsesfile, '\n')
 	evaluator = Evaluator(param, max(len(str(key)) for key in candtrees))
 	for n, ctree in candtrees.items():
+		# If the gold standard is incomplete, ignore missing sentences:
+		if n not in goldtrees:
+			continue
 		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
 	if param['LABELED'] and param['DEBUG'] != -1:
 		evaluator.breakdowns()
