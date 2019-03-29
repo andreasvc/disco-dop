@@ -1476,11 +1476,16 @@ class DrawTree(object):
 						','.join(str(a[0]) if len(a) == 1
 							else ('%d-%d' % (a[0], a[-1]))
 							for a in ranges(sorted(node.leaves()))))
+				labeledspan_nopunct = '%s %s' % (
+						node.label,
+						','.join(str(a[0]) if len(a) == 1
+							else ('%d-%d' % (a[0], a[-1]))
+							for a in ranges(sorted(leaves_nopunct(node)))))
 				pos = isinstance(node[0], int)
 				newtext.append('<span class=%s '
-						'data-id="%s_%d" data-s="%s">%s' % (
+						'data-id="%s_%d" data-s="%s" data-s-nopunct="%s">%s' % (
 						'p' if pos else 'n',
-						nodeprops, n, labeledspan, cat))
+						nodeprops, n, labeledspan, labeledspan_nopunct, cat))
 			else:
 				newtext.append('<font color="%s">%s</font>' % (
 						color, cat))
@@ -2021,6 +2026,15 @@ def ranges(seq):
 			rng = [a]
 	if rng:
 		yield rng
+
+
+def leaves_nopunct(node):
+	"""Get the non-punctuation leaves under a node."""
+	for subtree in node.subtrees():
+		if len(subtree) == 1 and isinstance(subtree[0], int): # preterminal
+			if subtree.label not in '.,':
+				yield subtree[0]
+		
 
 
 __all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
