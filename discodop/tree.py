@@ -1524,7 +1524,8 @@ class DrawTree(object):
 					newtext.append(cat)
 				else:
 					newtext.append('')
-				if func or (funcsep and line.endswith(funcsep)):
+				if func or (funcsep and line.endswith(funcsep)
+						and isinstance(node, Tree)):
 					if not seensep:
 						newtext[-1] += funcsep
 						seensep = True
