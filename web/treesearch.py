@@ -169,8 +169,9 @@ def export(form, output):
 		filename = 'fragments.txt'
 	elif output in ('sents', 'brackets', 'trees'):
 		fmt = '%s:%s|%s\n'
+		start, end = getslice(form.get('slice'))
 		results = CORPORA[engine].sents(
-				form['query'], selected, maxresults=SENTLIMIT,
+				form['query'], selected, start, end, maxresults=SENTLIMIT,
 				brackets=output in ('brackets', 'trees'))
 		if form.get('export') == 'json':
 			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
