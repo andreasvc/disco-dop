@@ -2032,7 +2032,7 @@ def leaves_nopunct(node):
 	"""Get the non-punctuation leaves under a node."""
 	for subtree in node.subtrees():
 		if len(subtree) == 1 and isinstance(subtree[0], int): # preterminal
-			if subtree.label not in '.,':
+			if subtree.label not in ('.', ',', '``', "''"):
 				yield subtree[0]
 		
 
