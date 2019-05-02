@@ -214,7 +214,7 @@ where input and output are treebanks; standard in/output is used if not given.
 			'introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
 			'tailmarker direction dot').split()
-	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
+	options = ('inputfmt= outputfmt= inputenc= outputenc= ids= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
 			'markorigin= maxlen= enc= transforms= markovthreshold= labelfun= '
 			'transforms= reversetransforms= filterlabels= ').split()
@@ -255,6 +255,11 @@ where input and output are treebanks; standard in/output is used if not given.
 	start, end = (int(start) if start else None), (int(end) if end else None)
 	# FIXME: support negative indices
 	trees = corpus.itertrees(start, end)
+	if '--ids' in opts:
+		ids = set(opts['--ids'].split(','))
+		trees = ((key, item) for key, item in trees
+				if key in ids)
+
 	if '--maxlen' in opts:
 		maxlen = int(opts['--maxlen'])
 		trees = ((key, item) for key, item in trees

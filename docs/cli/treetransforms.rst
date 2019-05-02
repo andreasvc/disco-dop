@@ -58,6 +58,9 @@ Other options
 --inputenc, --outputenc, --enc=<utf-8|iso-8859-1|...>
                 Treebank encoding [default: utf-8].
 
+--ids=IDs       select only the sentences with the specified IDs;
+                IDs is a comma-separated list of sentence IDs
+
 --slice=<n:m>   select a range of sentences from input starting with *n*,
                 up to but not including *m*; as in Python, *n* or *m* can be left
                 out or negative, and the first index is 0.
