@@ -509,6 +509,9 @@ def splitdiscnodes(tree, markorigin=False):
 							else '%s*' % child.label)
 					newchild = treeclass(newlabel, childsubset)
 					newchild.source = child.source
+					if (child.type == HEAD
+							and any(a.type == HEAD for a in child)):
+						newchild.type = HEAD
 					node.append(newchild)
 			else:
 				node.append(child)
@@ -537,12 +540,52 @@ def mergediscnodes(tree):
 			grandchildren = list(child)
 			child[:] = []
 			if not merge[child.label]:
-				merge[child.label].append(treeclass(label, []))
-				node.append(merge[child.label][0])
+				newchild = treeclass(label, [])
+				newchild.source = child.source
+				merge[child.label].append(newchild)
+				node.append(newchild)
 			merge[child.label][0].extend(grandchildren)
+			if child.type == HEAD:
+				merge[child.label][0].type = HEAD
 			if part:
 				nextlabel = '%s*%d' % (label, int(part) + 1)
 				merge[nextlabel].append(merge[child.label].pop(0))
+	return tree
+
+
+def raisediscnodes(tree):
+	"""Return a continuous version of tree by raising discontinuous components.
+
+	Requires head information. This transformation cannot be reversed.
+
+	>>> tree = Tree('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
+	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))')
+	>>> tree[1].type = tree[0, 1].type = tree[0, 0, 2].type = HEAD
+	>>> tree[0, 0, 0, 0].type = HEAD
+	>>> print(raisediscnodes(tree))  # doctest: +NORMALIZE_WHITESPACE
+	(S (PP (APPR 0) (ART 1) (NN 2)) (VMFIN 3)
+		(VP (VP (CARD 4) (VVPP 5)) (VAINF 6)))"""
+	for node in tree.subtrees():
+		if all(isinstance(a, Tree) and a.type != HEAD for a in node):
+			raise ValueError('No head information. Apply head rules.')
+	splitdiscnodes(tree)
+	for node in tree.postorder():
+		nodes = list(node)  # the original, unmerged children
+		node[:] = []  # the new, merged children
+		for child in nodes:
+			if not isinstance(child, Tree):
+				node.append(child)
+				continue
+			match = SPLITLABELRE.search(child.label)
+			if match is None:  # not discontinuous
+				node.append(child)
+			elif any(a.type == HEAD for a in child):
+				child.label = match.group(1)
+				node.append(child)
+			else:  # non-head disc component
+				grandchildren = list(child)
+				child[:] = []
+				node.extend(grandchildren)
 	return tree
 
 
@@ -905,6 +948,6 @@ __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
 		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
 		'canonicalize', 'optimalbinarize', 'minimalbinarization',
 		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
-		'contsets', 'getbits', 'addbitsets', 'getyf',
+		'contsets', 'getbits', 'addbitsets', 'getyf', 'raisediscnodes',
 		'treebankfanout', 'handledisc', 'removeemptynodes', 'removeterminals',
 		'binarizetree']
