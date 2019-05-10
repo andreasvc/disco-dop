@@ -221,7 +221,7 @@ class TgrepSearcher(CorpusSearcher):
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			return filename + '.t2c.gz'
 
-		super(TgrepSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
 		self.files = {convert(filename): None for filename in self.files}
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
@@ -474,7 +474,7 @@ class FragmentSearcher(CorpusSearcher):
 	#       optionally with order constraint: (NN cat) (NN dog)
 	# TODO: compiled query set, re-usable on new documents.
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
-		super(FragmentSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
 		self.disc = False
 		newvocab = True
 		path = os.path.dirname(next(iter(sorted(files))))
@@ -772,7 +772,7 @@ class RegexSearcher(CorpusSearcher):
 
 	def __init__(self, files, macros=None, numproc=None, ignorecase=False,
 			inmemory=False):
-		super(RegexSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
 		self.macros = None
 		self.flags = re.MULTILINE
 		if ignorecase:
@@ -1148,7 +1148,7 @@ class FIFOOrederedDict(OrderedDict):
 	"""FIFO cache with maximum number of elements based on OrderedDict."""
 
 	def __init__(self, limit):
-		super(FIFOOrederedDict, self).__init__()
+		super().__init__()
 		self.limit = limit
 
 	def __setitem__(self, key, value):  # pylint: disable=arguments-differ
@@ -1158,7 +1158,7 @@ class FIFOOrederedDict(OrderedDict):
 			self.pop(key)
 		elif len(self) >= self.limit:
 			self.pop(next(iter(self)))
-		super(FIFOOrederedDict, self).__setitem__(key, value)
+		super().__setitem__(key, value)
 
 
 def filterlabels(line, nofunc, nomorph):
