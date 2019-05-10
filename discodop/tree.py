@@ -389,7 +389,7 @@ class Tree(object):
 		if isinstance(val, Tree):
 			children = [cls.convert(child) for child in val]
 			tree = cls(val.label, children)
-			tree.source = val.source
+			tree.source = None if val.source is None else val.source[:]
 			tree.type = val.type
 			if (isinstance(val, ImmutableTree)
 					and isinstance(cls, ImmutableTree)):
