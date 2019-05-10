@@ -211,15 +211,22 @@ class TgrepSearcher(CorpusSearcher):
 
 	def __init__(self, files, macros=None, numproc=None):
 		def convert(filename):
-			"""Convert files not ending in .t2c.gz to tgrep2 format."""
-			if filename.endswith('.t2c.gz'):
-				return filename
-			elif not os.path.exists(filename + '.t2c.gz'):
-				subprocess.check_call(
-						args=[which('tgrep2'), '-p', filename,
-							filename + '.t2c.gz'], shell=False,
-						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			return filename + '.t2c.gz'
+			"""Create .t2c.gz files if necessary."""
+			if not os.path.exists(self._internalfilename(filename)):
+				strippedfilename = filename
+				if filename.endswith('.gz'):
+					strippedfilename = filename[:-len('.gz')]
+					subprocess.check_call(['gunzip', '--keep', filename])
+				try:
+					subprocess.check_call(
+							args=[which('tgrep2'),
+								'-p', strippedfilename,
+								self._internalfilename(filename)], shell=False,
+							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				finally:
+					if filename.endswith('.gz'):
+						os.remove(strippedfilename)
+			return filename
 
 		super().__init__(files, macros, numproc)
 		self.files = {convert(filename): None for filename in self.files}
@@ -362,11 +369,9 @@ class TgrepSearcher(CorpusSearcher):
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
-		if not filename.endswith('.t2c.gz'):
-			filename += '.t2c.gz'
 		cmd = [which('tgrep2'),
 				'-e', '-',  # extraction mode
-				'-c', filename]
+				'-c', self._internalfilename(filename)]
 		if sents:
 			cmd.append('-t')
 		proc = subprocess.Popen(args=cmd,
@@ -390,8 +395,6 @@ class TgrepSearcher(CorpusSearcher):
 					treestr, nofunc, nomorph)) for treestr in result)]
 
 	def getinfo(self, filename):
-		if filename.endswith('.t2c.gz'):
-			filename = filename[:-len('.t2c.gz')]
 		with openread(filename) as inp:
 			data = inp.read()
 		return CorpusInfo(
@@ -400,6 +403,17 @@ class TgrepSearcher(CorpusSearcher):
 				numnodes=data.count('('),
 				maxnodes=None)
 
+	@classmethod
+	def _internalfilename(self, filename):
+		"""Get tgrep2 filename.
+
+		>>> TgrepSearcher._internalfilename('foo')
+		'foo.t2c.gz'
+		>>> TgrepSearcher._internalfilename('foo.gz')
+		'foo.t2c.gz'
+		"""
+		return re.sub(r'\.gz$', '', filename) + '.t2c.gz'
+
 	@workerfunc
 	def _query(self, query, filename, fmt, start=None, end=None,
 			maxresults=None):
@@ -407,7 +421,7 @@ class TgrepSearcher(CorpusSearcher):
 		cmd = [which('tgrep2'), '-a',  # print all matches for each sentence
 				# '-z',  # pretty-print search pattern on stderr
 				'-m', fmt,
-				'-c', os.path.join(filename)]
+				'-c', self._internalfilename(filename)]
 		if self.macros:
 			cmd.append(self.macros)
 		cmd.append(query)
