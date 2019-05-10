@@ -1182,6 +1182,10 @@ class DrawTree(object):
 			raise ValueError('All leaves must be in the interval 0..n '
 					'with n=len(sent)\ntokens: %d indices: '
 					'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
+		for a in tree.subtrees():
+			if len(a) == 0:
+				raise ValueError(
+						'Non-terminals must dominate one or more leaves')
 		vertline, corner = -1, -2  # constants
 		tree = Tree.convert(tree)
 		for a in tree.subtrees():
