@@ -3,6 +3,7 @@ from __future__ import generator_stop
 import os
 import re
 import sys
+import gzip
 from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict
@@ -23,6 +24,10 @@ POSRE = re.compile(r'\(([^() ]+)\s+[^ ()]+\s*\)')
 # leaf itself can be empty; leaf ends with closing paren or whitespace
 # Assumes there is no whitespace between open paren and non-terminal: "(  NP "
 LEAVESRE = re.compile(r' (?=\))| ([^ ()]+)\s*(?=[\s)])')
+ALPINOXML = re.compile(
+		rb'<\?xml version="1.0" encoding="UTF-?8"\?>.*?</alpino_ds>',
+		flags=re.DOTALL | re.IGNORECASE)
+ALPINOSENTID = re.compile(b'<sentence sentid="(.*?)">')
 
 
 class Item(object):
@@ -453,6 +458,38 @@ class AlpinoCorpusReader(CorpusReader):
 				raise
 		return alpinotree(
 				xmlblock, self.functions, self.morphology, self.lemmas)
+
+
+class AlpinoCompactCorpusReader(AlpinoCorpusReader):
+	"""Corpus reader for the Alpino compact treebank format (Indexed Corpus).
+
+	Pass the .index file as filename(s). The corresponding dictzip-file with
+	.data.dz extension will be read as well."""
+	def _read_blocks(self):
+		"""Read corpus and yield blocks corresponding to each sentence."""
+		if self._encoding not in (None, 'utf8', 'utf-8'):
+			raise ValueError('Encoding specified in XML files, '
+					'cannot be overriden.')
+		# NB: could implement proper streaming, random access using .index file
+		# which lists offsets and sizes in base64 encoding.
+		for filename in self._filenames:
+			dzfile = re.sub(r'\.index$', '.data.dz', filename)
+			dirname = os.path.basename(re.sub(r'\.index$', '', filename))
+			with open(filename) as inp:
+				xmlfilenames = [line.split('\t')[0] for line in inp]
+			with gzip.open(dzfile, 'rb') as inp:
+				# NB: blocks are XML data as bytes string
+				blocks = ALPINOXML.findall(inp.read())
+			if len(blocks) != len(xmlfilenames):
+				raise ValueError('length mismatch: index %d; data.dz %d' %
+						(len(xmlfilenames), len(blocks)))
+			for xmlfilename, block in zip(xmlfilenames, blocks):
+				sentid = ALPINOSENTID.search(block).group(1).decode('utf8')
+				if sentid + '.xml' != xmlfilename:
+					raise ValueError('expected: %r; got %r'
+							% (xmlfilename, sentid))
+				n = '%s/%s' % (dirname, sentid)
+				yield n, block
 
 
 class FTBXMLCorpusReader(CorpusReader):
@@ -1173,6 +1210,7 @@ READERS = OrderedDict((
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
 		('alpino', AlpinoCorpusReader),
+		('alpinocompact', AlpinoCompactCorpusReader),
 		('ftb', FTBXMLCorpusReader)))
 WRITERS = ('export', 'bracket', 'discbracket',
 		'conll', 'mst', 'tokens', 'wordpos')
