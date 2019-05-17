@@ -11,6 +11,7 @@ import csv
 import sys
 import mmap
 import array
+import tempfile
 import subprocess
 import multiprocessing
 import concurrent.futures
@@ -25,7 +26,7 @@ from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from . import treebank, _fragments
 from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
 from .treetransforms import binarize, mergediscnodes, handledisc
-from .util import which, workerfunc, openread, ANSICOLOR
+from .util import which, workerfunc, openread, readbytes, run, ANSICOLOR
 from .containers import Vocabulary, FixedVocabulary, Ctrees
 
 SHORTUSAGE = '''Search through treebanks with queries.
@@ -217,24 +218,34 @@ class TgrepSearcher(CorpusSearcher):
 
 	def __init__(self, files, macros=None, numproc=None):
 		def convert(filename):
-			"""Create .t2c.gz files if necessary."""
+			"""Create tgrep2 indexed files (.t2c) if necessary."""
 			if not os.path.exists(self._internalfilename(filename)):
-				strippedfilename = filename
-				if filename.endswith('.gz'):
-					strippedfilename = filename[:-len('.gz')]
-					subprocess.check_call(['gunzip', '--keep', filename])
+				origfile = filename
+				if filename.endswith('.gz') or filename.endswith('.zst'):
+					with tempfile.NamedTemporaryFile(delete=False) as tmp:
+						tmp.write(readbytes(filename))
+						origfile = tmp.name
 				try:
-					subprocess.check_call(
-							args=[which('tgrep2'),
-								'-p', strippedfilename,
-								self._internalfilename(filename)], shell=False,
-							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+					args = [which('tgrep2'), '-p', origfile,
+							self._internalfilename(filename)]
+					returncode, _, stderr = run(args=args)
+					if 'must use the -K flag' in stderr.decode('utf8'):
+						returncode, _, stderr = run(
+								args=[args[0], '-K'] + args[1:])
+					if returncode != 0:
+						raise ValueError('Error creating tgrep2 index:\n%s'
+								% stderr.decode('utf8'))
 				finally:
-					if filename.endswith('.gz'):
-						os.remove(strippedfilename)
+					if filename != origfile:
+						os.unlink(tmp.name)
 			return filename
 
 		super().__init__(files, macros, numproc)
+		self._compressext = 'gz'  # the compression format to use for t2c files
+		if which('zstd', exception=False):  # https://facebook.github.io/zstd/
+			self._compressext = 'zst'
+		elif which('lz4', exception=False):  # https://github.com/lz4/lz4/
+			self._compressext = 'lz4'
 		self.files = {convert(filename): None for filename in self.files}
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
@@ -459,16 +470,10 @@ class TgrepSearcher(CorpusSearcher):
 				numnodes=data.count('('),
 				maxnodes=None)
 
-	@classmethod
 	def _internalfilename(self, filename):
-		"""Get tgrep2 filename.
-
-		>>> TgrepSearcher._internalfilename('foo')
-		'foo.t2c.gz'
-		>>> TgrepSearcher._internalfilename('foo.gz')
-		'foo.t2c.gz'
-		"""
-		return re.sub(r'\.gz$', '', filename) + '.t2c.gz'
+		"""Strip possible .gz extension and add .t2c.gz or .t2c.lz4."""
+		return '%s.t2c.%s' % (re.sub(r'\.gz$', '', filename),
+				self._compressext)
 
 	@workerfunc
 	def _query(self, queries, filename, fmt, start=None, end=None,

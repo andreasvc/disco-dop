@@ -15,9 +15,7 @@ Options:
                     bracket, discbracket, or export format.
 
                 :regex: search through tokenized sentences with Python regexps.
-                :tgrep2:
-                    tgrep2 queries; files are bracket corpora
-                    (optionally precompiled into tgrep2 format).
+                :tgrep2: tgrep2 queries; files are bracket corpora
 
 -c, --counts    Report counts; multiple queries can be given.
 -s, --sents     Output sentences (default); multiple queries can be given.
@@ -50,9 +48,10 @@ Options:
 
 Tree fragments
 ^^^^^^^^^^^^^^
-Search for literal matches of tree fragments, i.e., one or more connected grammar productions.
-Supports (binarized, optionally discontinuous) treebanks with the extensions
-``.mrg`` (bracket format), ``.dbr`` (discbracket format), and ``.export`` (export format).
+Search for literal matches of tree fragments, i.e., a subgraph consisting of
+connected grammar productions. Supports (binarized, optionally discontinuous)
+treebanks with the extensions ``.mrg`` (bracket format), ``.dbr`` (discbracket
+format), and ``.export`` (Negra export format).
 
 regular bracket trees::
 
@@ -87,7 +86,7 @@ Regular expressions
 ^^^^^^^^^^^^^^^^^^^
 In contrast with the other engines, regular expressions treat the input as
 plain text files, one sentence per line. The options ``--trees`` and ``--brackets`` are
-not applicable. The syntax is Python's ``re`` syntax.
+not applicable. The syntax is that of Python's ``re`` module, cited below.
 
 Regular expressions can contain both special and ordinary characters.
 Most ordinary characters, like "A", "a", or "0", are the simplest
@@ -142,6 +141,7 @@ TGrep2 syntax overview
 Only treebanks in bracket format ary supported, but trees can be n-ary.
 Note that the tgrep2 command needs to be installed.
 A version with small improvements is available from https://github.com/andreasvc/tgrep2
+Treebanks may be compressed with gzip, zstd, or lz4.
 
 TGrep2 operators::
 

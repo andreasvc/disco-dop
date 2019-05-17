@@ -1,22 +1,28 @@
 """Misc code to avoid cyclic imports."""
-import io
 import os
 import re
 import sys
 import gzip
 import codecs
 import traceback
+import subprocess
+from contextlib import contextmanager
 from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections.abc import Set, Iterable
 
 
-def which(program):
-	"""Return first match for program in search path."""
+def which(program, exception=True):
+	"""Return first match for program in search path.
+
+	:param exception: By default, ValueError is raised when program not found.
+		Pass False to return None in this case.
+	"""
 	for path in os.environ.get('PATH', os.defpath).split(":"):
 		if path and os.path.exists(os.path.join(path, program)):
 			return os.path.join(path, program)
-	raise ValueError('%r not found in path; please install it.' % program)
+	if exception:
+		raise ValueError('%r not found in path; please install it.' % program)
 
 
 def workerfunc(func):
@@ -34,22 +40,45 @@ def workerfunc(func):
 	return wrapper
 
 
+@contextmanager
+def genericdecompressor(cmd, filename, encoding='utf8'):
+	"""Run command line decompressor on file  and return file object."""
+	with subprocess.Popen([which(cmd), '-d', '-c', filename],
+			stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+		yield proc.stdout if encoding is None else codecs.getreader(
+				encoding)(proc.stdout)
+		proc.wait()
+
+
 def openread(filename, encoding='utf8'):
-	"""Open stdin/text file for reading; decompress .gz files on-the-fly."""
+	"""Open stdin/text file for reading; decompress gz/lz4/zst files on-the-fly.
+	"""
 	if filename == '-':
-		return io.open(sys.stdin.fileno(), encoding=encoding)
-	if not isinstance(filename, int) and filename.endswith('.gz'):
-		return codecs.getreader(encoding)(gzip.open(filename))
-	else:
-		return io.open(filename, encoding=encoding)
+		return open(sys.stdin.fileno(), encoding=encoding)
+	if not isinstance(filename, int):
+		if filename.endswith('.gz'):
+			return gzip.open(filename, encoding=encoding)
+		elif filename.endswith('.lz4'):
+			return genericdecompressor('lz4', filename, encoding)
+		elif filename.endswith('.zst'):
+			return genericdecompressor('zstd', filename, encoding)
+	return open(filename, encoding=encoding)
 
 
 def readbytes(filename):
-	"""Read binary file, return bytes; decompress .gz files on-the-fly."""
+	"""Read binary file, return bytes; decompress gz/lz4/zst files on-the-fly.
+	"""
+	if filename == '-':
+		return open(sys.stdin.fileno(), 'rb')
+	elif filename.endswith('.zst'):
+		with genericdecompressor('zstd', filename, encoding=None) as inp:
+			return inp.read()
+	elif filename.endswith('.lz4'):
+		with genericdecompressor('lz4', filename, encoding=None) as inp:
+			return inp.read()
 	with (gzip.open(filename, 'rb') if filename.endswith('.gz')
 			else open(filename, 'rb')) as inp:
-		result = inp.read()
-	return result
+		return inp.read()
 
 
 def slice_bounds(seq, slice_obj, allow_step=False):
@@ -375,6 +404,22 @@ def tokenize(text):
 	# Separate periods near end of string.
 	text = re.sub(r'\.(\W*$)', r' . \1', text)
 	return text.split()
+
+
+def run(*popenargs, **kwargs):
+    """Run command with arguments and return (returncode, stdout, stderr).
+
+    All arguments are the same as for the Popen constructor."""
+    with subprocess.Popen(*popenargs, **kwargs,
+			stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        try:
+            stdout, stderr = proc.communicate()
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
+        retcode = proc.poll()
+    return retcode, stdout, stderr
 
 
 ANSICOLOR = {
