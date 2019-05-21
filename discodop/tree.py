@@ -1993,7 +1993,8 @@ def ptbescape(token):
 		return '-LSB-'
 	elif token == ']':
 		return '-RSB-'
-	return token.replace('(', '-LRB-').replace(')', '-RRB-')
+	return (token.replace('(', '-LRB-').replace(')', '-RRB-')
+			.replace('/', '\\/'))
 
 
 def ptbunescape(token):
@@ -2008,8 +2009,8 @@ def ptbunescape(token):
 		return '['
 	elif token == '-RSB-':
 		return ']'
-	return token.replace('-LRB-', '(').replace('-RRB-', ')').replace(
-			'#LRB#', '(').replace('#RRB#', ')')
+	return (token.replace('-LRB-', '(').replace('-RRB-', ')')
+			.replace('#LRB#', '(').replace('#RRB#', ')').replace('\\/', '/'))
 
 
 def ranges(seq):
