@@ -600,33 +600,35 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	def getsubtree(node, parentid, morphology, lemmas):
 		"""Parse a subtree of an Alpino tree."""
 		source = [''] * len(FIELDS)
-		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
+		nodeid = int(node.get('id')) + 500
+		source[WORD] = node.get('word') or ("#%s" % nodeid)
 		source[LEMMA] = node.get('lemma') or node.get('root')
 		source[MORPH] = node.get('postag') or node.get('frame')
 		source[FUNC] = node.get('rel')
 		if 'cat' in node.keys():
 			source[TAG] = node.get('cat')
 			if node.get('index'):
-				coindexed[node.get('index')] = source
+				coindexed[int(node.get('index')) + 500] = source
 			label = node.get('cat')
 			result = ParentedTree(label.upper(), [])
 			for child in node:
-				subtree = getsubtree(child, node.get('id'), morphology, lemmas)
+				subtree = getsubtree(child, nodeid, morphology, lemmas)
 				if subtree and (
 						'word' in child.keys() or 'cat' in child.keys()):
-					subtree.source[PARENT] = node.get('id')
+					subtree.source[PARENT] = nodeid
 					result.append(subtree)
 			if not result:
 				return None
 		elif 'word' in node.keys():
 			source[TAG] = node.get('pt') or node.get('pos')
 			if node.get('index'):
-				coindexed[node.get('index')] = source
+				coindexed[int(node.get('index')) + 500] = source
 			result = ParentedTree(source[TAG], list(
 					range(int(node.get('begin')), int(node.get('end')))))
 			handlemorphology(morphology, lemmas, result, source, sent)
 		elif 'index' in node.keys():
-			coindexation[node.get('index')].extend([node.get('rel'), parentid])
+			coindexation[int(node.get('index')) + 500].extend(
+					[node.get('rel'), parentid])
 			return None
 		source[:] = [a.replace(' ', '_') if a else a for a in source]
 		result.source = source
@@ -743,6 +745,17 @@ def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 
 def writeexporttree(tree, sent, key, comment, morphology):
 	"""Return string with given tree in Negra's export format."""
+	def collectsecedges(node):
+		if node.source:
+			for rel, pid in zip(node.source[6::2], node.source[7::2]):
+				try:
+					idx = nodeidindex.index(int(pid))
+				except ValueError:
+					print('skipping secondary edge; %s' % key, file=sys.stderr)
+					continue
+				yield rel
+				yield str(500 + idx)
+
 	result = []
 	if key is not None:
 		cmt = (' %% ' + comment) if comment else ''
@@ -776,14 +789,11 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		lemma = '--'
 		postag = node.label.replace('$[', '$(') or '--'
 		func = morphtag = '--'
-		secedges = []
 		if node.source:
 			lemma = node.source[LEMMA] or '--'
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
-			for rel, pid in zip(node.source[6::2], node.source[7::2]):
-				secedges.append(rel)
-				secedges.append('%d' % (500 + nodeidindex.index(int(pid))))
+		secedges = list(collectsecedges(node))
 		if morphtag == '--' and morphology == 'replace':
 			morphtag = postag
 		elif morphtag == '--' and morphology == 'add' and '/' in postag:
@@ -797,13 +807,10 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		lemma = '--'
 		label = node.label or '--'
 		func = morphtag = '--'
-		secedges = []
 		if node.source:
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
-			for rel, pid in zip(node.source[6::2], node.source[7::2]):
-				secedges.append(rel)
-				secedges.append('%d' % (500 + nodeidindex.index(int(pid))))
+		secedges = collectsecedges(node)
 		parentid = '%d' % (0 if node.parent is tree
 				else 500 + idindex.index(id(node.parent)))
 		result.append('\t'.join((nodeid, lemma, label, morphtag, func,

@@ -1306,8 +1306,6 @@ class DrawTree(object):
 				for secedgelabel, secedgeparent in zip(
 						nodes[a].source[6::2],
 						nodes[a].source[7::2]):
-					coindexes.append('%s:%d' % (
-							secedgelabel, int(secedgeparent) - 500))
 					for b, node in nodes.items():
 						if (getattr(node, 'source', None) is not None
 								and node.source[0] == '#%s' % secedgeparent):
@@ -1315,8 +1313,9 @@ class DrawTree(object):
 									+ '=%d' % (int(secedgeparent) - 500))
 							break
 					else:
-						raise ValueError('secondary parent %s not found.'
-								% secedgeparent)
+						continue  # skip secondary edge to missing node
+					coindexes.append('%s:%d' % (
+							secedgelabel, int(secedgeparent) - 500))
 				if coindexes:
 					labels[a] = '%s[%s]' % (nodes[a].label,
 							','.join(coindexes))
