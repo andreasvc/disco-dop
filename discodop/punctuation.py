@@ -166,16 +166,20 @@ def balancedpunctraise(tree, sent):
 		preterminal = termparent[terminal]
 		# do we know the matching punctuation mark for this one?
 		if preterminal.label in PUNCTTAGS and sent[terminal] in punctmap:
-			right = terminal
+			right, rightparent = terminal, preterminal.parent
 			left = punctmap[sent[right]]
-			rightparent = preterminal.parent
 			leftparent = termparent[left].parent
+			child = None
 			if max(leftparent.leaves()) == right - 1:
-				node = termparent[right]
-				leftparent.append(node.parent.pop(node.parent_index))
+				child, node = termparent[right], rightparent
+				leftparent.append(node.pop(child.parent_index))
 			elif min(rightparent.leaves()) == left + 1:
-				node = termparent[left]
-				rightparent.insert(0, node.parent.pop(node.parent_index))
+				child, node = termparent[left], leftparent
+				rightparent.insert(0, node.pop(child.parent_index))
+			if child is not None:
+				while not node and node is not tree:  # prune empty ancestors
+					node, child = node.parent, node
+					del node[child.parent_index]
 			if sent[right] in punctmap:
 				del punctmap[sent[right]]
 		elif (sent[terminal] in BALANCEDPUNCTMATCH

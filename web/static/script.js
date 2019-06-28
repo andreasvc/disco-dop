@@ -51,7 +51,7 @@ function show(id, name) {
 		el.style.visibility = 'visible';
 	if(name != '') {
 		var elems = document.getElementsByName(name);
-		for (var n in elems)
+		for (var n = 0; n < elems.length; n++)
 			elems[n].disabled = false;
 	}
 }
@@ -63,7 +63,7 @@ function hide(id, name) {
 		el.style.visibility = 'hidden';
 	if(name != '') {
 		var elems = document.getElementsByName(name);
-		for (var n in elems)
+		for (var n = 0; n < elems.length; n++)
 			elems[n].disabled = true;
 	}
 }
@@ -77,11 +77,12 @@ function triggerForm(name, val) {
 	/* call the onChange event of the form element with 'name' and value 'val',
 	 * so that the appropriate form elements may be shown/hidden. */
 	var elems = document.getElementsByName(name)
-	for (var n in elems)
+	for (var n = 0; n < elems.length; n++) {
 		if(elems[n].value == val) {
 			elems[n].onchange();
 			break;
 		}
+	}
 }
 
 function entsub(e) {
@@ -146,19 +147,20 @@ function parse() {
 
 function checkall(name, val) {
 	/* check / uncheck all checkboxes with 'name'. */
-	var checkboxes = document.getElementsByName(name);
-	for (var i in checkboxes)
-		checkboxes[i].checked = val;
+	var elems = document.getElementsByName(name);
+	for (var n = 0; n < elems.length; n++)
+		elems[n].checked = val;
 }
 
 function numchecked() {
 	/* update number of checked checkboxes and write to span
 	 * 'numchecked'. */
-	var checkboxes = document.getElementsByName('textcheck');
+	var elems = document.getElementsByName('textcheck');
 	var checked = 0;
-	for (var i in checkboxes)
-		if(checkboxes[i].name == 'textcheck' && checkboxes[i].checked)
+	for (var n = 0; n < elems.length; n++) {
+		if(elems[n].name == 'textcheck' && elems[n].checked)
 			checked++;
+	}
 	document.getElementById('numchecked').innerHTML = checked;
 }
 
@@ -184,11 +186,11 @@ function mergecheckboxes() {
 			n++;
 	}
 	document.forms[0].texts.value = result.substring(1);
-	var radioboxes = document.getElementsByName('output');
-	for (n in radioboxes) {
-		if(radioboxes[n].checked) {
-			document.forms[0].action = radioboxes[n].value;
-			radioboxes[n].disabled = true;
+	var elems = document.getElementsByName('output');
+	for (var n = 0; n < elems.length; n++) {
+		if(elems[n].checked) {
+			document.forms[0].action = elems[n].value;
+			elems[n].disabled = true;
 			break;
 		}
 	}
@@ -201,22 +203,19 @@ function mergecheckboxes() {
 
 function highlightdep(id) {
 	['word', 'tag', 'dependency', 'edge', 'arrow'].forEach(function(a) {
-		var elements = document.getElementsByClassName(a);
-		for (var i in elements) {
-			elements[i].style = '';
-		}
+		var elems = document.getElementsByClassName(a);
+		for (var n = 0; n < elems.length; n++)
+			elems[n].style = '';
 	});
-	var elements = document.getElementsByClassName(id);
-	for (var i in elements) {
-		elements[i].style = 'stroke: black !important; ';
-	}
+	var elems = document.getElementsByClassName(id);
+	for (var n = 0; n < elems.length; n++)
+		elems[n].style = 'stroke: black !important; ';
 }
 
 function nohighlightdep() {
 	['word', 'tag', 'dependency', 'edge', 'arrow'].forEach(function(a) {
-		var elements = document.getElementsByClassName(a);
-		for (var i in elements) {
-			elements[i].style = '';
-		}
+		var elems = document.getElementsByClassName(a);
+		for (var n = 0; n < elems.length; n++)
+			elems[n].style = '';
 	});
 }

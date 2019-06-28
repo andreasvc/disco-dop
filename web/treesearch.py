@@ -60,7 +60,7 @@ FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
+EXTRE = re.compile(r'\.(?:mrg|export|dbr|txt|tok)(?:\.gz)?$')
 
 COLORS = dict(enumerate('''
 		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
@@ -169,8 +169,9 @@ def export(form, output):
 		filename = 'fragments.txt'
 	elif output in ('sents', 'brackets', 'trees'):
 		fmt = '%s:%s|%s\n'
+		start, end = getslice(form.get('slice'))
 		results = CORPORA[engine].sents(
-				form['query'], selected, maxresults=SENTLIMIT,
+				form['query'], selected, start, end, maxresults=SENTLIMIT,
 				brackets=output in ('brackets', 'trees'))
 		if form.get('export') == 'json':
 			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
@@ -400,7 +401,7 @@ def trees(form):
 				gotresults = True
 				yield 'count: %5d\n%s\n\n' % (
 						cnt, DrawTree(match, match.sent).text(
-							unicodelines=True, html=True))
+							unicodelines=True, html=True, funcsep='-'))
 			continue
 		for m, (_filename, sentno, tree, sent, high) in enumerate(results):
 			if m == 0:
@@ -415,7 +416,7 @@ def trees(form):
 						query=form['query'], engine=engine), separator=b';')))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
-						unicodelines=True, html=True)
+						unicodelines=True, html=True, funcsep='-')
 			except ValueError as err:
 				line = "#%s \nERROR: %s\n%s\n%s\n" % (
 						sentno, err, tree, sent)
@@ -705,21 +706,22 @@ def draw():
 		return "<pre>%s</pre>" % DrawTree(request.args['tree'],
 				[a or None for a in request.args['sent'].split(' ')]
 				if 'sent' in request.args else None).text(
-				unicodelines=True, html=True)
+				unicodelines=True, html=True, funcsep='-')
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
 	if 'tgrep2' in CORPORA:
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		tree, sent = CORPORA['tgrep2'].extract(
+				list(CORPORA['tgrep2'].files)[textno],
 				filename, [sentno], nofunc, nomorph).pop()
 	elif 'frag' in CORPORA:
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
 		tree, sent = CORPORA['frag'].extract(
-				filename, [sentno], nofunc, nomorph).pop()
+				list(CORPORA['frag'].files)[textno],
+				[sentno], nofunc, nomorph).pop()
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
-	result = DrawTree(tree, sent).text(unicodelines=True, html=True)
+	result = DrawTree(tree, sent).text(
+			unicodelines=True, html=True, funcsep='-')
 	return '<pre id="t%s">%s</pre>' % (sentno, result)
 
 
@@ -737,17 +739,17 @@ def browsetrees():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		if 'tgrep2' in CORPORA:
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			drawntrees = [DrawTree(tree, sent).text(
-					unicodelines=True, html=True)
+					unicodelines=True, html=True, funcsep='-')
 					for tree, sent in CORPORA['tgrep2'].extract(
-						filename, range(start, maxtree), nofunc, nomorph)]
+							list(CORPORA['tgrep2'].files)[textno],
+							range(start, maxtree), nofunc, nomorph)]
 		elif 'frag' in CORPORA:
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
 			drawntrees = [DrawTree(tree, sent).text(
-					unicodelines=True, html=True)
+					unicodelines=True, html=True, funcsep='-')
 					for tree, sent in CORPORA['frag'].extract(
-						filename, range(start, maxtree), nofunc, nomorph)]
+							list(CORPORA['tgrep2'].files)[textno],
+							range(start, maxtree), nofunc, nomorph)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = ['<pre id="t%s"%s>%s</pre>' % (n,
@@ -797,14 +799,9 @@ def browsesents():
 			except IndexError:
 				raise ValueError(
 						'no treebank available for "%s".' % TEXTS[textno])
-		if engine == 'tgrep2':
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		elif engine == 'regex':
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
-		elif engine == 'frag':
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
 		results = CORPORA[engine].extract(
-				filename, range(start, maxsent), sents=True)
+				list(CORPORA[engine].files)[textno],
+				range(start, maxsent), sents=True)
 		# FIXME conflicts w/highlighting
 		# results = [htmlescape(a) for a in results]
 		legend = queryparams = ''
@@ -1095,7 +1092,8 @@ def getcorpus():
 				texts, corpusinfo, styletable = pickle.load(inp)
 		except ValueError:
 			pass
-	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg'))) + sorted(
+			glob.glob(os.path.join(CORPUS_DIR, '*.mrg.gz')))
 	ffiles = [a.replace('.ct', '') for a in sorted(
 			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.ct'))
@@ -1103,36 +1101,36 @@ def getcorpus():
 			)]
 	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
 	# get tokenized sents from trees or ucto
-	for filename in ffiles or tfiles or txtfiles:
-		tokenize(filename)
+	# for filename in ffiles or tfiles or txtfiles:
+	# 	tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
-	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
+	if tfiles:
 		corpora['tgrep2'] = treesearch.TgrepSearcher(
 				tfiles, macros='static/tgrepmacros.txt', numproc=NUMPROC)
 		log.info('tgrep2 corpus loaded.')
-	if ffiles and set(ffiles) != set(corpora.get('frag', ())):
+	if ffiles:
 		corpora['frag'] = treesearch.FragmentSearcher(
 				ffiles, macros='static/fragmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('frag corpus loaded.')
-	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
+	if tokfiles:
 		corpora['regex'] = treesearch.RegexSearcher(
 				tokfiles, macros='static/regexmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('regex corpus loaded.')
 
 	assert tfiles or ffiles or tokfiles, (
-			'no corpus files with extension .mrg, .dbr, .export, .dact, '
+			'no corpus files with extension .mrg, .dbr, .export, '
 			'or .txt found in %s' % CORPUS_DIR)
 	assert len(set(
-			frozenset(b.rsplit('.', 1)[0] for b in files)
+			frozenset(EXTRE.sub('', b) for b in files)
 			for files in (tfiles, ffiles, tokfiles) if files)) == 1, (
 			'files in different formats do not match.')
 	picklemtime = 0
 	if os.path.exists(picklefile):
 		picklemtime = os.stat(picklefile).st_mtime
-	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
-		for filename in tfiles + ffiles + tokfiles}
+	currentfiles = {EXTRE.sub('', os.path.basename(filename))
+			for filename in tfiles + ffiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
 				for a in tfiles + ffiles + tokfiles)
 				or corpusinfo.keys() != corpora.keys()):
@@ -1143,8 +1141,8 @@ def getcorpus():
 				corpusinfo[engine].append(corpora[engine].getinfo(filename))
 		if not corpusinfo:
 			raise ValueError('no texts found.')
-		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in ffiles or tfiles or tokfiles]
+		texts = [EXTRE.sub('', os.path.basename(filename))
+				for filename in ffiles or tfiles or tokfiles]
 		styletable = getreadabilitymeasures(
 				[a.len for a in next(iter(corpusinfo.values()))])
 		with open(picklefile, 'wb') as out:

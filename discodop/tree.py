@@ -389,7 +389,7 @@ class Tree(object):
 		if isinstance(val, Tree):
 			children = [cls.convert(child) for child in val]
 			tree = cls(val.label, children)
-			tree.source = val.source
+			tree.source = None if val.source is None else val.source[:]
 			tree.type = val.type
 			if (isinstance(val, ImmutableTree)
 					and isinstance(cls, ImmutableTree)):
@@ -587,7 +587,7 @@ class ImmutableTree(Tree):
 		if children is None:
 			return  # see note in Tree.__init__()
 		self._hash = self._leaves = None
-		super(ImmutableTree, self).__init__(label_or_str, children)
+		super().__init__(label_or_str, children)
 		# Precompute our hash value. This ensures that we're really
 		# immutable. It also means we only have to calculate it once.
 		try:
@@ -680,7 +680,7 @@ class ParentedTree(Tree):
 		if children is None:
 			return  # see note in Tree.__init__()
 		self._parent = None
-		super(ParentedTree, self).__init__(label_or_str, children)
+		super().__init__(label_or_str, children)
 		# iterate over self.children, *not* children,
 		# because children might be an iterator.
 		for i, child in enumerate(self.children):
@@ -794,7 +794,7 @@ class ParentedTree(Tree):
 				if isinstance(self[i], Tree):
 					self._delparent(self[i], i)
 			# Delete the children from our child list.
-			super(ParentedTree, self).__delitem__(index)
+			super().__delitem__(index)
 		elif isinstance(index, int):  # del ptree[i]
 			if index < 0:
 				index += len(self)
@@ -804,7 +804,7 @@ class ParentedTree(Tree):
 			if isinstance(self[index], Tree):
 				self._delparent(self[index], index)
 			# Remove the child from our child list.
-			super(ParentedTree, self).__delitem__(index)
+			super().__delitem__(index)
 		elif index == ():  # del ptree[()]
 			raise IndexError('The tree position () may not be deleted.')
 		elif len(index) == 1:  # del ptree[(i, )]
@@ -834,7 +834,7 @@ class ParentedTree(Tree):
 				if isinstance(child, Tree):
 					self._setparent(child, start + i)
 			# finally, update the content of the child list itself.
-			super(ParentedTree, self).__setitem__(index, value)
+			super().__setitem__(index, value)
 		elif isinstance(index, int):  # ptree[i] = value
 			if index < 0:
 				index += len(self)
@@ -850,7 +850,7 @@ class ParentedTree(Tree):
 			if isinstance(self[index], Tree):
 				self._delparent(self[index], index)
 			# Update our child list.
-			super(ParentedTree, self).__setitem__(index, value)
+			super().__setitem__(index, value)
 		elif index == ():  # ptree[()] = value
 			raise IndexError('The tree position () may not be assigned to.')
 		elif len(index) == 1:  # ptree[(i, )] = value
@@ -861,13 +861,13 @@ class ParentedTree(Tree):
 	def append(self, child):
 		if isinstance(child, Tree):
 			self._setparent(child, len(self))
-		super(ParentedTree, self).append(child)
+		super().append(child)
 
 	def extend(self, children):
 		for child in children:
 			if isinstance(child, Tree):
 				self._setparent(child, len(self))
-			super(ParentedTree, self).append(child)
+			super().append(child)
 
 	def insert(self, index, child):
 		# Handle negative indexes. Note that if index < -len(self),
@@ -880,7 +880,7 @@ class ParentedTree(Tree):
 		# Set the child's parent, and update our child list.
 		if isinstance(child, Tree):
 			self._setparent(child, index)
-		super(ParentedTree, self).insert(index, child)
+		super().insert(index, child)
 
 	def pop(self, index=-1):
 		if index < 0:
@@ -889,7 +889,7 @@ class ParentedTree(Tree):
 			raise IndexError('index out of range')
 		if isinstance(self[index], Tree):
 			self._delparent(self[index], index)
-		return super(ParentedTree, self).pop(index)
+		return super().pop(index)
 
 	# NB: like `list`, this is done by equality, not identity!
 	# To remove a specific child, use del ptree[i].
@@ -897,7 +897,7 @@ class ParentedTree(Tree):
 		index = self.index(child)
 		if isinstance(self[index], Tree):
 			self._delparent(self[index], index)
-		super(ParentedTree, self).remove(child)
+		super().remove(child)
 
 	def detach(self):
 		"""Remove this node from its parent node, if it has one.
@@ -941,7 +941,7 @@ class ImmutableParentedTree(ImmutableTree, ParentedTree):
 	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return  # see note in Tree.__init__()
-		super(ImmutableParentedTree, self).__init__(label_or_str, children)
+		super().__init__(label_or_str, children)
 
 
 class DiscTree(ImmutableTree):
@@ -952,7 +952,7 @@ class DiscTree(ImmutableTree):
 
 	def __init__(self, tree, sent):
 		self.sent = tuple(sent)
-		super(DiscTree, self).__init__(tree.label, tuple(
+		super().__init__(tree.label, tuple(
 				DiscTree(child, sent) if isinstance(child, Tree) else child
 				for child in tree))
 
@@ -981,7 +981,7 @@ class DiscTree(ImmutableTree):
 
 	def __repr__(self):
 		return "DisctTree(%r, %r)" % (
-				super(DiscTree, self).__repr__(), self.sent)
+				super().__repr__(), self.sent)
 
 
 class DrawTree(object):
@@ -1182,6 +1182,10 @@ class DrawTree(object):
 			raise ValueError('All leaves must be in the interval 0..n '
 					'with n=len(sent)\ntokens: %d indices: '
 					'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
+		for a in tree.subtrees():
+			if len(a) == 0:
+				raise ValueError(
+						'Non-terminals must dominate one or more leaves')
 		vertline, corner = -1, -2  # constants
 		tree = Tree.convert(tree)
 		for a in tree.subtrees():
@@ -1302,8 +1306,6 @@ class DrawTree(object):
 				for secedgelabel, secedgeparent in zip(
 						nodes[a].source[6::2],
 						nodes[a].source[7::2]):
-					coindexes.append('%s:%d' % (
-							secedgelabel, int(secedgeparent) - 500))
 					for b, node in nodes.items():
 						if (getattr(node, 'source', None) is not None
 								and node.source[0] == '#%s' % secedgeparent):
@@ -1311,8 +1313,9 @@ class DrawTree(object):
 									+ '=%d' % (int(secedgeparent) - 500))
 							break
 					else:
-						raise ValueError('secondary parent %s not found.'
-								% secedgeparent)
+						continue  # skip secondary edge to missing node
+					coindexes.append('%s:%d' % (
+							secedgelabel, int(secedgeparent) - 500))
 				if coindexes:
 					labels[a] = '%s[%s]' % (nodes[a].label,
 							','.join(coindexes))
@@ -1533,7 +1536,8 @@ class DrawTree(object):
 					newtext.append(cat)
 				else:
 					newtext.append('')
-				if func or (funcsep and line.endswith(funcsep)):
+				if func or (funcsep and line.endswith(funcsep)
+						and isinstance(node, Tree)):
 					if not seensep:
 						newtext[-1] += funcsep
 						seensep = True
@@ -1998,7 +2002,8 @@ def ptbescape(token):
 		return '-LSB-'
 	elif token == ']':
 		return '-RSB-'
-	return token.replace('(', '-LRB-').replace(')', '-RRB-')
+	return (token.replace('(', '-LRB-').replace(')', '-RRB-')
+			.replace('/', '\\/'))
 
 
 def ptbunescape(token):
@@ -2013,8 +2018,8 @@ def ptbunescape(token):
 		return '['
 	elif token == '-RSB-':
 		return ']'
-	return token.replace('-LRB-', '(').replace('-RRB-', ')').replace(
-			'#LRB#', '(').replace('#RRB#', ')')
+	return (token.replace('-LRB-', '(').replace('-RRB-', ')')
+			.replace('#LRB#', '(').replace('#RRB#', ')').replace('\\/', '/'))
 
 
 def ranges(seq):

@@ -37,9 +37,15 @@ The following transforms are applied in the order given on the command line.
 
 --splitdisc
                 Related options: ``[--markorigin]``
-                Split discontinuous nodes into several continuous nodes.
+                Transform trees into continuous trees by splitting discontinuous nodes
+                into several continuous nodes.
 
 --mergedisc     Reverse the node splitting operation.
+
+--raisedisc
+                Transform trees into continuous trees by attaching non-head discontinuous
+                components higher in the tree. Not reversible.
+                Requires use of ``--headrules``.
 
 Other options
 ^^^^^^^^^^^^^

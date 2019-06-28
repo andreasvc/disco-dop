@@ -209,9 +209,9 @@ where input and output are treebanks; standard in/output is used if not given.
 	from . import treebank, treebanktransforms
 	from .treetransforms import (canonicalize, binarize,
 			unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes,
-			introducepreterminals, markovthreshold)
+			raisediscnodes, introducepreterminals, markovthreshold)
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
-			'introducepreterminals renumber sentid removeempty '
+			'raisedisc introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
 			'tailmarker direction dot').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= ids= slice= ensureroot= '
@@ -311,8 +311,10 @@ where input and output are treebanks; standard in/output is used if not given.
 		if key == '--splitdisc':
 			actions.append(lambda tree, sent:
 					(splitdiscnodes(tree, '--markorigin' in opts), sent))
-		if key == '--mergediscnodes':
+		if key == '--mergedisc':
 			actions.append(lambda tree, sent: (mergediscnodes(tree), sent))
+		if key == '--raisedisc':
+			actions.append(lambda tree, sent: (raisediscnodes(tree), sent))
 		if key == '--unbinarize':
 			actions.append(lambda tree, sent: (unbinarize(tree, sent), sent))
 		if key == '--reversetransforms':

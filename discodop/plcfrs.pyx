@@ -59,8 +59,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 			start=None, logprob=True, viterbi=True,
 			itemsestimate=None):
 		cdef SmallChartItem tmp = SmallChartItem(0, 0)
-		super(SmallLCFRSChart, self).__init__(
-				grammar, sent, start, logprob, viterbi)
+		super().__init__(grammar, sent, start, logprob, viterbi)
 		if itemsestimate is not None:
 			self.items.reserve(itemsestimate)
 			# NB: self.itemindex does not support reserve
@@ -179,8 +178,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True,
 			itemsestimate=None):
-		super(FatLCFRSChart, self).__init__(
-				grammar, sent, start, logprob, viterbi)
+		super().__init__(grammar, sent, start, logprob, viterbi)
 		cdef FatChartItem tmp = FatChartItem(0)
 		if itemsestimate is not None:
 			self.items.reserve(itemsestimate)

@@ -11,11 +11,12 @@ import csv
 import sys
 import mmap
 import array
-import concurrent.futures
-import multiprocessing
+import tempfile
 import subprocess
-from collections import Counter, OrderedDict, namedtuple
+import multiprocessing
+import concurrent.futures
 from itertools import islice
+from collections import Counter, OrderedDict, namedtuple
 try:
 	import re2
 	RE2LIB = True
@@ -25,7 +26,7 @@ from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from . import treebank, _fragments
 from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
 from .treetransforms import binarize, mergediscnodes, handledisc
-from .util import which, workerfunc, openread, ANSICOLOR
+from .util import which, workerfunc, openread, readbytes, run, ANSICOLOR
 from .containers import Vocabulary, FixedVocabulary, Ctrees
 
 SHORTUSAGE = '''Search through treebanks with queries.
@@ -139,7 +140,13 @@ class CorpusSearcher(object):
 
 	def batchsents(self, queries, subset=None, start=None, end=None,
 			maxresults=100, brackets=False):
-		"""Variant of sents() to run a batch of queries."""
+		"""Variant of sents() to run a batch of queries.
+
+		:yields: tuples of the form ``(corpus1, matches)``
+            where matches is in the same format returned by sents()
+			excluding the filename, with the results of different patterns
+			merged together.
+		"""
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		for query in queries:
@@ -211,17 +218,34 @@ class TgrepSearcher(CorpusSearcher):
 
 	def __init__(self, files, macros=None, numproc=None):
 		def convert(filename):
-			"""Convert files not ending in .t2c.gz to tgrep2 format."""
-			if filename.endswith('.t2c.gz'):
-				return filename
-			elif not os.path.exists(filename + '.t2c.gz'):
-				subprocess.check_call(
-						args=[which('tgrep2'), '-p', filename,
-							filename + '.t2c.gz'], shell=False,
-						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			return filename + '.t2c.gz'
+			"""Create tgrep2 indexed files (.t2c) if necessary."""
+			if not os.path.exists(self._internalfilename(filename)):
+				origfile = filename
+				if filename.endswith('.gz') or filename.endswith('.zst'):
+					with tempfile.NamedTemporaryFile(delete=False) as tmp:
+						tmp.write(readbytes(filename))
+						origfile = tmp.name
+				try:
+					args = [which('tgrep2'), '-p', origfile,
+							self._internalfilename(filename)]
+					returncode, _, stderr = run(args=args)
+					if 'must use the -K flag' in stderr.decode('utf8'):
+						returncode, _, stderr = run(
+								args=[args[0], '-K'] + args[1:])
+					if returncode != 0:
+						raise ValueError('Error creating tgrep2 index:\n%s'
+								% stderr.decode('utf8'))
+				finally:
+					if filename != origfile:
+						os.unlink(tmp.name)
+			return filename
 
-		super(TgrepSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
+		self._compressext = 'gz'  # the compression format to use for t2c files
+		if which('zstd', exception=False):  # https://facebook.github.io/zstd/
+			self._compressext = 'zst'
+		elif which('lz4', exception=False):  # https://github.com/lz4/lz4/
+			self._compressext = 'lz4'
 		self.files = {convert(filename): None for filename in self.files}
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
@@ -232,7 +256,9 @@ class TgrepSearcher(CorpusSearcher):
 		result = OrderedDict()
 		jobs = {}
 		# %s the sentence number
+		# %h the tree matched by the head (first) node of the pattern
 		fmt = r'%s\n:::\n'
+		fmtbreakdown = r'%s\n%h:::\n',
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
@@ -241,15 +267,15 @@ class TgrepSearcher(CorpusSearcher):
 			except KeyError:
 				if indices:
 					jobs[self._submit(lambda x: [n for n, _
-							in self._query(query, x, fmt, start, end, None)],
+							in self._query([query], x, fmt, start, end, None)],
 							filename)] = filename
 				elif breakdown:
 					jobs[self._submit(lambda x: Counter(match for _, match in
-							self._query(query, x, r'%s\n%m:::\n', start, end,
+							self._query([query], x, fmtbreakdown, start, end,
 							None)), filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
-						in self._query(query, x, fmt, start, end, None)),
+						in self._query([query], x, fmt, start, end, None)),
 						filename)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
@@ -257,13 +283,65 @@ class TgrepSearcher(CorpusSearcher):
 					breakdown] = result[filename] = future.result()
 		return result
 
+	def batchcounts(self, queries, subset=None, start=None, end=None):
+		subset = subset or self.files
+		jobs = {}
+		# %s the sentence number
+		# %p the number of the matching pattern
+		fmt = r'%s\n%p:::\n'
+		for filename in subset:
+			# NB: not using cache
+			jobs[self._submit(lambda x:
+					[cnt for _, cnt in sorted(Counter(int(queryno)
+						for _, queryno in self._query(
+							queries, x, fmt, start, end, None)).items())]
+					)] = filename
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			yield filename, future.result()
+
+	def batchsents(self, queries, subset=None, start=None, end=None,
+			maxresults=100, brackets=False):
+		# FIXME: this is highly similar to sents(), but no caching
+		subset = subset or self.files
+		# %s the sentence number
+		# %w complete tree in bracket notation
+		# %h the tree matched by the head (first) node of the pattern
+		# %yh %zh the terminal index of the first/last terminal in the match
+		fmt = r'%s\n%w\n%h\n%yh\n%zh:::\n'
+		jobs = {}
+		for filename in subset:
+			jobs[self._submit(lambda x: list(self._query(
+					queries, x, fmt, start, end, maxresults)),
+					filename)] = filename
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			result = []
+			for sentno, line in future.result():
+				sent, match, begin, end = line.splitlines()
+				if brackets:
+					match1 = match
+					match2 = ''
+				else:
+					begin, end = int(begin) - 1, int(end)
+					tokens = [ptbunescape(token)
+							for token in GETLEAVES.findall(sent)]
+					sent = ' '.join(tokens)
+					prelen = len(' '.join(tokens[:begin]))
+					match = ' '.join(tokens[begin:end])
+					match1 = set(range(prelen, prelen + len(match) + 1))
+					match2 = set()
+				result.append((sentno, sent, match1, match2))
+			yield filename, result
+
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
 			nofunc=False, nomorph=False):
 		subset = subset or self.files
 		# %s the sentence number
 		# %w complete tree in bracket notation
-		# %m all marked nodes, or the head node if none are marked
-		fmt = r'%s\n%w\n%m:::\n'
+		# %h the tree matched by the head (first) node of the pattern
+		# %nh the depth-first pre-order node number of the tree head
+		fmt = r'%s\n%w\n%h\n%nh:::\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -274,7 +352,7 @@ class TgrepSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
-						query, x, fmt, start, end, maxresults)),
+						[query], x, fmt, start, end, maxresults)),
 						filename)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -282,28 +360,30 @@ class TgrepSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, line in future.result():
-				lines = line.splitlines()
-				treestr, matches = lines[0], lines[1:]
+				treestr, match, nodenum = line.splitlines()
 				treestr = filterlabels(treestr, nofunc, nomorph)
 				treestr = treestr.replace(" )", " -NONE-)")
-				for match in matches:
-					if match.startswith('('):
-						treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
-								match.split(None, 1)), 1)
-					else:
-						match = ' %s)' % match
-						treestr = treestr.replace(match, '_HIGH%s' % match)
-
+				nodenum = int(nodenum)
 				tree, sent = brackettree(treestr)
-				tree = mergediscnodes(tree)
-				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
-				tmp = {}
-				for marked in high:
-					marked.label = marked.label.rsplit("_", 1)[0]
-					for node in marked.subtrees():
-						tmp[id(node)] = node
-					tmp.update((id(a), a) for a in marked.leaves())
-				x.append((filename, sentno, tree, sent, list(tmp.values())))
+				# FIXME cannot do this, would change node numbers;
+				# how could a match on a discontinuous componenta be recovered?
+				# tree = mergediscnodes(tree)
+				high = []
+				n = 0
+				for node in tree.subtrees():
+					n += 1
+					if n == nodenum:
+						high = list(node.subtrees()) + list(node.leaves())
+						break
+					if isinstance(node[0], int):
+						n += 1
+						if n == nodenum:
+							high = list(node.leaves())
+							break
+				else:
+					raise ValueError('Matching node %d not found in tree:\n%s'
+							% (nodenum, tree))
+				x.append((filename, sentno, tree, sent, high))
 			self.cache['trees', query, filename, start, end,
 					nofunc, nomorph] = x, maxresults
 			result.extend(x)
@@ -314,8 +394,9 @@ class TgrepSearcher(CorpusSearcher):
 		subset = subset or self.files
 		# %s the sentence number
 		# %w complete tree in bracket notation
-		# %m all marked nodes, or the head node if none are marked
-		fmt = r'%s\n%w\n%m:::\n'
+		# %h the tree matched by the head (first) node of the pattern
+		# %yh %zh the terminal index of the first/last terminal in the match
+		fmt = r'%s\n%w\n%h\n%yh\n%zh:::\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -326,7 +407,7 @@ class TgrepSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
-						query, x, fmt, start, end, maxresults)),
+						[query], x, fmt, start, end, maxresults)),
 						filename)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -334,25 +415,18 @@ class TgrepSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, line in future.result():
-				lines = line.splitlines()
-				sent, matches = lines[0], lines[1:]
+				sent, match, begin, end = line.splitlines()
 				if brackets:
-					match1 = matches[0]
+					match1 = match
 					match2 = ''
 				else:
-					tmp = set()
-					for match in matches:
-						idx = sent.index(match if match.startswith('(')
-								else ' %s)' % match)
-						prelen = len(' '.join(ptbunescape(token) for token
-								in GETLEAVES.findall(sent[:idx])))
-						match = (' '.join(ptbunescape(token) for token
-								in GETLEAVES.findall(match))
-								if '(' in match else ptbunescape(match))
-						tmp.update(range(prelen, prelen + len(match) + 1))
-					sent = ' '.join(ptbunescape(token)
-							for token in GETLEAVES.findall(sent))
-					match1 = tmp
+					begin, end = int(begin) - 1, int(end)
+					tokens = [ptbunescape(token)
+							for token in GETLEAVES.findall(sent)]
+					sent = ' '.join(tokens)
+					prelen = len(' '.join(tokens[:begin]))
+					match = ' '.join(tokens[begin:end])
+					match1 = set(range(prelen, prelen + len(match) + 1))
 					match2 = set()
 				x.append((filename, sentno, sent, match1, match2))
 			self.cache['sents', query, filename,
@@ -362,11 +436,9 @@ class TgrepSearcher(CorpusSearcher):
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
-		if not filename.endswith('.t2c.gz'):
-			filename += '.t2c.gz'
 		cmd = [which('tgrep2'),
 				'-e', '-',  # extraction mode
-				'-c', filename]
+				'-c', self._internalfilename(filename)]
 		if sents:
 			cmd.append('-t')
 		proc = subprocess.Popen(args=cmd,
@@ -390,8 +462,6 @@ class TgrepSearcher(CorpusSearcher):
 					treestr, nofunc, nomorph)) for treestr in result)]
 
 	def getinfo(self, filename):
-		if filename.endswith('.t2c.gz'):
-			filename = filename[:-len('.t2c.gz')]
 		with openread(filename) as inp:
 			data = inp.read()
 		return CorpusInfo(
@@ -400,17 +470,22 @@ class TgrepSearcher(CorpusSearcher):
 				numnodes=data.count('('),
 				maxnodes=None)
 
+	def _internalfilename(self, filename):
+		"""Strip possible .gz extension and add .t2c.gz or .t2c.lz4."""
+		return '%s.t2c.%s' % (re.sub(r'\.gz$', '', filename),
+				self._compressext)
+
 	@workerfunc
-	def _query(self, query, filename, fmt, start=None, end=None,
+	def _query(self, queries, filename, fmt, start=None, end=None,
 			maxresults=None):
-		"""Run a query on a single file."""
+		"""Run queries on a single file."""
 		cmd = [which('tgrep2'), '-a',  # print all matches for each sentence
 				# '-z',  # pretty-print search pattern on stderr
 				'-m', fmt,
-				'-c', os.path.join(filename)]
-		if self.macros:
+				'-c', self._internalfilename(filename)]
+		if self.macros:  # tgrep2 accepts a filename to read patterns from
 			cmd.append(self.macros)
-		cmd.append(query)
+		cmd.extend(queries)
 		proc = subprocess.Popen(
 				args=cmd, shell=False, bufsize=0,
 				stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -442,7 +517,7 @@ class TgrepSearcher(CorpusSearcher):
 			results = ((int(match.group(1)), match.group(2)) for match
 					in linere.finditer(out))
 		if proc.returncode != 0:
-			raise ValueError(err)
+			raise ValueError('command: %s\n%s' % (' '.join(cmd), err))
 		return results
 
 
@@ -474,7 +549,7 @@ class FragmentSearcher(CorpusSearcher):
 	#       optionally with order constraint: (NN cat) (NN dog)
 	# TODO: compiled query set, re-usable on new documents.
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
-		super(FragmentSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
 		self.disc = False
 		newvocab = True
 		path = os.path.dirname(next(iter(sorted(files))))
@@ -772,7 +847,7 @@ class RegexSearcher(CorpusSearcher):
 
 	def __init__(self, files, macros=None, numproc=None, ignorecase=False,
 			inmemory=False):
-		super(RegexSearcher, self).__init__(files, macros, numproc)
+		super().__init__(files, macros, numproc)
 		self.macros = None
 		self.flags = re.MULTILINE
 		if ignorecase:
@@ -1148,7 +1223,7 @@ class FIFOOrederedDict(OrderedDict):
 	"""FIFO cache with maximum number of elements based on OrderedDict."""
 
 	def __init__(self, limit):
-		super(FIFOOrederedDict, self).__init__()
+		super().__init__()
 		self.limit = limit
 
 	def __setitem__(self, key, value):  # pylint: disable=arguments-differ
@@ -1158,7 +1233,7 @@ class FIFOOrederedDict(OrderedDict):
 			self.pop(key)
 		elif len(self) >= self.limit:
 			self.pop(next(iter(self)))
-		super(FIFOOrederedDict, self).__setitem__(key, value)
+		super().__setitem__(key, value)
 
 
 def filterlabels(line, nofunc, nomorph):
@@ -1285,7 +1360,7 @@ def main():
 		if not corpora:
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
-		print('error: %r' % err, file=sys.stderr)
+		print(err, file=sys.stderr)
 		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
