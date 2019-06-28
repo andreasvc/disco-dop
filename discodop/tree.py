@@ -1481,11 +1481,15 @@ class DrawTree(object):
 						','.join(str(a[0]) if len(a) == 1
 							else ('%d-%d' % (a[0], a[-1]))
 							for a in ranges(sorted(leaves_nopunct(node)))))
+				if parent is None:
+					parent_id = ''
+				else:
+					parent_id = '%s_%s' % (nodeprops, parent)
 				pos = isinstance(node[0], int)
 				newtext.append('<span class=%s '
-						'data-id="%s_%d" data-s="%s" data-s-nopunct="%s">%s' % (
+						'data-id="%s_%d" data-s="%s" data-s-nopunct="%s" data-p="%s">%s' % (
 						'p' if pos else 'n',
-						nodeprops, n, labeledspan, labeledspan_nopunct, cat))
+						nodeprops, n, labeledspan, labeledspan_nopunct, parent_id, cat))
 			else:
 				newtext.append('<font color="%s">%s</font>' % (
 						color, cat))
@@ -1581,6 +1585,7 @@ class DrawTree(object):
 			for col in matrix[row]:
 				n = matrix[row][col]
 				node = self.nodes[n]
+				parent = self.edges.get(n)
 				text = labels[n]
 				if isinstance(node, Tree):
 					# draw horizontal branch towards children for this node
