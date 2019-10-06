@@ -138,10 +138,13 @@ the list of files changes or any file is updated.
 
 TGrep2 syntax overview
 ^^^^^^^^^^^^^^^^^^^^^^
-Only treebanks in bracket format ary supported, but trees can be n-ary.
+Only treebanks in :ref:`bracket format <bracket-format>` are supported,
+but trees can be n-ary.
 Note that the tgrep2 command needs to be installed.
-A version with small improvements is available from https://github.com/andreasvc/tgrep2
-Treebanks may be compressed with gzip, zstd, or lz4.
+A version with minor improvements is available: https://github.com/andreasvc/tgrep2
+
+Treebanks may be compressed with gzip, `zstd <http://www.zstd.net/>`_, or lz4.
+zstd appears to give the best speed/compression tradeoff.
 
 TGrep2 operators::
 

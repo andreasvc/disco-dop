@@ -241,7 +241,7 @@ some extra libraries such as Flask and pandas to be installed::
 ``treesearch.py``
     A web interface for searching through treebanks. Expects
     one or more treebanks in the directory ``web/corpus/`` (sample included).
-    See `the treesearch manual <cli/treesearch>`_ for instructions on corpus
+    See :doc:`the treesearch manual <cli/treesearch>` for instructions on corpus
     preperation. To enable basic authentication, put a text file
     ``web/treesearchpasswd.txt`` with lines of the form ``username: password``
     (see the example file, only use over HTTPS).

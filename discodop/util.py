@@ -407,19 +407,19 @@ def tokenize(text):
 
 
 def run(*popenargs, **kwargs):
-    """Run command with arguments and return (returncode, stdout, stderr).
+	"""Run command with arguments and return (returncode, stdout, stderr).
 
-    All arguments are the same as for the Popen constructor."""
-    with subprocess.Popen(*popenargs, **kwargs,
+	All arguments are the same as for the Popen constructor."""
+	with subprocess.Popen(*popenargs, **kwargs,
 			stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
-        try:
-            stdout, stderr = proc.communicate()
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
-        retcode = proc.poll()
-    return retcode, stdout, stderr
+		try:
+			stdout, stderr = proc.communicate()
+		except Exception:
+			proc.kill()
+			proc.wait()
+			raise
+		retcode = proc.poll()
+	return retcode, stdout, stderr
 
 
 ANSICOLOR = {

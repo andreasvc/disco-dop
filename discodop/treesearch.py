@@ -143,7 +143,7 @@ class CorpusSearcher(object):
 		"""Variant of sents() to run a batch of queries.
 
 		:yields: tuples of the form ``(corpus1, matches)``
-            where matches is in the same format returned by sents()
+			where ``matches`` is in the same format returned by ``sents()``
 			excluding the filename, with the results of different patterns
 			merged together.
 		"""
@@ -260,22 +260,25 @@ class TgrepSearcher(CorpusSearcher):
 		fmt = r'%s\n:::\n'
 		fmtbreakdown = r'%s\n%h:::\n',
 		for filename in subset:
-			try:
-				result[filename] = self.cache[
-						'counts', query, filename, start, end, indices,
-						breakdown]
-			except KeyError:
-				if indices:
-					jobs[self._submit(lambda x: [n for n, _
-							in self._query([query], x, fmt, start, end, None)],
-							filename)] = filename
-				elif breakdown:
-					jobs[self._submit(lambda x: Counter(match for _, match in
-							self._query([query], x, fmtbreakdown, start, end,
-							None)), filename)] = filename
-				else:
-					jobs[self._submit(lambda x: sum(1 for _
-						in self._query([query], x, fmt, start, end, None)),
+			result[filename] = self.cache.get((
+					'counts', query, filename, start, end, indices,
+					breakdown))
+			if result[filename] is not None:
+				pass
+			elif indices:
+				jobs[self._submit(
+						lambda x: [n for n, _ in self._query(
+							[query], x, fmt, start, end, None)],
+						filename)] = filename
+			elif breakdown:
+				jobs[self._submit(
+						lambda x: Counter(match for _, match in self._query(
+							[query], x, fmtbreakdown, start, end, None)),
+						filename)] = filename
+			else:
+				jobs[self._submit(
+						lambda x: sum(1 for _ in self._query(
+							[query], x, fmt, start, end, None)),
 						filename)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
@@ -291,11 +294,11 @@ class TgrepSearcher(CorpusSearcher):
 		fmt = r'%s\n%p:::\n'
 		for filename in subset:
 			# NB: not using cache
-			jobs[self._submit(lambda x:
-					[cnt for _, cnt in sorted(Counter(int(queryno)
+			jobs[self._submit(
+					lambda x: [cnt for _, cnt in sorted(Counter(int(queryno)
 						for _, queryno in self._query(
-							queries, x, fmt, start, end, None)).items())]
-					)] = filename
+							queries, x, fmt, start, end, None)).items())],
+					filename)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			yield filename, future.result()
@@ -311,8 +314,9 @@ class TgrepSearcher(CorpusSearcher):
 		fmt = r'%s\n%w\n%h\n%yh\n%zh:::\n'
 		jobs = {}
 		for filename in subset:
-			jobs[self._submit(lambda x: list(self._query(
-					queries, x, fmt, start, end, maxresults)),
+			jobs[self._submit(
+					lambda x: list(self._query(
+						queries, x, fmt, start, end, maxresults)),
 					filename)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
@@ -351,8 +355,9 @@ class TgrepSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						[query], x, fmt, start, end, maxresults)),
+				jobs[self._submit(
+						lambda x: list(self._query(
+							[query], x, fmt, start, end, maxresults)),
 						filename)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -406,8 +411,9 @@ class TgrepSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						[query], x, fmt, start, end, maxresults)),
+				jobs[self._submit(
+						lambda x: list(self._query(
+							[query], x, fmt, start, end, maxresults)),
 						filename)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -542,11 +548,11 @@ class FragmentSearcher(CorpusSearcher):
 	"""
 
 	# TODO: allow single terminals as queries: word
-	#       alternatively, allow wildcard: (* word)
+	# 		alternatively, allow wildcard: (* word)
 	# TODO: allow regex labels: /label/
 	# 		expand to multiple queries; feasible?
 	# TODO: interpret multiple fragments in a single query as AND query,
-	#       optionally with order constraint: (NN cat) (NN dog)
+	# 		optionally with order constraint: (NN cat) (NN dog)
 	# TODO: compiled query set, re-usable on new documents.
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
 		super().__init__(files, macros, numproc)
@@ -625,8 +631,8 @@ class FragmentSearcher(CorpusSearcher):
 				jobs[self._submit(
 						_frag_query if self.numproc == 1 else _frag_query_mp,
 						cquery, bitsets, maxnodes, filename, self.vocabpath,
-						start, end, None, indices=indices, trees=False)
-						] = filename
+						start, end, None, indices=indices, trees=False,
+						)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			tmp = future.result()
@@ -645,9 +651,11 @@ class FragmentSearcher(CorpusSearcher):
 		cqueries, bitsets, maxnodes = self._parse_query(queries, disc=self.disc)
 		for filename in subset:
 			# NB: not using cache.
-			jobs[self._submit(_frag_query, cqueries, bitsets, maxnodes,
-					filename, self.vocabpath, start, end, None, indices=False,
-					trees=False)] = filename
+			jobs[self._submit(
+					_frag_query,
+					cqueries, bitsets, maxnodes, filename, self.vocabpath,
+					start, end, None, indices=False, trees=False,
+					)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			yield filename, future.result()
@@ -673,8 +681,8 @@ class FragmentSearcher(CorpusSearcher):
 				jobs[self._submit(
 						_frag_query if self.numproc == 1 else _frag_query_mp,
 						cquery, bitsets, maxnodes, filename, self.vocabpath,
-						start, end, maxresults, indices=True, trees=True)
-						] = filename
+						start, end, maxresults, indices=True, trees=True,
+						)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -724,8 +732,8 @@ class FragmentSearcher(CorpusSearcher):
 				jobs[self._submit(
 						_frag_query if self.numproc == 1 else _frag_query_mp,
 						cquery, bitsets, maxnodes, filename, self.vocabpath,
-						start, end, maxresults, indices=True, trees=True)
-						] = filename
+						start, end, maxresults, indices=True, trees=True,
+						)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -904,9 +912,12 @@ class RegexSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, indices, False,
 						breakdown]
 			except KeyError:
-				jobs[self._submit(_regex_run_query, pattern, filename,
-						self.fileno[filename], self.lineidxpath, start, end,
-						None, indices, False, breakdown)] = filename
+				jobs[self._submit(
+						_regex_run_query,
+						pattern, filename, self.fileno[filename],
+						self.lineidxpath, start, end, None, indices, False,
+						breakdown,
+						)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			self.cache['counts', query, filename, start, end, indices, False,
@@ -933,7 +944,8 @@ class RegexSearcher(CorpusSearcher):
 						_regex_query if self.numproc == 1 else _regex_query_mp,
 						query, filename, self.fileno[filename],
 						self.lineidxpath, self.flags, start, end, maxresults,
-						True, True)] = filename
+						True, True,
+						)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -1400,7 +1412,7 @@ def main():
 			results = searcher.counts(
 					query, start=start, end=end, breakdown=True)
 			writecounts(results, flat='--csv' not in opts)
-		elif len(queries) > 1:
+		elif len(queries) > 1 or '--csv' in opts:
 			if indices:
 				raise ValueError('--indices only supported with single query.')
 			results = searcher.batchcounts(

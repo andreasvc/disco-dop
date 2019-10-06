@@ -488,7 +488,7 @@ class Parser(object):
 				from .runexp import dobinarization
 				tree = dobinarization([tree], [sent],
 						self.prm.binarization,
-                        self.prm.relationalrealizational, logmsg=False)[0]
+						self.prm.relationalrealizational, logmsg=False)[0]
 				parsetrees = [(str(tree), prob, None)]
 				partialparse = True
 			if stage.name in (stage.prune for stage in self.stages):
