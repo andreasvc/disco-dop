@@ -1391,6 +1391,7 @@ def main():
 	ignorecase = '--ignore-case' in opts or '-i' in opts
 	printfname = (len(corpora) > 1 and '--no-filename' not in opts
 			and '-h' not in opts)
+	printlineno = '--line-number' in opts or '-n' in opts
 	if ignorecase and engine != 'regex':
 		raise ValueError('--ignore-case is only supported with --engine=regex')
 	if engine == 'tgrep2':
@@ -1447,9 +1448,11 @@ def main():
 			if printfname:
 				print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
-			if '--line-number' in opts or '-n' in opts:
+			if printlineno:
 				print('\x1b[%dm%s\x1b[0m:'
 						% (ANSICOLOR['green'], sentno), end='')
+			if printfname or printlineno:
+				print('\n', end='')
 			print(out)
 	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
@@ -1484,7 +1487,7 @@ def main():
 				if printfname:
 					print('\x1b[%dm%s\x1b[0m:' % (
 							ANSICOLOR['magenta'], filename), end='')
-				if '--line-number' in opts or '-n' in opts:
+				if printlineno:
 					print('\x1b[%dm%s\x1b[0m:'
 							% (ANSICOLOR['green'], sentno), end='')
 				print(out)
