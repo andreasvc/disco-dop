@@ -47,6 +47,10 @@ The following transforms are applied in the order given on the command line.
                 components higher in the tree. Not reversible.
                 Requires use of ``--headrules``.
 
+--canonical
+                Transform trees into continuous trees by re-ordering sentences.
+                Not reversible.
+
 Other options
 ^^^^^^^^^^^^^
 --inputfmt=<export|bracket|discbracket|alpino|tiger|ftb>

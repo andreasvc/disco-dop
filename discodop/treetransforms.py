@@ -589,6 +589,31 @@ def raisediscnodes(tree):
 	return tree
 
 
+def canonicallyorderedtree(tree, sent):
+	"""Return a continuous version of tree by re-ordering the sentence.
+
+	This transformation cannot be reversed.
+
+	>>> tree = ('(top (smain (noun 0=Het) (verb 1=had) (inf (verb 5=kunnen)'
+	... ' (inf (np (det 2=een) (adj 3=prachtige) (noun 4=dag))'
+	... ' (verb 6=zijn) (pp (prep 7=in) (noun 8=Londen))))) (punct 9=.))')
+	>>> from .tree import brackettree, writebrackettree
+	>>> tree, sent = brackettree(tree)
+	>>> tree = canonicallyorderedtree(tree, sent)
+	>>> print(writebrackettree(tree, sent))  # doctest: +NORMALIZE_WHITESPACE
+	(top (smain (noun Het) (verb had) (inf (inf (np (det een) (adj prachtige)
+		(noun dag)) (verb zijn) (pp (prep in) (noun Londen))) (verb kunnen)))
+		(punct .))
+	"""
+	newsent = [None] * len(sent)
+	for n, node in enumerate(canonicalize(tree).subtrees(
+			lambda n: n and isinstance(n[0], int))):
+		newsent[n] = sent[node[0]]
+		node[0] = n
+	sent[:] = newsent
+	return tree
+
+
 def addfanoutmarkers(tree):
 	"""Mark discontinuous constituents with '_n' where n = # gaps + 1."""
 	for st in tree.subtrees():

@@ -209,10 +209,11 @@ where input and output are treebanks; standard in/output is used if not given.
 	from . import treebank, treebanktransforms
 	from .treetransforms import (canonicalize, binarize,
 			unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes,
-			raisediscnodes, introducepreterminals, markovthreshold)
+			raisediscnodes, introducepreterminals, markovthreshold,
+			canonicallyorderedtree)
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
-			'raisedisc introducepreterminals renumber sentid removeempty '
-			'help markorigin markhead leftunary rightunary '
+			'raisedisc canonical introducepreterminals renumber sentid '
+			'removeempty help markorigin markhead leftunary rightunary '
 			'tailmarker direction dot').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
@@ -268,12 +269,12 @@ where input and output are treebanks; standard in/output is used if not given.
 		if key == '--introducepreterminals':
 			actions.append(lambda tree, sent:
 					(introducepreterminals(tree, sent), sent))
-		if key == '--transforms':
+		elif key == '--transforms':
 			actions.append(lambda tree, sent, value=value:
 					(treebanktransforms.transform(tree, sent,
 						treebanktransforms.expandpresets(value.split(','))),
 					sent))
-		if key in ('--binarize', '--optimalbinarize'):
+		elif key in ('--binarize', '--optimalbinarize'):
 			if key == '--binarize':
 				actions.append(lambda tree, sent:
 						(binarize(
@@ -303,16 +304,19 @@ where input and output are treebanks; standard in/output is used if not given.
 							int(opts.get('-h', 999)),
 							int(opts.get('-v', 1))),
 						sent))
-		if key == '--splitdisc':
+		elif key == '--splitdisc':
 			actions.append(lambda tree, sent:
 					(splitdiscnodes(tree, '--markorigin' in opts), sent))
-		if key == '--mergedisc':
+		elif key == '--canonical':
+			actions.append(lambda tree, sent:
+					(canonicallyorderedtree(tree, sent), sent))
+		elif key == '--mergedisc':
 			actions.append(lambda tree, sent: (mergediscnodes(tree), sent))
-		if key == '--raisedisc':
+		elif key == '--raisedisc':
 			actions.append(lambda tree, sent: (raisediscnodes(tree), sent))
-		if key == '--unbinarize':
+		elif key == '--unbinarize':
 			actions.append(lambda tree, sent: (unbinarize(tree, sent), sent))
-		if key == '--reversetransforms':
+		elif key == '--reversetransforms':
 			actions.append(lambda tree, sent, value=value:
 					(treebanktransforms.reversetransform(tree, sent,
 						treebanktransforms.expandpresets(value.split(','))),

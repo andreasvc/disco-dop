@@ -57,7 +57,7 @@ def openread(filename, encoding='utf8'):
 		return open(sys.stdin.fileno(), encoding=encoding)
 	if not isinstance(filename, int):
 		if filename.endswith('.gz'):
-			return gzip.open(filename, encoding=encoding)
+			return gzip.open(filename, mode='rt', encoding=encoding)
 		elif filename.endswith('.lz4'):
 			return genericdecompressor('lz4', filename, encoding)
 		elif filename.endswith('.zst'):
