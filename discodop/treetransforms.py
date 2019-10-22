@@ -483,8 +483,9 @@ def splitdiscnodes(tree, markorigin=False):
 
 	Boyd (2007): Discontinuity revisited. http://aclweb.org/anthology/W07-1506
 
-	:markorigin=False: VP* (bare label)
-	:markorigin=True: VP*1 (add index)
+	:param markorigin:
+		:False: VP* (bare label)
+		:True: VP*1 (add index)
 
 	>>> tree = Tree('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
 	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))')
@@ -601,12 +602,12 @@ def canonicallyorderedtree(tree, sent):
 	>>> tree, sent = brackettree(tree)
 	>>> tree = canonicallyorderedtree(tree, sent)
 	>>> print(writebrackettree(tree, sent))  # doctest: +NORMALIZE_WHITESPACE
-	(top (smain (noun Het) (verb had) (inf (inf (np (det een) (adj prachtige)
-		(noun dag)) (verb zijn) (pp (prep in) (noun Londen))) (verb kunnen)))
+	(top (smain (noun Het) (verb had) (inf (verb kunnen) (inf (np (det een)
+		(adj prachtige) (noun dag)) (verb zijn) (pp (prep in) (noun Londen)))))
 		(punct .))
 	"""
 	newsent = [None] * len(sent)
-	for n, node in enumerate(canonicalize(tree).subtrees(
+	for n, node in enumerate(canonicalizealpino(tree).subtrees(
 			lambda n: n and isinstance(n[0], int))):
 		newsent[n] = sent[node[0]]
 		node[0] = n
@@ -683,6 +684,18 @@ def canonicalize(tree):
 	"""Restore canonical linear precedence order; tree is modified in-place."""
 	for a in tree.postorder(lambda n: len(n) > 1 and isinstance(n[0], Tree)):
 		a.children.sort(key=lambda n: n.leaves())
+	return tree
+
+
+def canonicalizealpino(tree):
+	"""Canonicalize tree using Alpino method.
+
+	cf. https://github.com/rug-compling/Alpino/
+	TreebankTools/bin/dtcanonicalize.py"""
+	from .treebanktransforms import function
+	for a in tree.postorder(lambda n: len(n) > 1 and isinstance(n[0], Tree)):
+		a.children.sort(
+				key=lambda n: (n.leaves()[-1], n.leaves(), function(n)))
 	return tree
 
 
