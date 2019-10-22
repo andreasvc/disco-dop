@@ -233,8 +233,8 @@ class TgrepSearcher(CorpusSearcher):
 						returncode, _, stderr = run(
 								args=[args[0], '-K'] + args[1:])
 					if returncode != 0:
-						raise ValueError('Error creating tgrep2 index:\n%s'
-								% stderr.decode('utf8'))
+						raise ValueError('Error creating tgrep2 index of %r:\n'
+								'%s' % (filename, stderr.decode('utf8')))
 				finally:
 					if filename != origfile:
 						os.unlink(tmp.name)

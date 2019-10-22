@@ -170,8 +170,9 @@ def export(form, output):
 	elif output in ('sents', 'brackets', 'trees'):
 		fmt = '%s:%s|%s\n'
 		start, end = getslice(form.get('slice'))
+		maxresults = min(int(form.get('maxresults', SENTLIMIT)), SENTLIMIT)
 		results = CORPORA[engine].sents(
-				form['query'], selected, start, end, maxresults=SENTLIMIT,
+				form['query'], selected, start, end, maxresults=maxresults,
 				brackets=output in ('brackets', 'trees'))
 		if form.get('export') == 'json':
 			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
@@ -372,6 +373,7 @@ def trees(form):
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
+	maxresults = min(int(form.get('maxresults', TREELIMIT)), TREELIMIT)
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form), separator=b';')
 	yield ('<pre>Query: %s\n'
@@ -380,10 +382,10 @@ def trees(form):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				TREELIMIT, url, url + ';linenos=1'))
+				maxresults, url, url + ';linenos=1'))
 	try:
 		tmp = CORPORA[engine].trees(form['query'],
-				selected, start, end, maxresults=TREELIMIT,
+				selected, start, end, maxresults=maxresults,
 				nomorph='nomorph' in form, nofunc='nofunc' in form)
 	except Exception as err:
 		yield '<span class=r>%s</span>' % htmlescape(str(err).splitlines()[-1])
@@ -435,6 +437,7 @@ def sents(form, dobrackets=False):
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
+	maxresults = min(int(form.get('maxresults', SENTLIMIT)), SENTLIMIT)
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form), separator=b';'))
 	yield ('<pre>Query: %s\n'
@@ -443,10 +446,10 @@ def sents(form, dobrackets=False):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				SENTLIMIT, url, url + ';linenos=1'))
+				maxresults, url, url + ';linenos=1'))
 	try:
 		tmp = CORPORA[engine].sents(form['query'],
-					selected, start, end, maxresults=SENTLIMIT,
+					selected, start, end, maxresults=maxresults,
 					brackets=dobrackets)
 	except Exception as err:
 		yield '<span class=r>%s</span>' % htmlescape(str(err).splitlines()[-1])
@@ -567,7 +570,7 @@ def fragmentsinresults(form, doexport=False):
 		fragments.PARAMS.update(disc=True, fmt='discbracket')
 	else:
 		fragments.PARAMS.update(disc=False, fmt='bracket')
-	for n, (_, _, treestr, _) in enumerate(CORPORA[engine].sents(
+	for n, (_, _, treestr, _, _) in enumerate(CORPORA[engine].sents(
 			form['query'], selected, start, end,
 			maxresults=SENTLIMIT, brackets=True)):
 		if n == 0:
@@ -1197,7 +1200,7 @@ APP.wsgi_app = QueryStringRedirectMiddleware(APP.wsgi_app)
 
 fragments.PARAMS.update(quiet=True, debug=False, disc=False, complete=False,
 		cover=False, quadratic=False, complement=False, adjacent=False,
-		twoterms=False, nofreq=False, approx=True, indices=False,
+		twoterms=None, nofreq=False, approx=True, indices=False,
 		fmt='bracket')
 
 # this is redundant but used to support both javascript-enabled /foo

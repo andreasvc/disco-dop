@@ -188,8 +188,10 @@ div.barplot span {
     <label><input type=checkbox name=nofunc{{ ' checked' if 'nofunc' in form }}>
         Hide function tags</label>
     <label><input type=checkbox name=breakdown{{ ' checked' if 'breakdown' in form }}>
-        Breakdown</label>
-    <br>
+        Breakdown</label>;
+    <label>Max results:
+        <input type=text name=maxresults value="{{ form['maxresults'] }}" size=10>
+    </label><br>
     </td><td></td></tr>
     <tr>
         <td></td><td><input type=submit value=Submit></td>
