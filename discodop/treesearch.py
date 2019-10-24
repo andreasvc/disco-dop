@@ -468,9 +468,9 @@ class TgrepSearcher(CorpusSearcher):
 		result = out.decode('utf8').splitlines()
 		if sents:
 			return result
-        return [(mergediscnodes(tree) if mergedisc else tree, sent)
-                for tree, sent
-                in (brackettree(
+		return [(mergediscnodes(tree) if mergedisc else tree, sent)
+				for tree, sent
+				in (brackettree(
 						filterlabels(treestr, nofunc, nomorph),
 						detectdisc=detectdisc)
 					for treestr in result)]
@@ -800,7 +800,7 @@ class FragmentSearcher(CorpusSearcher):
 	def _parse_query(self, query, disc=False):
 		"""Prepare fragment query."""
 		if isinstance(query, list):
-			qitems = (brackettree(a. detectdisc=True) for a in query)
+			qitems = (brackettree(a, detectdisc=True) for a in query)
 		else:
 			qitems = treebank.incrementaltreereader(
 					io.StringIO(query), strict=True, robust=False)
