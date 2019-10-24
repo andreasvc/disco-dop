@@ -25,7 +25,7 @@ POSRE = re.compile(r'\(([^() ]+)\s+[^ ()]+\s*\)')
 # Assumes there is no whitespace between open paren and non-terminal: "(  NP "
 LEAVESRE = re.compile(r' (?=\))| ([^ ()]+)\s*(?=[\s)])')
 ALPINOXML = re.compile(
-		rb'<\?xml version="1.0" encoding="UTF-?8"\?>.*?</alpino_ds>',
+		rb'<\?xml version="1.0" encoding="UTF-?8"\?>.*?</alpino_ds>\r?\n',
 		flags=re.DOTALL | re.IGNORECASE)
 ALPINOSENTID = re.compile(b'<sentence sentid="(.*?)">')
 
@@ -119,7 +119,7 @@ class CorpusReader(object):
 		if not self._filenames:
 			raise ValueError("no files matched pattern '%s' in %s" % (
 					path, os.getcwd()))
-		self._block_cache = None
+		self._block_cache = None  # optionally, cache of blocks (e.g., etrees)
 		self._trees_cache = None
 
 	def itertrees(self, start=None, end=None):
@@ -170,12 +170,13 @@ class CorpusReader(object):
 		"""Iterate over blocks in corpus file corresponding to parse trees."""
 
 	def _parse(self, block):
-		""":returns: a parse tree given a string from the treebank file."""
+		""":returns: a parse tree given a block from the treebank file."""
+		raise NotImplementedError('this is an abstract base class.')
 
 	def _parsetree(self, block):
 		""":returns: a transformed parse tree and sentence."""
 		item = self._parse(block)
-		if not item.sent:  # ??3
+		if not item.sent:  # ???
 			return item
 		if self.removeempty:
 			removeemptynodes(item.tree, item.sent)
@@ -195,7 +196,7 @@ class CorpusReader(object):
 		return item
 
 	def _word(self, block):
-		""":returns: a list of words given a string."""
+		""":returns: a list of words given a block from the treebank file."""
 		if self.punct in {'remove', 'prune'}:
 			return self._parsetree(block).sent
 		return self._parse(block).sent
@@ -306,24 +307,26 @@ class NegraCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		"""Read corpus and yield blocks corresponding to each sentence."""
+		# NB: A Negra "block" is a list of lines without line endings.
 		results = set()
 		started = False
+		lines = []
 		for filename in self._filenames:
 			with openread(filename, encoding=self._encoding) as inp:
 				for line in inp:
+					line = line.rstrip()
 					if line.startswith('#BOS '):
 						if started:
 							raise ValueError('beginning of sentence marker '
 									'while previous one still open: %s' % line)
 						started = True
-						line = line.strip()
-						sentid = line.split()[1]
-						lines = [line]
+						sentid = line.split(None, 2)[1]
+						lines[:] = [line]
 					elif line.startswith('#EOS '):
 						if not started:
 							raise ValueError('end of sentence marker while '
 									'none started')
-						thissentid = line.strip().split()[1]
+						thissentid = line.split(None, 2)[1]
 						if sentid != thissentid:
 							raise ValueError('unexpected sentence id: '
 								'start=%s, end=%s' % (sentid, thissentid))
@@ -332,10 +335,10 @@ class NegraCorpusReader(CorpusReader):
 							raise ValueError(
 									'duplicate sentence ID: %s' % sentid)
 						results.add(sentid)
-						lines.append(line.strip())
+						lines.append(line)
 						yield sentid, lines
 					elif started:
-						lines.append(line.strip())
+						lines.append(line)
 					# other lines are ignored: #FORMAT x, %% comments, ...
 
 	def _parse(self, block):
@@ -351,28 +354,32 @@ class TigerXMLCorpusReader(CorpusReader):
 			trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((n, ElementTree.tostring(a))
-				for n, a in self._block_cache.items())
+		return OrderedDict((sentid, rawblock)
+				for sentid, (rawblock, _xmlblock) in self._block_cache.items())
 
 	def _read_blocks(self):
 		if self._encoding not in (None, 'utf8', 'utf-8'):
 			raise ValueError('Encoding specified in XML files, '
 					'cannot be overriden.')
 		for filename in self._filenames:
-			# iterator over elements in XML file
-			context = ElementTree.iterparse(filename,
-					events=('start', 'end'))
-			_, root = next(context)  # event == 'start' of root element
-			for event, elem in context:
-				if event == 'end' and elem.tag == 's':
-					yield elem.get('id'), elem
-				root.clear()
+			with openread(filename, encoding=None) as inp:
+				# iterator over elements in XML file
+				context = ElementTree.iterparse(
+						inp, events=('start', 'end'))
+				_, root = next(context)  # event == 'start' of root element
+				for event, elem in context:
+					if event == 'end' and elem.tag == 's':
+						sentid = elem.get('id')
+						rawblock = ElementTree.tostring(elem)
+						yield sentid, (rawblock, elem)
+					root.clear()
 
 	def _parse(self, block):
 		"""Translate Tiger XML structure to the fields of export format."""
+		rawblock, xmlblock = block
 		nodes = OrderedDict()
-		root = block.find('graph').get('root')
-		for term in block.find('graph').find('terminals'):
+		root = xmlblock.find('graph').get('root')
+		for term in xmlblock.find('graph').find('terminals'):
 			fields = nodes.setdefault(term.get('id'), 6 * [None])
 			fields[WORD] = term.get('word')
 			fields[LEMMA] = term.get('lemma')
@@ -381,7 +388,7 @@ class TigerXMLCorpusReader(CorpusReader):
 			fields[PARENT] = '0' if term.get('id') == root else None
 			fields[FUNC] = '--'
 			nodes[term.get('id')] = fields
-		for nt in block.find('graph').find('nonterminals'):
+		for nt in xmlblock.find('graph').find('nonterminals'):
 			if nt.get('id') == root:
 				ntid = '0'
 			else:
@@ -413,7 +420,7 @@ class TigerXMLCorpusReader(CorpusReader):
 				+ ['#EOS ' + block.get('id')],
 				self.functions, self.morphology, self.lemmas)
 		item.tree.label = root.split('_', 1)[1]
-		item.block = ElementTree.tostring(block)
+		item.block = rawblock
 		return item
 
 
@@ -429,7 +436,8 @@ class AlpinoCorpusReader(CorpusReader):
 			trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return self._block_cache
+		return OrderedDict((n, rawblock)
+				for n, (rawblock, _xmlblock) in self._block_cache.items())
 
 	def _read_blocks(self):
 		"""Read corpus and yield blocks corresponding to each sentence."""
@@ -437,34 +445,31 @@ class AlpinoCorpusReader(CorpusReader):
 			raise ValueError('Encoding specified in XML files, '
 					'cannot be overriden.')
 		for filename in self._filenames:
-			block = open(filename, 'rb').read()  # NB: store XML data as bytes
+			with open(filename, 'rb') as inp:
+				rawblock = inp.read()  # NB: store XML data as bytes
 			# ../path/dir/file.xml => dir/file
 			path, filename = os.path.split(filename)
 			_, lastdir = os.path.split(path)
 			n = os.path.join(lastdir, filename)[:-len('.xml')]
-			yield n, block
+			try:
+				xmlblock = ElementTree.fromstring(rawblock)
+			except ElementTree.ParseError:
+				print('Problem with %r:\n%s' % (
+						filename,
+						rawblock.decode('utf8', errors='replace')),
+						file=sys.stderr)
+			yield n, (rawblock, xmlblock)
 
 	def _parse(self, block):
 		""":returns: a parse tree given a string."""
-		if ElementTree.iselement(block):
-			xmlblock = block
-		else:  # NB: parse because raw XML might contain entities etc.
-			try:
-				xmlblock = ElementTree.fromstring(block)
-			except ElementTree.ParseError:
-				print('Problem with:\n%s' %
-						block.decode('utf8', errors='replace'),
-						file=sys.stderr)
-				raise
 		return alpinotree(
-				xmlblock, self.functions, self.morphology, self.lemmas)
+				block, self.functions, self.morphology, self.lemmas)
 
 
 class AlpinoCompactCorpusReader(AlpinoCorpusReader):
 	"""Corpus reader for the Alpino compact treebank format (Indexed Corpus).
 
-	Pass the .index file as filename(s). The corresponding dictzip-file with
-	.data.dz extension will be read as well."""
+	Pass one or more .index or .data.dz files as filenames."""
 	def _read_blocks(self):
 		"""Read corpus and yield blocks corresponding to each sentence."""
 		if self._encoding not in (None, 'utf8', 'utf-8'):
@@ -472,24 +477,23 @@ class AlpinoCompactCorpusReader(AlpinoCorpusReader):
 					'cannot be overriden.')
 		# NB: could implement proper streaming, random access using .index file
 		# which lists offsets and sizes in base64 encoding.
+		sentids = set()
+		started = False
+		lines = []
 		for filename in self._filenames:
 			dzfile = re.sub(r'\.index$', '.data.dz', filename)
 			dirname = os.path.basename(re.sub(r'\.index$', '', filename))
-			with open(filename) as inp:
-				xmlfilenames = [line.split('\t')[0] for line in inp]
 			with gzip.open(dzfile, 'rb') as inp:
-				# NB: blocks are XML data as bytes string
-				blocks = ALPINOXML.findall(inp.read())
-			if len(blocks) != len(xmlfilenames):
-				raise ValueError('length mismatch: index %d; data.dz %d' %
-						(len(xmlfilenames), len(blocks)))
-			for xmlfilename, block in zip(xmlfilenames, blocks):
-				sentid = ALPINOSENTID.search(block).group(1).decode('utf8')
-				if sentid + '.xml' != xmlfilename:
-					raise ValueError('expected: %r; got %r'
-							% (xmlfilename, sentid))
-				n = '%s/%s' % (dirname, sentid)
-				yield n, block
+				for block in ALPINOXML.findall(inp.read()):
+					sentid = ALPINOSENTID.search(block).group(1).decode('utf8')
+					n = '%s/%s' % (dirname, sentid)
+					try:
+						xmlblock = ElementTree.fromstring(block)
+					except ElementTree.ParseError:
+						print('Problem with %r:\n%s' % (
+								n, block.decode('utf8', errors='replace')),
+								file=sys.stderr)
+					yield n, (block, xmlblock)
 
 
 class FTBXMLCorpusReader(CorpusReader):
@@ -512,24 +516,26 @@ class FTBXMLCorpusReader(CorpusReader):
 			trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((n, ElementTree.tostring(a))
-				for n, a in self._block_cache.items())
+		return OrderedDict((sentid, rawblock)
+				for sentid, (rawblock, _xmlblock) in self._block_cache.items())
 
 	def _read_blocks(self):
 		if self._encoding not in (None, 'utf8', 'utf-8'):
 			raise ValueError('Encoding specified in XML files, '
 					'cannot be overriden.')
 		for filename in self._filenames:
-			# iterator over elements in XML file
-			context = ElementTree.iterparse(filename,
-					events=('start', 'end'))
-			_event, root = next(context)  # event == 'start' of root element
-			filename1 = os.path.splitext(os.path.basename(filename))[0]
-			for event, elem in context:
-				if event == 'end' and elem.tag == 'SENT':
-					sentid = '%s-%s' % (filename1, elem.get('nb'))
-					yield sentid, elem
-				root.clear()
+			with openread(filename, encoding=None) as inp:
+				# iterator over elements in XML file
+				context = ElementTree.iterparse(inp,
+						events=('start', 'end'))
+				_event, root = next(context)  # event: 'start' of root element
+				filename1 = os.path.splitext(os.path.basename(filename))[0]
+				for event, elem in context:
+					if event == 'end' and elem.tag == 'SENT':
+						sentid = '%s-%s' % (filename1, elem.get('nb'))
+						rawblock = ElementTree.tostring(elem)
+						yield sentid, (rawblock, elem)
+					root.clear()
 
 	def _parse(self, block):
 		""":returns: a parse tree given a string."""
@@ -540,7 +546,7 @@ class FTBXMLCorpusReader(CorpusReader):
 def exporttree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sentence from tree in export format given as list of lines.
 
-	:param block: a list of lines
+	:param block: a list of lines without line endings.
 	:returns: Item object, with tree, sent, command, block fields."""
 	def getchildren(parent):
 		"""Traverse tree in export format and create Tree object."""
@@ -596,7 +602,8 @@ def exportsplit(line):
 
 
 def alpinotree(block, functions=None, morphology=None, lemmas=None):
-	"""Get tree, sent from tree in Alpino format given as etree XML object."""
+	"""Get tree, sent from tree in Alpino format given as string, etree object.
+	"""
 	def getsubtree(node, parentid, morphology, lemmas):
 		"""Parse a subtree of an Alpino tree."""
 		source = [''] * len(FIELDS)
@@ -636,15 +643,16 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 
 	coindexed = {}
 	coindexation = defaultdict(list)
-	sent = block.find('sentence').text.split(' ')
-	tree = getsubtree(block.find('node'), 0, morphology, lemmas)
+	rawblock, xmlblock = block
+	sent = xmlblock.find('sentence').text.split(' ')
+	tree = getsubtree(xmlblock.find('node'), 0, morphology, lemmas)
 	for i in coindexation:
 		coindexed[i].extend(coindexation[i])
-	comment = block.find('comments/comment')  # NB: only use first comment
+	comment = xmlblock.find('comments/comment')  # NB: only use first comment
 	if comment is not None:
 		comment = comment.text
 	handlefunctions(functions, tree, morphology=morphology)
-	return Item(tree, sent, comment, ElementTree.tostring(block))
+	return Item(tree, sent, comment, rawblock)
 
 
 def ftbtree(block, functions=None, morphology=None, lemmas=None):
@@ -686,13 +694,14 @@ def ftbtree(block, functions=None, morphology=None, lemmas=None):
 		result.source = source
 		return result
 
+	rawblock, xmlblock = block
 	sent = []
 	nodeids = count(500)
-	tree = getsubtree(block)
-	comment = ' '.join('%s=%r' % (a, block.get(a))
+	tree = getsubtree(xmlblock)
+	comment = ' '.join('%s=%r' % (a, xmlblock.get(a))
 			for a in ('nb', 'textid', 'argument', 'author', 'date'))
 	handlefunctions(functions, tree, morphology=morphology)
-	return Item(tree, sent, comment, ElementTree.tostring(block))
+	return Item(tree, sent, comment, rawblock)
 
 
 def writetree(tree, sent, key, fmt, comment=None, morphology=None,
@@ -1000,7 +1009,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 	Supports brackets, discbrackets, export and alpino-xml format.
 	The format is autodetected.
 
-	:param treeinput: an iterator giving one line at a time.
+	:param treeinput: an iterable of lines (line endings optional).
 	:param strict: if True, raise ValueError on malformed data.
 	:param robust: if True, only return trees with more than 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
@@ -1177,10 +1186,11 @@ def segmentexport(morphology, functions, strict=False):
 	inblock = 0
 	line = (yield None, CONSUMED)
 	while line is not None:
+		line = line.rstrip()
 		if line.startswith('#BOS ') or line.startswith('#BOT '):
 			if strict and inblock != 0:
 				raise ValueError('nested #BOS or #BOT')
-			cur = [line]
+			cur[:] = [line]
 			inblock = 1 if line.startswith('#BOS ') else 2
 			line = (yield None, CONSUMED)
 		elif line.startswith('#EOS ') or line.startswith('#EOT '):
@@ -1191,10 +1201,11 @@ def segmentexport(morphology, functions, strict=False):
 			line = (yield ((item.tree, item.sent, item.comment), ), CONSUMED)
 			inblock = 0
 			cur = []
-		elif line.strip():
+		elif line:
 			if inblock == 1:
 				cur.append(line)
-			line = line.lstrip()
+			else:
+				line = line.lstrip()
 			line = (yield None, (CONSUMED if inblock
 					or line.startswith('%%')
 					or line.startswith('#FORMAT ')
