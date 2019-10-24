@@ -607,8 +607,8 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 	A tree with a discontinuous substitution site is expected to be binarized
 	with ``rightmostunary=True``:
 
-	>>> from discodop.treebank import brackettree
-	>>> tree, sent = brackettree(u'(S (X 0= 2= 4=))')
+	>>> from discodop.tree import discbrackettree
+	>>> tree, sent = discbrackettree('(S (X 0= 2= 4=))')
 	>>> print(handledisc(tree))
 	(S (X 0 (X|<> 2 (X|<> 4))))
 

@@ -598,8 +598,8 @@ def canonicallyorderedtree(tree, sent):
 	>>> tree = ('(top (smain (noun 0=Het) (verb 1=had) (inf (verb 5=kunnen)'
 	... ' (inf (np (det 2=een) (adj 3=prachtige) (noun 4=dag))'
 	... ' (verb 6=zijn) (pp (prep 7=in) (noun 8=Londen))))) (punct 9=.))')
-	>>> from .tree import brackettree, writebrackettree
-	>>> tree, sent = brackettree(tree)
+	>>> from .tree import discbrackettree, writebrackettree
+	>>> tree, sent = discbrackettree(tree)
 	>>> tree = canonicallyorderedtree(tree, sent)
 	>>> print(writebrackettree(tree, sent))  # doctest: +NORMALIZE_WHITESPACE
 	(top (smain (noun Het) (verb had) (inf (verb kunnen) (inf (np (det een)

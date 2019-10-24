@@ -1069,7 +1069,7 @@ def segmentbrackets(strict=False, robust=True):
 	def tryparse(result, rest):
 		"""Add a tree to the results list."""
 		try:
-			tree, sent = brackettree(result)
+			tree, sent = brackettree(result, detectdisc=True)
 		except Exception as err:
 			raise ValueError('%r\nwhile parsing:\n%r' % (
 					err, dict(result=result, rest=rest, parens=parens,

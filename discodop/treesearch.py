@@ -24,7 +24,8 @@ except ImportError:
 	RE2LIB = False
 from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from . import treebank, _fragments
-from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
+from .tree import (Tree, DrawTree, DiscTree, brackettree, discbrackettree,
+		ptbunescape)
 from .treetransforms import binarize, mergediscnodes, handledisc
 from .util import which, workerfunc, openread, readbytes, run, ANSICOLOR
 from .containers import Vocabulary, FixedVocabulary, Ctrees
@@ -82,7 +83,7 @@ class CorpusSearcher(object):
 		"""
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
-			nofunc=False, nomorph=False):
+			nofunc=False, nomorph=False, detectdisc=True, mergedisc=True):
 		"""Run query and return list of matching trees.
 
 		:param start, end: the interval of sentences to query in each corpus;
@@ -90,6 +91,8 @@ class CorpusSearcher(object):
 		:param maxresults: the maximum number of matches to return.
 		:param nofunc, nomorph: whether to remove / add function tags and
 			morphological features from trees.
+		:param detectdisc: whether to detect discbracket format.
+		:param mergedisc: whether to merge split discontinuities.
 		:returns: list of tuples of the form
 			``(corpus, sentno, tree, sent, highlight)``
 			highlight is a list of matched Tree nodes from tree."""
@@ -155,8 +158,8 @@ class CorpusSearcher(object):
 				result[value[0]].append(value[1:])
 		yield from result.items()
 
-	def extract(self, filename, indices,
-			nofunc=False, nomorph=False, sents=False):
+	def extract(self, filename, indices, nofunc=False, nomorph=False,
+			detectdisc=True, mergedisc=True, sents=False):
 		"""Extract a range of trees / sentences.
 
 		:param filename: one of the filenames in ``self.files``
@@ -164,8 +167,9 @@ class CorpusSearcher(object):
 			(1-based, excluding empty lines)
 		:param sents: if True, return sentences instead of trees.
 			Sentences are strings with space-separated tokens.
-		:param nofunc, nomorph: same as for ``trees()`` method.
-		:returns: a list of Tree objects or sentences."""
+		:returns: a list of Tree objects or sentences.
+
+		For the other options, see the ``trees()`` method."""
 
 	def getinfo(self, filename):
 		"""Return named tuple with members len, numnodes, and numwords."""
@@ -339,7 +343,7 @@ class TgrepSearcher(CorpusSearcher):
 			yield filename, result
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
-			nofunc=False, nomorph=False):
+			nofunc=False, nomorph=False, detectdisc=True, mergedisc=False):
 		subset = subset or self.files
 		# %s the sentence number
 		# %w complete tree in bracket notation
@@ -351,7 +355,7 @@ class TgrepSearcher(CorpusSearcher):
 		for filename in subset:
 			try:
 				x, maxresults2 = self.cache['trees', query, filename,
-						start, end, nofunc, nomorph]
+						start, end, nofunc, nomorph, detectdisc, mergedisc]
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
@@ -365,14 +369,16 @@ class TgrepSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, line in future.result():
-				treestr, match, nodenum = line.splitlines()
+				treestr, _match, nodenum = line.splitlines()
 				treestr = filterlabels(treestr, nofunc, nomorph)
 				treestr = treestr.replace(" )", " -NONE-)")
 				nodenum = int(nodenum)
-				tree, sent = brackettree(treestr)
-				# FIXME cannot do this, would change node numbers;
-				# how could a match on a discontinuous componenta be recovered?
-				# tree = mergediscnodes(tree)
+				tree, sent = brackettree(treestr, detectdisc=detectdisc)
+				if mergedisc:
+					raise NotImplementedError
+					# FIXME cannot do this, would change node numbers; how
+					# could a match on a discontinuous component be recovered?
+					# tree = mergediscnodes(tree)
 				high = []
 				n = 0
 				for node in tree.subtrees():
@@ -390,7 +396,7 @@ class TgrepSearcher(CorpusSearcher):
 							% (nodenum, tree))
 				x.append((filename, sentno, tree, sent, high))
 			self.cache['trees', query, filename, start, end,
-					nofunc, nomorph] = x, maxresults
+					nofunc, nomorph, detectdisc, mergedisc] = x, maxresults
 			result.extend(x)
 		return result
 
@@ -440,8 +446,8 @@ class TgrepSearcher(CorpusSearcher):
 			result.extend(x)
 		return result
 
-	def extract(self, filename, indices,
-			nofunc=False, nomorph=False, sents=False):
+	def extract(self, filename, indices, nofunc=False, nomorph=False,
+			detectdisc=True, mergedisc=True, sents=False):
 		cmd = [which('tgrep2'),
 				'-e', '-',  # extraction mode
 				'-c', self._internalfilename(filename)]
@@ -462,10 +468,12 @@ class TgrepSearcher(CorpusSearcher):
 		result = out.decode('utf8').splitlines()
 		if sents:
 			return result
-		return [(mergediscnodes(tree), sent)
-				for tree, sent
-				in (brackettree(filterlabels(
-					treestr, nofunc, nomorph)) for treestr in result)]
+        return [(mergediscnodes(tree) if mergedisc else tree, sent)
+                for tree, sent
+                in (brackettree(
+						filterlabels(treestr, nofunc, nomorph),
+						detectdisc=detectdisc)
+					for treestr in result)]
 
 	def getinfo(self, filename):
 		with openread(filename) as inp:
@@ -531,7 +539,7 @@ class FragmentSearcher(CorpusSearcher):
 	"""Search for fragments in a bracket treebank.
 
 	Format of treebanks and queries can be bracket, discbracket, or
-	export (autodetected).
+	export (detected based on file extension).
 	Each query consists of one or more tree fragments, and the results
 	will be merged together, except with batchcounts(), which returns
 	the results for each fragment separately.
@@ -661,7 +669,7 @@ class FragmentSearcher(CorpusSearcher):
 			yield filename, future.result()
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
-			nofunc=False, nomorph=False):
+			nofunc=False, nomorph=False, detectdisc=True, mergedisc=False):
 		subset = subset or self.files
 		if self.macros is not None:
 			query = query.format(**self.macros)
@@ -671,7 +679,7 @@ class FragmentSearcher(CorpusSearcher):
 		for filename in subset:
 			try:
 				x, maxresults2 = self.cache['trees', query, filename,
-						start, end, nofunc, nomorph]
+						start, end, nofunc, nomorph, detectdisc, mergedisc]
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
@@ -697,8 +705,9 @@ class FragmentSearcher(CorpusSearcher):
 							match,
 							'%s_HIGH %s' % tuple(match.split(None, 1)),
 							1)
-					tree, sent = brackettree(treestr)
-					tree = mergediscnodes(tree)
+					tree, sent = brackettree(treestr, detectdisc=detectdisc)
+					if mergedisc:
+						tree = mergediscnodes(tree)
 					high = list(tree.subtrees(
 							lambda n: n.label.endswith("_HIGH")))
 					if high:
@@ -707,7 +716,7 @@ class FragmentSearcher(CorpusSearcher):
 						high = list(high.subtrees()) + high.leaves()
 					x.append((filename, sentno, tree, sent, high))
 			self.cache['trees', query, filename, start, end,
-					nofunc, nomorph] = x, maxresults
+					nofunc, nomorph, detectdisc, mergedisc] = x, maxresults
 			result.extend(x)
 		return result
 
@@ -748,7 +757,7 @@ class FragmentSearcher(CorpusSearcher):
 							match = LEAFINDICES.sub(' ', match)
 						match1, match2 = match, ''
 					else:
-						_, xsent = brackettree(treestr)
+						_, xsent = discbrackettree(treestr)
 						sent = ' '.join(xsent)
 						fragwords = set(GETLEAVES.findall(frag))
 						match1 = {int(a) for a, b
@@ -763,8 +772,8 @@ class FragmentSearcher(CorpusSearcher):
 			result.extend(x)
 		return result
 
-	def extract(self, filename, indices,
-			nofunc=False, nomorph=False, sents=False):
+	def extract(self, filename, indices, nofunc=False, nomorph=False,
+			detectdisc=True, mergedisc=False, sents=False):
 		if self.files[filename] is not None:
 			corpus = self.files[filename]
 		else:
@@ -773,13 +782,12 @@ class FragmentSearcher(CorpusSearcher):
 			return [' '.join(ptbunescape(token)
 					for token in corpus.extractsent(n - 1, self.vocab))
 					for n in indices]
-		result = []
-		for n in indices:
-			treestr = corpus.extract(n - 1, self.vocab)
-			tree, sent = brackettree(
-					filterlabels(treestr, nofunc, nomorph))
-			result.append((mergediscnodes(tree), sent))
-		return result
+		return [(mergediscnodes(tree) if mergedisc else tree, sent)
+				for tree, sent
+				in (brackettree(filterlabels(
+						corpus.extract(n - 1, self.vocab), nofunc, nomorph),
+						detectdisc=detectdisc)
+					for n in indices)]
 
 	def getinfo(self, filename):
 		if self.files[filename] is not None:
@@ -792,7 +800,7 @@ class FragmentSearcher(CorpusSearcher):
 	def _parse_query(self, query, disc=False):
 		"""Prepare fragment query."""
 		if isinstance(query, list):
-			qitems = (brackettree(a) for a in query)
+			qitems = (brackettree(a. detectdisc=True) for a in query)
 		else:
 			qitems = treebank.incrementaltreereader(
 					io.StringIO(query), strict=True, robust=False)
@@ -960,7 +968,7 @@ class RegexSearcher(CorpusSearcher):
 		return result
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
-			nofunc=False, nomorph=False):
+			nofunc=False, nomorph=False, detectdisc=True, mergedisc=True):
 		raise ValueError('not applicable with plain text corpus.')
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
@@ -1008,8 +1016,8 @@ class RegexSearcher(CorpusSearcher):
 				result.extend(tmp)
 			yield filename, result
 
-	def extract(self, filename, indices,
-			nofunc=False, nomorph=False, sents=True):
+	def extract(self, filename, indices, nofunc=False, nomorph=False,
+			detectdisc=True, mergedisc=True, sents=True):
 		if not sents:
 			raise ValueError('not applicable with plain text corpus.')
 		lineindex = self.lineindex[self.fileno[filename]]

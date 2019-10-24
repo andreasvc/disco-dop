@@ -19,7 +19,7 @@ if sys.version_info[0] == 2:
 import multiprocessing
 from collections import defaultdict
 from getopt import gnu_getopt, GetoptError
-from .tree import brackettree
+from .tree import brackettree, discbrackettree
 from .treebank import writetree
 from .treetransforms import unbinarize
 from . import _fragments
@@ -517,7 +517,8 @@ def debinarize(fragments):
 	"""Debinarize fragments; fragments that fail to debinarize left as-is."""
 	result = []
 	for origfrag in fragments:
-		frag, sent = brackettree(origfrag)
+		frag, sent = (discbrackettree(origfrag) if PARAMS['disc']
+				else brackettree(origfrag, detectdisc=False))
 		try:
 			frag = writetree(unbinarize(frag), sent, 0,
 					'discbracket' if PARAMS['disc'] else 'bracket').strip()

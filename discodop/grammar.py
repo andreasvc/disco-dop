@@ -407,7 +407,7 @@ def inducetagfromtsg(elemtrees):
 	newinittrees = OrderedDict()
 	auxtrees = OrderedDict()
 	for tree, weight in elemtrees:
-		tree, sent = brackettree(tree)
+		tree, sent = brackettree(tree, detectdisc=True)
 		extractedadjunction = False
 		if not all(token is None for token in sent):
 			for footcand in tree.subtrees(
@@ -526,7 +526,7 @@ def ostagreduction(inittrees, auxtrees, packedgraph=False, extrarules=None):
 
 	# assign addresses to all nodes, collect adjunction sites
 	for tree, weight in inittrees.items():
-		tree, sent = brackettree(tree)
+		tree, sent = brackettree(tree, detectdisc=True)
 		dectree = decorator.decorate(tree, sent, False)
 		decinittrees.append((dectree, sent, weight))
 		for node in dectree.subtrees():
@@ -534,7 +534,7 @@ def ostagreduction(inittrees, auxtrees, packedgraph=False, extrarules=None):
 				adjsites[REMOVEDEC.sub('', node.label)].add(node.label)
 	logging.info('decorated initial trees')
 	for tree, weight in auxtrees.items():
-		tree, sent = brackettree(tree)
+		tree, sent = brackettree(tree, detectdisc=True)
 		dectree = decorator.decorate(tree, sent, True)
 		decauxtrees.append((dectree, sent, weight))
 		auxroots[REMOVEDEC.sub('', dectree.label)].add(dectree.label)

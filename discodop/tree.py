@@ -1047,7 +1047,7 @@ class DrawTree(object):
 		self.sent = sent
 		if isinstance(tree, str):
 			if sent is None:
-				self.tree, sent = brackettree(tree)
+				self.tree, sent = brackettree(tree, detectdisc=True)
 				self.sent = sent
 			else:
 				self.tree = Tree.parse(tree, parse_leaf=int)
@@ -1880,11 +1880,14 @@ def frontier(tree, sent, nodecolor='blue', leafcolor='red'):
 			for idx, pos in sorted(tree.pos()))
 
 
-def brackettree(treestr):
-	"""Parse a single tree presented in (disc)bracket format (autodetected).
+def brackettree(treestr, detectdisc=True):
+	"""Parse a single tree presented in (disc)bracket format.
 
+	:param detectdisc: if True, enable discbracket detection;
+		if False, force bracket format.
 	:returns: (tree, sent) tuple of ParentedTree and list of str."""
-	if STRTERMRE.search(treestr):  # bracket: terminals are not all indices
+	# bracket: terminals are not all indices
+	if not detectdisc or STRTERMRE.search(treestr):
 		sent, cnt = [], count()
 
 		def substleaf(x):
