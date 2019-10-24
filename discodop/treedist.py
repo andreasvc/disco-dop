@@ -301,6 +301,8 @@ def geteditstats(forest1, forest2):
 		result = min(deletestats, insertstats, matchorswapstats)
 	geteditstats.mem[forest1, forest2] = result
 	return result
+
+
 geteditstats.mem = {}
 
 

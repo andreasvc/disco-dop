@@ -17,8 +17,7 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import (Tree, ParentedTree, ImmutableTree, writediscbrackettree,
-		brackettree)
+from .tree import Tree, ParentedTree, ImmutableTree, writediscbrackettree
 from .kbest import lazykbest
 from .kbest cimport getderiv
 from .grammar import lcfrsproductions, spinal, REMOVEDEC
@@ -170,7 +169,7 @@ cpdef marginalize(method, Chart chart, list sent=None, list tags=None,
 			try:
 				treestr = recoverfragments(
 						root, entry.first, chart, backtransform)
-			except:
+			except Exception:
 				continue
 				# print(getderiv(
 				# 		root, entry.first, chart).decode('utf8'))
@@ -525,8 +524,9 @@ cdef sldop_simple(int sldop_n, Chart chart):
 	# (addressed) nodes.
 	result = {}
 	for tree in selectedtrees:
-		score, deriv = min([(deriv.count('(') -
-				len([a for a in deriv.split() if '@' in a or '}<' in a]),
+		score, deriv = min([
+				(deriv.count('(') - len([a for a in deriv.split()
+					if '@' in a or '}<' in a]),
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
@@ -1015,7 +1015,7 @@ def ostagderivation(derivtreestr, sent):
 		tmp = [str(splitostagfrag(node, sent))
 				for node in derivtree.subtrees(ostagfrontiernt)]
 		return [(_fragments.pygetsent(frag), None) for frag in tmp]
-	except:
+	except Exception:
 		return []
 
 
@@ -1119,6 +1119,7 @@ def test():
 		'SL-DOP n=7:\t%s %r' % e(sldop_),
 		'simple SL-DOP:\t%s %r' % e(sldopsimple),
 		'shortest:\t%s %r' % e(short), sep='\n')
+
 
 __all__ = ['getderivations', 'marginalize', 'gettree', 'treeparsing',
 		'viterbiderivation', 'doprerank', 'dopparseprob', 'frontiernt',

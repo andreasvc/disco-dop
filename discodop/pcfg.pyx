@@ -854,4 +854,5 @@ def test():
 	cfg2 = Grammar(rules, start='S')
 	testsent('astronomers saw stars with telescopes', cfg2, 2)
 
+
 __all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'parse']

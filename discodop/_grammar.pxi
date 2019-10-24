@@ -7,7 +7,7 @@ YFBINARY = re.compile(
 YFUNARYRE = re.compile(rb'^0(?:,0)*$')
 # Match when non-integral weights are present
 LCFRS_NONINT = re.compile(b'\t(?:0x)?[0-9]+[./][0-9]+(?:p-[0-9]+)?\n')
-BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\.[0-9]+[ \t]')
+BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile(b'[ \t][0-9]+[./][0-9]+[ \t\n]')
 # Detect rule format of bitpar
 BITPARRE = re.compile(rb'^[-.e0-9]+\b')
@@ -360,8 +360,8 @@ cdef class Grammar:
 		self._indexrules(self.bylhs, 0, 0, orignumrules)
 		# check whether RHS labels occur as LHS of phrasal and/or lexical rule
 		for lhs in range(1, self.nonterminals):
-			if (self.bylhs[lhs][0].lhs != lhs and
-					self.lexicallhs.find(lhs) == self.lexicallhs.end()):
+			if (self.bylhs[lhs][0].lhs != lhs
+					and self.lexicallhs.find(lhs) == self.lexicallhs.end()):
 				raise ValueError('symbol %r has not been seen as LHS '
 					'in any rule.' % self.tolabel[lhs])
 		self._indexrules(self.unary, 1, 2, orignumunary)
@@ -898,9 +898,10 @@ cdef class Grammar:
 		else:
 			# NB: ALL fine symbols are mapped to some coarse symbol;
 			# we only check if all coarse symbols have received a mapping.
-			l = sorted([coarse.tolabel[a] for a in
+			labels = sorted([coarse.tolabel[a] for a in
 					set(range(coarse.nonterminals)) - seen])
-			diff = ', '.join(l[:10]) + (', ...' if len(l) > 10 else '')
+			diff = ', '.join(labels[:10]) + (
+					', ...' if len(labels) > 10 else '')
 			if coarse.nonterminals > self.nonterminals:
 				msg = ('grammar is not a superset of coarse grammar:\n'
 						'coarse labels without mapping: { %s }' % diff)

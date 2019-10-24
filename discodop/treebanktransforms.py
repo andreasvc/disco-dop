@@ -400,8 +400,8 @@ def negratransforms(name, tree, sent):
 			else:  # no rel. pronoun found
 				node.label += STATESPLIT + 'norel'
 	elif name == 'whFeat':  # mark NP/PP that immediately dominates WH-pronoun
-		for node in tree.subtrees(lambda n: strip(n.label) in {'NP', 'PP'} and
-				any(strip(a.label) in {'PWAT', 'PWS', 'PWAV'} for a in n)):
+		for node in tree.subtrees(lambda n: strip(n.label) in {'NP', 'PP'}
+				and any(strip(a.label) in {'PWAT', 'PWS', 'PWAV'} for a in n)):
 			node.label += STATESPLIT + 'wh'
 	elif name == 'nounSeq':  # consecutive nouns in NP
 		for node in tree.subtrees(lambda n: base(n, 'NP')):
@@ -501,13 +501,12 @@ def ptbtransforms(name, tree, sent):
 	# http://aclweb.org/anthology/P03-1054
 	elif name == 'splitIN':  # Stanford Parser splitIN=3
 		for node in tree.subtrees(lambda n: base(n, 'IN')):
-			if base(node.parent.parent, 'N') and (
-					base(node.parent, 'P') or
-					base(node.parent, 'A')):
+			if (base(node.parent.parent, 'N')
+					and (base(node.parent, 'P') or base(node.parent, 'A'))):
 				node.label += STATESPLIT + 'N'
-			elif base(node.parent, 'Q') and (
-					base(node.parent.parent, 'N') or
-					base(node.parent.parent, 'ADJP')):
+			elif (base(node.parent, 'Q')
+					and (base(node.parent.parent, 'N')
+						or base(node.parent.parent, 'ADJP'))):
 				node.label += STATESPLIT + 'Q'
 			elif base(node.parent.parent, 'S'):
 				if base(node.parent, 'SBAR'):
@@ -519,13 +518,12 @@ def ptbtransforms(name, tree, sent):
 				node.label += STATESPLIT + 'T'
 	elif name == 'splitIN4':  # Stanford Parser splitIN=4
 		for node in tree.subtrees(lambda n: base(n, 'IN')):
-			if base(node.parent.parent, 'N') and (
-					base(node.parent, 'P') or
-					base(node.parent, 'A')):
+			if (base(node.parent.parent, 'N')
+					and (base(node.parent, 'P') or base(node.parent, 'A'))):
 				node.label += STATESPLIT + 'N'
-			elif base(node.parent, 'Q') and (
-					base(node.parent.parent, 'N') or
-					base(node.parent.parent, 'ADJP')):
+			elif (base(node.parent, 'Q')
+					and (base(node.parent.parent, 'N')
+						or base(node.parent.parent, 'ADJP'))):
 				node.label += STATESPLIT + 'Q'
 			elif node.parent.parent.label[0] == 'S' and not base(
 					node.parent.parent, 'SBAR'):
@@ -1733,6 +1731,7 @@ def getmaxid(tree):
 					and EXPORTNONTERMINAL.match(n.source[WORD])),
 				500)),
 			default=500)
+
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
 		'dlevel', 'rrtransform', 'rrbacktransform', 'rindex', 'labels',

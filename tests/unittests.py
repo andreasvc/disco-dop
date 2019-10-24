@@ -166,13 +166,13 @@ class Test_grammar(object):
 		ids = UniqueIDs()
 		assert flatten(
 				'(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))',
-				ids, {}) == (
+				ids) == (
 				[(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 				(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 				(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 				'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
 
-		assert flatten("(NN 0=foo)", ids, {}) == (
+		assert flatten("(NN 0=foo)", ids) == (
 				[(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 
 		prods, frag = flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0=Das) (CNP "
@@ -181,7 +181,7 @@ class Test_grammar(object):
 				"(VAFIN 4=hatte))) (VP (VP|<ADV> (ADV 5=kuerzlich) "
 				"(VP|<NP> (NP (ART 6=dem) (NN 7=Ortsbeirat)) (VP|<NP> "
 				"(NP_2 8= 10=) (VP|<VVPP> (VVPP 9=))))))))",
-				ids, {})
+				ids)
 		assert prods == [(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
 				(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
 				(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
@@ -206,7 +206,7 @@ class Test_grammar(object):
 
 		assert flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0=) (VP|<ADV>_2 "
 				"(ADV 2=) (VP|<VVPP> (VVPP 4=))))) (S|<VAFIN> (VAFIN 1=)))",
-				ids, {}) == (
+				ids) == (
 				[(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 				(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 				(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],

@@ -306,7 +306,7 @@ def querydict(queries):
 		if '\t' in query:
 			normquery, query = query.split('\t')
 		else:
-			normquery, query = None, query
+			normquery = None
 		result[name] = normquery, query
 	return result
 

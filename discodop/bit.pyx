@@ -108,4 +108,5 @@ def test():
 		anextunset(ulongvec, 0, 2), sizeof(uint64_t) * 8)
 	print('it worked')
 
+
 __all__ = ['bitcount', 'fanout', 'pyintbitcount', 'pyintnextset']

@@ -9,7 +9,6 @@ import sys
 import json
 import glob
 import logging
-import subprocess
 from heapq import nlargest
 from datetime import datetime, timedelta
 from operator import itemgetter
@@ -36,7 +35,6 @@ from werkzeug.urls import url_encode
 # disco-dop
 from discodop import fragments, treesearch
 from discodop.tree import Tree, DiscTree, DrawTree
-from discodop.util import which
 
 DEBUG = False  # when True: enable debugging interface, disable multiprocessing
 INMEMORY = False  # keep corpora in memory
@@ -60,7 +58,7 @@ FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg|export|dbr|txt|tok)(?:\.gz)?$')
+EXTRE = re.compile(r'\.(?:mrg|export|dbr|txt|tok)(?:\.gz|\.zst)?$')
 
 COLORS = dict(enumerate('''
 		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
@@ -170,7 +168,7 @@ def export(form, output):
 	elif output in ('sents', 'brackets', 'trees'):
 		fmt = '%s:%s|%s\n'
 		start, end = getslice(form.get('slice'))
-		maxresults = min(int(form.get('maxresults', SENTLIMIT)), SENTLIMIT)
+		maxresults = min(int(form.get('maxresults') or SENTLIMIT), SENTLIMIT)
 		results = CORPORA[engine].sents(
 				form['query'], selected, start, end, maxresults=maxresults,
 				brackets=output in ('brackets', 'trees'))
@@ -348,7 +346,7 @@ def counts(form, doexport=False):
 			overview = OrderedDict(
 					('%s_%s' % (cat, query),
 						df[query].loc[keys == cat].mean() or 0)
-					for query in df.columns
+					for query in df.columns  # pylint: disable=not-an-iterable
 						for cat in keyset)
 			df['category'] = keys
 			yield '<pre>\n%s\n</pre>' % (
@@ -356,7 +354,7 @@ def counts(form, doexport=False):
 						float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
-					for query in df.columns)
+					for query in df.columns)  # pylint: disable=not-an-iterable
 			yield '<pre>\n%s\n</pre>' % df.describe().to_string(
 					float_format=fmt)
 		yield plot(overview, max(overview.values()),
@@ -373,7 +371,7 @@ def trees(form):
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
-	maxresults = min(int(form.get('maxresults', TREELIMIT)), TREELIMIT)
+	maxresults = min(int(form.get('maxresults') or TREELIMIT), TREELIMIT)
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form), separator=b';')
 	yield ('<pre>Query: %s\n'
@@ -437,7 +435,7 @@ def sents(form, dobrackets=False):
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
-	maxresults = min(int(form.get('maxresults', SENTLIMIT)), SENTLIMIT)
+	maxresults = min(int(form.get('maxresults') or SENTLIMIT), SENTLIMIT)
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form), separator=b';'))
 	yield ('<pre>Query: %s\n'
@@ -716,7 +714,7 @@ def draw():
 	if 'tgrep2' in CORPORA:
 		tree, sent = CORPORA['tgrep2'].extract(
 				list(CORPORA['tgrep2'].files)[textno],
-				filename, [sentno], nofunc, nomorph).pop()
+				[sentno], nofunc, nomorph).pop()
 	elif 'frag' in CORPORA:
 		tree, sent = CORPORA['frag'].extract(
 				list(CORPORA['frag'].files)[textno],
@@ -1020,44 +1018,9 @@ def querydict(queries):
 		if '\t' in query:
 			normquery, query = query.split('\t')
 		else:
-			normquery, query = None, query
+			normquery = None
 		result[name] = normquery, query
 	return result
-
-
-def tokenize(filename):
-	"""Create a tokenized copy of a text, one sentence per line."""
-	base = EXTRE.sub('', filename)
-	try:
-		ucto = which('ucto')
-	except ValueError:
-		ucto = None
-	if os.path.exists(base + '.tok'):
-		return
-	elif os.path.exists(base + '.mrg.t2c.gz'):
-		tgrep = subprocess.Popen(
-				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
-				shell=False, bufsize=-1, stdout=subprocess.PIPE)
-		converted = (a.decode('utf8').replace('-LRB-', '(').replace('-RRB-', ')')
-				for a in tgrep.stdout)
-	elif os.path.exists(base + '.mrg'):
-		with io.open(base + '.mrg', encoding='utf8') as inp:
-			converted = [' '.join(GETLEAVES.findall(line)
-					).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
-					for line in inp]
-	elif ucto and filename.endswith('.txt'):
-		newfile = base + '.tok'
-		proc = subprocess.Popen(args=[which('ucto'),
-				'-L', LANG, '-s', '', '-n',
-				filename, newfile], shell=False)
-		proc.wait()
-		return
-	else:
-		raise ValueError('no file found for "%s" and ucto not installed.'
-				% filename)
-	newfile = EXTRE.sub('.tok', filename)
-	with io.open(newfile, 'w', encoding='utf8') as out:
-		out.writelines(converted)
 
 
 def getreadabilitymeasures(numsents):
@@ -1065,7 +1028,7 @@ def getreadabilitymeasures(numsents):
 	try:
 		import readability
 	except ImportError:
-		APP.logger.warning(
+		LOG.warning(
 			'readability module not found; install with:\npip install'
 			' https://github.com/andreasvc/readability/tarball/master')
 		return {}
@@ -1095,32 +1058,28 @@ def getcorpus():
 				texts, corpusinfo, styletable = pickle.load(inp)
 		except ValueError:
 			pass
-	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg'))) + sorted(
-			glob.glob(os.path.join(CORPUS_DIR, '*.mrg.gz')))
-	ffiles = [a.replace('.ct', '') for a in sorted(
+	tfiles = [a for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*')))
+			if re.search(r'\.mrg(?:\.gz|\.zst)?$', a) is not None]
+	ffiles = [re.sub(r'\.ct$', '', a) for a in (
 			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.export.ct'))
 			)]
-	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
-	# get tokenized sents from trees or ucto
-	# for filename in ffiles or tfiles or txtfiles:
-	# 	tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles:
 		corpora['tgrep2'] = treesearch.TgrepSearcher(
 				tfiles, macros='static/tgrepmacros.txt', numproc=NUMPROC)
-		log.info('tgrep2 corpus loaded.')
+		LOG.info('tgrep2 corpus loaded.')
 	if ffiles:
 		corpora['frag'] = treesearch.FragmentSearcher(
 				ffiles, macros='static/fragmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
-		log.info('frag corpus loaded.')
+		LOG.info('frag corpus loaded.')
 	if tokfiles:
 		corpora['regex'] = treesearch.RegexSearcher(
 				tokfiles, macros='static/regexmacros.txt',
 				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
-		log.info('regex corpus loaded.')
+		LOG.info('regex corpus loaded.')
 
 	assert tfiles or ffiles or tokfiles, (
 			'no corpus files with extension .mrg, .dbr, .export, '
@@ -1168,7 +1127,7 @@ def getcorpus():
 def stream_template(template_name, **context):
 	"""Pass an iterator to a template; from Flask documentation."""
 	APP.update_template_context(context)
-	templ = APP.jinja_env.get_template(template_name)
+	templ = APP.jinja_env.get_template(template_name)  # pylint: disable=E1101
 	result = templ.stream(context)
 	result.enable_buffering(5)
 	return result
@@ -1214,11 +1173,11 @@ DISPATCH = {
 }
 
 logging.basicConfig()
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)
-log.handlers[0].setFormatter(logging.Formatter(
+LOG = logging.getLogger()
+LOG.setLevel(logging.DEBUG)
+LOG.handlers[0].setFormatter(logging.Formatter(
 		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-log.info('loading corpus.')
+LOG.info('loading corpus.')
 if __name__ == '__main__':
 	from getopt import gnu_getopt, GetoptError
 	try:
@@ -1234,15 +1193,15 @@ if __name__ == '__main__':
 		NUMPROC = int(opts['--numproc'])
 # NB: load corpus regardless of whether running standalone:
 (TEXTS, CORPUSINFO, STYLETABLE, CORPORA, METADATA) = getcorpus()
-log.info('corpus loaded.')
+LOG.info('corpus loaded.')
 try:
 	with open('treesearchpasswd.txt', 'rt') as fileobj:
 		PASSWD = {a.strip(): b.strip() for a, b
 				in (line.split(':', 1) for line in fileobj)}
-	log.info('password protection enabled.')
+	LOG.info('password protection enabled.')
 except Exception as err:
 	PASSWD = None
-	log.info('no password protection: %s', err)
+	LOG.info('no password protection: %s', err)
 if __name__ == '__main__':
 	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),

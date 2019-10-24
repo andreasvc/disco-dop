@@ -1091,4 +1091,5 @@ def test():
 	assert testsent('Darueber muss nachgedacht ' + ' '.join(64 * ['werden']),
 			grammar)
 
+
 __all__ = ['LCFRSChart', 'SmallLCFRSChart', 'FatLCFRSChart', 'parse']

@@ -18,6 +18,7 @@ import math
 from operator import itemgetter
 from flask import Flask, Markup, Response, redirect, url_for
 from flask import request, render_template, send_from_directory
+from flask.logging import create_logger
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
@@ -119,7 +120,7 @@ def parse():
 			parsetrees = results[-1].parsetrees or []
 			parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
 			parsetrees_ = []
-			APP.logger.info('[%s] %s', probstr(prob), tree)
+			LOG.info('[%s] %s', probstr(prob), tree)
 			tree = Tree.parse(tree, parse_leaf=int)
 			result = Markup(DrawTree(tree, senttok).text(
 					unicodelines=True, html=html, funcsep='-'))
@@ -205,13 +206,13 @@ def loadparsers():
 	if not PARSERS:
 		for directory in glob.glob('grammars/*/'):
 			_, lang = os.path.split(os.path.dirname(directory))
-			APP.logger.info('Loading grammar %r', lang)
+			LOG.info('Loading grammar %r', lang)
 			params = readparam(os.path.join(directory, 'params.prm'))
 			params.resultdir = directory
 			readgrammars(directory, params.stages, params.postagging,
 					params.transformations, top=getattr(params, 'top', 'ROOT'))
 			PARSERS[lang] = Parser(params)
-			APP.logger.info('Grammar for %s loaded.', lang)
+			LOG.info('Grammar for %s loaded.', lang)
 	assert PARSERS, 'no grammars found!'
 
 
@@ -237,7 +238,7 @@ def unigramprob(model, sent, smooth=-math.log(1e-20)):
 def guesslang(sent):
 	"""Heuristic: pick language that contains most words from input."""
 	probs = {lang: unigramprob(PARSERS[lang], sent) for lang in PARSERS}
-	APP.logger.info('Lang: %r; Sent: %s', probs, ' '.join(sent))
+	LOG.info('Lang: %r; Sent: %s', probs, ' '.join(sent))
 	return min(probs, key=probs.get)
 
 
@@ -253,7 +254,8 @@ def replacemorph(tree):
 
 
 logging.basicConfig()
-for logger in (logging.getLogger(), APP.logger):
+LOG = create_logger(APP)
+for logger in (logging.getLogger(), LOG):
 	logger.setLevel(logging.DEBUG)
 	logger.handlers[0].setFormatter(logging.Formatter(
 			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))

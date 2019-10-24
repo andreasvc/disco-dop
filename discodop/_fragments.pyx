@@ -232,7 +232,7 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 				disc, getroot(bitset, SLOTS))
 		try:
 			frag = getsent(''.join(tmp)) if disc else ''.join(tmp)
-		except:
+		except Exception:
 			print(asent)
 			print(tmp)
 			raise
@@ -667,8 +667,8 @@ cdef twoterminals(NodeArray a, Node *anodes,
 			continue
 		tmp = trees2.prodindex[anodes[i].prod]
 		for j in range(a.len):
-			if (i != j and anodes[j].left < 0 and
-					anodes[j].prod in lexicalprods):
+			if (i != j and anodes[j].left < 0
+					and anodes[j].prod in lexicalprods):
 				candidates |= tmp & trees2.prodindex[anodes[j].prod]
 	return candidates
 
@@ -855,7 +855,7 @@ def pygetsent(str frag):
 	"""
 	try:
 		return getsent(frag)
-	except:
+	except Exception:
 		print(frag)
 		raise
 
@@ -900,8 +900,8 @@ cdef dumpmatrix(uint64_t *matrix, NodeArray a, NodeArray b, Node *anodes,
 			print('\t', end='')
 			print('1' if TESTBIT(&matrix[m * SLOTS], n) else ' ', end='')
 	print('\ncommon productions:', end=' ')
-	print(len({anodes[n].prod for n in range(a.len)} &
-			{bnodes[n].prod for n in range(b.len)}))
+	print(len({anodes[n].prod for n in range(a.len)}
+			& {bnodes[n].prod for n in range(b.len)}))
 	print('found:', end=' ')
 	print('horz', sum([abitcount(&matrix[n * SLOTS], SLOTS) > 0
 			for n in range(b.len)]),

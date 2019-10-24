@@ -348,9 +348,12 @@ where input and output are treebanks; standard in/output is used if not given.
 	encoding = opts.get('outputenc', 'utf8')
 	with io.open(outfilename, 'w', encoding=encoding) as outfile:
 		# copy trees verbatim when only taking slice or converting encoding
-		if (not actions and opts.get('--inputfmt') == opts.get(
-				'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
-				'--outputenc', '--inputfmt', '--outputfmt'}):
+		if (not actions
+				and opts.get('--inputfmt') == opts.get('--outputfmt')
+				and opts.get('--inputfmt') in (
+					'export', 'bracket', 'discbracket')
+				and set(opts) <= {'--slice', '--inputenc', '--outputenc',
+					'--inputfmt', '--outputfmt'}):
 			for block in islice(corpus.blocks().values(), start, end):
 				outfile.write(block)
 				cnt += 1

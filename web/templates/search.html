@@ -198,7 +198,7 @@ div.barplot span {
     </tr>
     </tbody></table>
     <td>
-        <a href="javascript: togglelink('selecttexts'); " id="linkselecttexts">hide selection</a>;
+		<a href="javascript: togglelink('selecttexts'); " id="linkselecttexts">{{ 'show' if form.get('query') or output == 'style' else 'hide'}} selection</a>;
         <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
         (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
         <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)

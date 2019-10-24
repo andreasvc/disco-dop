@@ -99,12 +99,11 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		closedclasswords = {word for tag in closedclasstags
 				for word in wordsfortag[tag]}
 		# NB: words below unknown word threshold are included
-		openclasswords = words.keys() - closedclasswords
+		# openclasswords = words.keys() - closedclasswords
 		# add rare closed-class words back to lexicon
 		lexicon.update(closedclasswords)
 	else:
 		openclasstags = {}
-		openclasswords = {}
 	for sent in tagged_sents:
 		for n, (word, _) in enumerate(sent):
 			if word not in lexicon:
@@ -309,6 +308,7 @@ def unknownwordbase(word, _loc, _lexicon):
 			sig += "-%s" % word[-2:].lower()
 	return sig
 
+
 NOUNSUFFIX = re.compile("(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
 		"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
 		"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
@@ -416,8 +416,8 @@ def externaltagging(usetagger, model, sents, overridetag, tagmap):
 		taggedsents = OrderedDict((n, [tagmangle(a, '_', overridetag, tagmap)
 			for a in tags.split()]) for n, tags in zip(sents, tagout))
 	elif usetagger == 'frog':  # Dutch 'frog' tagger
-		tagger = Popen(args=[which('frog')] +
-					'-n --skip=tacmnp -t /dev/stdin'.split(),
+		tagger = Popen(args=[which('frog')]
+					+ '-n --skip=tacmnp -t /dev/stdin'.split(),
 				shell=False, stdin=PIPE, stdout=PIPE)
 		tagout, stderr = tagger.communicate(''.join(
 				' '.join(w for w in map(itemgetter(0), tagsent)) + '\n'

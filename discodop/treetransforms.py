@@ -654,7 +654,7 @@ def removeterminals(tree, sent, func):
 				# delete empty ancestors
 				while not node and node is not tree:
 					node, child = node.parent, node
-					del node[child._get_parent_index()]
+					del node[child.parent_index]
 			else:
 				preterms[child[0]] = child
 	# renumber

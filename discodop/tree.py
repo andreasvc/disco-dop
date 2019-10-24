@@ -712,14 +712,14 @@ class ParentedTree(Tree):
 		"""The left sibling of this tree, or None if it has none."""
 		parent_index = self._get_parent_index()
 		if self._parent and parent_index > 0:
-			return self._parent[parent_index - 1]
+			return self._parent[parent_index - 1]  # pylint: disable=E1136
 		return None  # no left sibling
 
 	def _get_right_sibling(self):
 		"""The right sibling of this tree, or None if it has none."""
 		parent_index = self._get_parent_index()
 		if self._parent and parent_index < (len(self._parent) - 1):
-			return self._parent[parent_index + 1]
+			return self._parent[parent_index + 1]  # pylint: disable=E1136
 		return None  # no right sibling
 
 	def _get_treeposition(self):
@@ -1165,7 +1165,7 @@ class DrawTree(object):
 							i += scale
 							j -= scale
 			raise ValueError('could not find a free cell for:\n%s\n%s'
-					'min=%d; max=%d' % (tree[m], minidx, maxidx, dumpmatrix()))
+					'min=%d; max=%d' % (tree[m], dumpmatrix(), minidx, maxidx))
 
 		def dumpmatrix():
 			"""Dump matrix contents for debugging purposes."""

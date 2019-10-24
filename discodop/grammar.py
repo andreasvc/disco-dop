@@ -162,8 +162,8 @@ def dopreduction(trees, sents, packedgraph=False, decorator=None,
 		# Bod (2003, figure 3): correction factor for number of subtrees.
 		# Caveat: the original formula (Goodman 2003, eq. 8.23) has a_j in the
 		# denominator of all rules; this is probably a misprint.
-		ewe = (float((1 if '@' in r[0] else freq) *
-				reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
+		ewe = (float((1 if '@' in r[0] else freq)
+				* reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
 				/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
 		# Goodman (2003, p 135). any rule corresponding to the introduction of
 		# a fragment has a probability of 1/2, else 1.
@@ -267,7 +267,7 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False, ids=None):
 	# use artificial markers of binarization as disambiguation,
 	# construct a mapping of productions to fragments
 	for frag in fragments:
-		prods, newfrag = flatten(frag, ids, backtransform)
+		prods, newfrag = flatten(frag, ids)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
 			grammar[prod] = getweight(frag)
@@ -280,7 +280,7 @@ def dopgrammar(trees, fragments, extrarules=None, debug=False, ids=None):
 		backtransform[prod] = frag, newfrag
 	if debug:
 		ids = UniqueIDs()
-		flatfrags = [flatten(frag, ids, {})
+		flatfrags = [flatten(frag, ids)
 				for frag in fragments]
 		print("recurring fragments:")
 		for a, b in zip(flatfrags, fragments):
@@ -335,7 +335,7 @@ def compiletsg(fragments):
 	backtransform = {}
 	ids = UniqueIDs()
 	for frag, weight in fragments.items():
-		prods, newfrag = flatten(frag, ids, backtransform)
+		prods, newfrag = flatten(frag, ids)
 		if prods[0][0][1] == 'Epsilon':  # lexical production
 			grammar[prods[0]] = weight
 			continue
@@ -645,22 +645,27 @@ def renumber(tree, root, foot, sent):
 
 
 def substitutionsite(node, sent):
+	"""Return True if node is a substitution site."""
 	return isinstance(node[0], int) and sent[node[0]] is None
 
 
 def footnode(node, sent):
+	"""Return True if node is a foot node."""
 	return isinstance(node[0], int) and sent[node[0]] == '*'
 
 
 def preterminal(node, sent):
+	"""Return True if node is a preterminal."""
 	return isinstance(node[0], int) and sent[node[0]] not in (None, '*')
 
 
 def spinal(node):
+	"""Return True if node is a spinal node."""
 	return node.label.endswith('$')
 
 
 def spinallabel(node, sent, adjsite):
+	"""Create a spinal label."""
 	if footnode(node, sent):
 		return adjsite
 	elif spinal(node):
@@ -691,7 +696,7 @@ def sortgrammar(grammar, altweights=None):
 	return grammar, altweights
 
 
-def flatten(frag, ids, backtransform):
+def flatten(frag, ids):
 	r"""Auxiliary function for Double-DOP.
 
 	Remove internal nodes from a fragment and read off the (binarized)
@@ -707,7 +712,7 @@ def flatten(frag, ids, backtransform):
 
 	>>> ids = UniqueIDs()
 	>>> frag = "(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))"
-	>>> prods, template = flatten(frag, ids, {})
+	>>> prods, template = flatten(frag, ids)
 	>>> print('\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
 	01	ROOT ROOT}<0> $.@.
@@ -765,7 +770,6 @@ def flatten(frag, ids, backtransform):
 	# mark substitution sites and ensure string.
 	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], frag)
 	prod = prods[0]
-	# if prod in backtransform:
 	if len(prod_) <= 2:
 		# normally, rules of fragments are disambiguated by binarization IDs.
 		# In case there's a fragment with only one or two frontier nodes,
@@ -1111,16 +1115,16 @@ def grammarinfo(grammar, dump=None):
 		complexity to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120
 		times, etc.)"""
 	lhs = {rule[0] for (rule, yf), w in grammar}
-	l = len(grammar)
+	numrules = len(grammar)
 	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
 							for a in range(3) if len(rule) > a})
 	result += " of which preterminals: %d\n" % (
 		len({rule[0] for (rule, yf), w in grammar if rule[1] == 'Epsilon'})
 		or len({rule[a] for (rule, yf), w in grammar
 				for a in range(1, 3) if len(rule) > a and rule[a] not in lhs}))
-	ll = sum(1 for (rule, yf), w in grammar if rule[1] == 'Epsilon')
-	result += "clauses: %d  lexical clauses: %d" % (l, ll)
-	result += " non-lexical clauses: %d\n" % (l - ll)
+	numlexical = sum(1 for (rule, yf), w in grammar if rule[1] == 'Epsilon')
+	result += "clauses: %d  lexical clauses: %d" % (numrules, numlexical)
+	result += " non-lexical clauses: %d\n" % (numrules - numlexical)
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
 	result += "max fan-out: %d in " % n
 	result += printrule(r, yf, w)
@@ -1156,7 +1160,7 @@ def grammarstats(filename):
 		match = RULERE.match(line)
 		if (match.group('LHS1') or match.group('LHS2')) != label:
 			if label is not None:
-				print('%s\t%d\t%d' % (label, cnt, freq))
+				print('%s\t%d\t%d' % (label, int(cnt), int(freq)))
 			cnt = freq = 0
 			label = (match.group('LHS1') or match.group('LHS2'))
 		cnt += 1
