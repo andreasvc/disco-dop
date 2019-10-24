@@ -86,12 +86,6 @@ the discontinuous node relate to the other spans in the tree::
 While the VP node does not dominate any terminals, if they were to be added,
 they would end up before and after the NP node.
 
-alpino
-^^^^^^
-Alpino XML format. One file per sentence. These two properties make it slow
-to process, so the recommended approach is to convert to another format.
-
-Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
 
 Read-only formats
 ^^^^^^^^^^^^^^^^^
@@ -99,6 +93,12 @@ Read-only formats
     Cf. http://www.ims.uni-stuttgart.de/forschung/ressourcen/werkzeuge/TIGERSearch/doc/html/TigerXML.html
 :``ftb``: FTB XML format (does not support discontinuous constituents).
     Cf. http://www.llf.cnrs.fr/Gens/Abeille/French-Treebank-fr.php
+:``alpino``: Alpino XML format. One file per sentence. These two properties make it slow
+    to process, so the recommended approach is to convert to another format
+    (on the other hand, not all attributes are retained in the conversion).
+    Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
+:``alpinocompact``: Alpino XML trees stored as Compact Corpus (dictzip).
+    Cf. http://www.let.rug.nl/~vannoord/alp/Alpino/TreebankTools.html#_act_managing_compact_corpora
 
 Write-only formats
 ^^^^^^^^^^^^^^^^^^

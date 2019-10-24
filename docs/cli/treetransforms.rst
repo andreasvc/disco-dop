@@ -53,7 +53,7 @@ The following transforms are applied in the order given on the command line.
 
 Other options
 ^^^^^^^^^^^^^
---inputfmt=<export|bracket|discbracket|alpino|tiger|ftb>
+--inputfmt=<export|bracket|discbracket|alpino|alpinocompact|tiger|ftb>
                 Input treebank format [default: export].
 
 --outputfmt=<export|bracket|discbracket|conll|mst|tokens|wordpos>
