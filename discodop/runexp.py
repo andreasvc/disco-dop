@@ -245,7 +245,7 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		raise ValueError('training corpus (selection) should be non-empty.')
 	if transformations:
 		if 'ftbundocompounds' in transformations:
-			treebanktransforms.collectftbcompounds(
+			treebanktransforms.getftbcompounds(
 					trees, sents, resultdir + '/compounds.txt')
 		newtrees, newsents = [], []
 		for tree, sent in zip(trees, sents):
@@ -676,8 +676,8 @@ def writeresults(results, params):
 	ext = {'export': 'export', 'bracket': 'mrg',
 			'discbracket': 'dbr', 'alpino': 'xml'}
 	category = (params.category + '.') if params.category else ''
-	if params.corpusfmt in ('alpino', 'tiger'):
-		# convert gold corpus because writing these formats is unsupported
+	if params.corpusfmt not in ('export', 'bracket', 'discbracket'):
+		# convert gold corpus because writing this formats is unsupported
 		corpusfmt = 'export'
 		with io.open('%s/%sgold.%s' % (params.resultdir, category,
 				ext[corpusfmt]), 'w', encoding='utf8') as out:
@@ -861,7 +861,7 @@ def parsetepacoc(
 							and n not in tepacocids][:trainnumsents])
 	getgrammars(dobinarization(trees, sents, binarization, False),
 			sents, stages, testmaxwords, resultdir,
-			numproc, None, False, trees[0].label)
+			numproc, None, trees[0].label)
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0

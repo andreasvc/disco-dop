@@ -1603,10 +1603,17 @@ def dlevel(tree, lang='nl'):
 
 
 def getftbcompounds(trees, sents, cachedfile):
-	"""Collect multi-word expressions in FTB, or read from cached file."""
+	"""Read multi-word expressions from cached file, or extract from FTB.
+
+	:param trees: extract MWEs from FTB trees, if cachedfile not given.
+	:param sents: corresponding sentences of `trees`.
+	:param cachedfile: if trees given, write compounds to this file.
+		If trees is `None`, read from this file
+		(one MWE per line, each MWE as space-separated tokens).
+	"""
 	if os.path.exists(cachedfile):
 		with open(cachedfile) as inp:
-			FTBCOMPOUNDS.update(inp.read().split())
+			FTBCOMPOUNDS.update(inp.read().splitlines())
 	elif trees:
 		for tree, sent in zip(trees, sents):
 			for node in tree.subtrees(lambda n: n.label.startswith('MW')):

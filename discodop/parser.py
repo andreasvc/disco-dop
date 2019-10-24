@@ -804,7 +804,7 @@ def readgrammars(resultdir, stages, postagging=None,
 		postagging.sigs = {w for w in stages[0].grammar.getwords()
 				if w.startswith(UNK)}
 	if transformations and 'ftbundocompounds' in transformations:
-		treebanktransforms.collectftbcompounds(
+		treebanktransforms.getftbcompounds(
 				None, None, resultdir + '/compounds.txt')
 
 
