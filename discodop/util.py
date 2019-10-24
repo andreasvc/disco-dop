@@ -42,42 +42,59 @@ def workerfunc(func):
 
 @contextmanager
 def genericdecompressor(cmd, filename, encoding='utf8'):
-	"""Run command line decompressor on file  and return file object."""
-	with subprocess.Popen([which(cmd), '-d', '-c', filename],
+	"""Run command line decompressor on file and return file object.
+
+	:param encoding: if None, mode is binary; otherwise, text."""
+	with subprocess.Popen(
+			[which(cmd), '-d', '-c', '-q', filename],
 			stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+		# FIXME: should use select to avoid deadlocks due to OS pipe buffers
+		# filling up and blocking the child process.
 		yield proc.stdout if encoding is None else codecs.getreader(
 				encoding)(proc.stdout)
-		proc.wait()
+		retcode = proc.wait()
+		if retcode:  # FIXME: retcode 2 means warning. allow warnings?
+			raise ValueError('non-zero exit code %s from compressor %s:\n%r'
+					% (retcode, cmd, proc.stderr.read()))
+
+
+@contextmanager
+def genericcompressor(cmd, filename, encoding='utf8', compresslevel=8):
+	"""Run command line compressor on file and return file object.
+
+	:param encoding: if None, mode is binary; otherwise, text."""
+	with open(filename, 'wb') as out, subprocess.Popen(
+			[which(cmd), '-c', '-q', '-f', '-%s' % compresslevel],
+			stdin=subprocess.PIPE, stdout=out, stderr=subprocess.PIPE) as proc:
+		yield proc.stdin if encoding is None else codecs.getwriter(
+				encoding)(proc.stdin)
+		proc.stdin.close()
+		retcode = proc.wait()
+		if retcode:
+			raise ValueError('non-zero exit code %s from compressor %s:\n%r'
+					% (retcode, cmd, proc.stderr.read()))
 
 
 def openread(filename, encoding='utf8'):
-	"""Open stdin/text file for reading; decompress gz/lz4/zst files on-the-fly.
-	"""
-	if filename == '-':
-		return open(sys.stdin.fileno(), encoding=encoding)
+	"""Open stdin/file for reading; decompress gz/lz4/zst files on-the-fly.
+
+	:param encoding: if None, mode is binary; otherwise, text."""
+	mode = 'rb' if encoding is None else 'rt'
+	if filename == '-':  # TODO: decompress stdin on-the-fly
+		return open(sys.stdin.fileno(), mode=mode, encoding=encoding)
 	if not isinstance(filename, int):
 		if filename.endswith('.gz'):
-			return gzip.open(filename, mode='rt', encoding=encoding)
-		elif filename.endswith('.lz4'):
-			return genericdecompressor('lz4', filename, encoding)
+			return gzip.open(filename, mode=mode, encoding=encoding)
 		elif filename.endswith('.zst'):
 			return genericdecompressor('zstd', filename, encoding)
-	return open(filename, encoding=encoding)
+		elif filename.endswith('.lz4'):
+			return genericdecompressor('lz4', filename, encoding)
+	return open(filename, mode=mode, encoding=encoding)
 
 
 def readbytes(filename):
-	"""Read binary file, return bytes; decompress gz/lz4/zst files on-the-fly.
-	"""
-	if filename == '-':
-		return open(sys.stdin.fileno(), 'rb')
-	elif filename.endswith('.zst'):
-		with genericdecompressor('zstd', filename, encoding=None) as inp:
-			return inp.read()
-	elif filename.endswith('.lz4'):
-		with genericdecompressor('lz4', filename, encoding=None) as inp:
-			return inp.read()
-	with (gzip.open(filename, 'rb') if filename.endswith('.gz')
-			else open(filename, 'rb')) as inp:
+	"""Read bytes from stdin/file; decompress gz/lz4/zst files on-the-fly."""
+	with openread(filename, encoding=None) as inp:
 		return inp.read()
 
 
