@@ -44,7 +44,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 	classifier = linear_model.SGDClassifier(
 			loss='hinge',
 			penalty='elasticnet',
-			n_iter=int(10 ** 6 / len(trees)))
+			max_iter=int(10 ** 6 / len(trees)))
 	alphas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 	if multi:
 		classifier = multiclass.OneVsRestClassifier(
@@ -60,7 +60,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 	msg = ('trained classifier; grid search results:\n%s\n'
 			'multi=%r, posfunc=%r; best score on training set: %g %%\n'
 			'parameters: %r\nfunction tags: %s' % (
-			'\n'.join(str(a) for a in classifier.grid_scores_),
+			'\n'.join('%s: %s' % a for a in classifier.cv_results_.items()),
 			multi, posfunc, 100.0 * classifier.best_score_,
 			classifier.best_estimator_,
 			' '.join(str(a) for a in encoder.classes_)))
