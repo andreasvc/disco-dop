@@ -262,7 +262,7 @@ class TgrepSearcher(CorpusSearcher):
 		# %s the sentence number
 		# %h the tree matched by the head (first) node of the pattern
 		fmt = r'%s\n:::\n'
-		fmtbreakdown = r'%s\n%h:::\n',
+		fmtbreakdown = r'%s\n%h:::\n'
 		for filename in subset:
 			result[filename] = self.cache.get((
 					'counts', query, filename, start, end, indices,
@@ -1448,11 +1448,13 @@ def main():
 							unicodelines=True, ansi=True)))
 			return
 		for filename, sentno, tree, sent, high in results:
+			out = None
 			if '--only-matching' in opts or '-o' in opts:
 				tree = max(high, key=lambda x:
 						len(x.leaves()) if isinstance(x, Tree) else 1)
-			out = DrawTree(tree, sent, highlight=high).text(
+			out = (DrawTree(tree, sent, highlight=high).text(
 					unicodelines=True, ansi=True)
+					if isinstance(tree, Tree) else sent[tree])
 			if printfname:
 				print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')

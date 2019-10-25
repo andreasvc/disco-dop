@@ -102,9 +102,12 @@ Read-only formats
 
 Write-only formats
 ^^^^^^^^^^^^^^^^^^
-:``connl``, ``mst``: Dependency conversion. Relies on head identification.
-                     Labels based on function tags (if any). A discontinuous
-                     tree may produce a non-projective dependency structure.
+:``conll``: Convert to dependency structures in CoNLL-X tabular format.
+   Relies on head identification. Labels based on function tags (if any).
+   A discontinuous tree may produce a non-projective dependency structure.
+   Cf. https://depparse.uvt.nl/DataFormat.html
+:``mst``: Dependency format used by MST parser.
+   Cf. https://github.com/travisbrown/mstparser#3a-input-data-format
 :``tokens``: Tokens separated by spaces, one sentence per line.
 :``wordpos``: Similar to ``tokens`` but of the form ``token/POS``.
 

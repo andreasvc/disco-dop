@@ -875,12 +875,15 @@ def writedependencies(tree, sent, fmt):
 	"""Convert tree to dependencies in `mst` or `conll` format."""
 	deps = dependencies(tree)
 	if fmt == 'mst':  # MST parser can read this format
-		# fourth line with function tags is left empty.
-		return "\n".join((
-			'\t'.join(word for word in sent),
+		# https://github.com/travisbrown/mstparser#3a-input-data-format
+		return '\n'.join((
+			'\t'.join(sent),
 			'\t'.join(tag for _, tag in sorted(tree.pos())),
-			'\t'.join(str(head) for _, _, head in deps))) + '\n\n'
+			'\t'.join(str(rel) for _n, rel, _head in deps),
+			'\t'.join(str(head) for _n, _rel, head in deps),
+			)) + '\n\n'
 	elif fmt == 'conll':
+		# Cf. https://depparse.uvt.nl/DataFormat.html
 		return '\n'.join('%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_' % (
 			n, word, tag, tag, head, rel)
 			for word, (_, tag), (n, rel, head)

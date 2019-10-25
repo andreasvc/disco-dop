@@ -84,8 +84,8 @@ This can be done by running a dummy query on a set of files::
 
 Regular expressions
 ^^^^^^^^^^^^^^^^^^^
-In contrast with the other engines, regular expressions treat the input as
-plain text files, one sentence per line. The options ``--trees`` and ``--brackets`` are
+In contrast with the other engines, the regex engine treats the input files as
+plain text, one sentence per line. The options ``--trees`` and ``--brackets`` are
 not applicable. The syntax is that of Python's ``re`` module, cited below.
 
 Regular expressions can contain both special and ordinary characters.
@@ -133,8 +133,10 @@ resulting RE will match the second character::
 More information: https://docs.python.org/3/library/re.html#regular-expression-syntax
 
 This query engine creates a cached index of line numbers in all files
-``treesearchline.idx``; this index should automatically be recreated when
+``treesearchline.idx``; this index should be recreated automatically when
 the list of files changes or any file is updated.
+Install https://github.com/andreasvc/pyre2
+for faster queries using linear time deterministic finite automata.
 
 TGrep2 syntax overview
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -190,13 +192,13 @@ is created (in the same directory).
 
 Examples
 ^^^^^^^^
-Show trees that can contain a NP modified by a PP::
+Show trees that contain an NP modified by a PP::
 
     $ discodop treesearch --trees -e frag '(NP (NP ) (PP ))' wsj-02-21.mrg
 
-Same query, but only show matching terminals::
+Show constituents modified by "good"::
 
-    $ discodop treesearch --only-matching --sents -e frag '(NP (NP ) (PP ))' ~/data/wsj-02-21.mrg
+    $ discodop treesearch --only-matching --sents -e tgrep2 '* $, (* < good)' ~/data/wsj-02-21.mrg
 
 Perform a large number of regex queries from a file, and store counts in a CSV file::
 
