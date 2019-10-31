@@ -44,9 +44,15 @@ def workerfunc(func):
 def genericdecompressor(cmd, filename, encoding='utf8'):
 	"""Run command line decompressor on file and return file object.
 
-	:param encoding: if None, mode is binary; otherwise, text."""
+	:param cmd: executable in path with gzip-like command line interface;
+		e.g., ``gzip, zstd, lz4, bzip2, lzop``
+	:param filename: the file to decompress.
+	:param encoding: if None, mode is binary; otherwise, text.
+	:raises ValueError: if command returns an error.
+	:returns: a file-like object that must be used in a with-statement;
+		supports .read() and iteration, but not seeking."""
 	with subprocess.Popen(
-			[which(cmd), '-d', '-c', '-q', filename],
+			[which(cmd), '--decompress', '--stdout', '--quiet', filename],
 			stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
 		# FIXME: should use select to avoid deadlocks due to OS pipe buffers
 		# filling up and blocking the child process.
@@ -62,9 +68,15 @@ def genericdecompressor(cmd, filename, encoding='utf8'):
 def genericcompressor(cmd, filename, encoding='utf8', compresslevel=8):
 	"""Run command line compressor on file and return file object.
 
-	:param encoding: if None, mode is binary; otherwise, text."""
+	:param cmd: executable in path with gzip-like command line interface;
+		e.g., ``gzip, zstd, lz4, bzip2, lzop``
+	:param filename: the compressed output file.
+	:param encoding: if None, mode is binary; otherwise, text.
+	:raises ValueError: if command returns an error.
+	:returns: a file-like object that must be used in a with-statement;
+		supports .write() but not seeking."""
 	with open(filename, 'wb') as out, subprocess.Popen(
-			[which(cmd), '-c', '-q', '-f', '-%s' % compresslevel],
+			[which(cmd), '--stdout', '--quiet', '-%s' % compresslevel],
 			stdin=subprocess.PIPE, stdout=out, stderr=subprocess.PIPE) as proc:
 		yield proc.stdin if encoding is None else codecs.getwriter(
 				encoding)(proc.stdin)
