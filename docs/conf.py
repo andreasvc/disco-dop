@@ -45,7 +45,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Disco-DOP'
-copyright = u'2017, Andreas van Cranenburgh'
+copyright = u'2019, Andreas van Cranenburgh'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -96,6 +96,8 @@ highlight_language = 'none'
 autodoc_member_order = 'bysource'
 autodoc_default_flags = ['members']
 autosummary_generate = True
+# append __init__ docstring to docstring of class
+autoclass_content = 'both'
 
 # -- Options for HTML output --------------------------------------------------
 
@@ -266,7 +268,7 @@ texinfo_documents = [
 epub_title = u'Disco-DOP'
 epub_author = u'Andreas van Cranenburgh'
 epub_publisher = u'Andreas van Cranenburgh'
-epub_copyright = u'2015, Andreas van Cranenburgh'
+epub_copyright = u'2019, Andreas van Cranenburgh'
 
 # The language of the text. It defaults to the language option
 # or en if the language is not set.
@@ -301,6 +303,3 @@ epub_copyright = u'2015, Andreas van Cranenburgh'
 
 # Allow duplicate toc entries.
 #epub_tocdup = True
-
-# append __init__ docstring to docstring of class
-autoclass_content = 'both'

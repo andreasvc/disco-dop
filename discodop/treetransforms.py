@@ -982,10 +982,10 @@ def getyf(left, right):
 
 
 __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
-		'factorconstituent', 'markovthreshold', 'splitdiscnodes',
-		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
-		'canonicalize', 'optimalbinarize', 'minimalbinarization',
-		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
-		'contsets', 'getbits', 'addbitsets', 'getyf', 'raisediscnodes',
-		'treebankfanout', 'handledisc', 'removeemptynodes', 'removeterminals',
-		'binarizetree']
+		'handledisc', 'factorconstituent', 'markovthreshold', 'splitdiscnodes',
+		'mergediscnodes', 'raisediscnodes', 'canonicallyorderedtree',
+		'addfanoutmarkers', 'removefanoutmarkers', 'removeterminals',
+		'removeemptynodes', 'treebankfanout', 'canonicalize',
+		'canonicalizealpino', 'binarizetree', 'optimalbinarize',
+		'minimalbinarization', 'fanout', 'complexity', 'complexityfanout',
+		'fanoutcomplexity', 'contsets', 'getbits', 'addbitsets', 'getyf']

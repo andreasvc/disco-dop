@@ -1237,8 +1237,9 @@ WRITERS = ('export', 'bracket', 'discbracket',
 		'conll', 'mst', 'tokens', 'wordpos')
 
 __all__ = ['Item', 'CorpusReader', 'BracketCorpusReader',
-		'DiscBracketCorpusReader', 'NegraCorpusReader', 'AlpinoCorpusReader',
-		'TigerXMLCorpusReader', 'FTBXMLCorpusReader',
+		'DiscBracketCorpusReader', 'NegraCorpusReader', 'TigerXMLCorpusReader',
+		'AlpinoCorpusReader', 'AlpinoCompactCorpusReader',
+		'FTBXMLCorpusReader',
 		'exporttree', 'exportsplit', 'alpinotree', 'ftbtree',
 		'writetree', 'writeexporttree', 'writealpinotree', 'writedependencies',
 		'dependencies', 'deplen', 'handlefunctions', 'handlemorphology',

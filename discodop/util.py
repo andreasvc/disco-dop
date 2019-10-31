@@ -462,5 +462,6 @@ ANSICOLOR = {
 		'white': 37,
 }
 
-__all__ = ['which', 'workerfunc', 'openread', 'slice_bounds',
-		'OrderedSet', 'ANSICOLOR']
+__all__ = ['which', 'workerfunc', 'genericdecompressor', 'genericcompressor',
+		'openread', 'readbytes', 'slice_bounds', 'merge', 'tokenize', 'run',
+		'OrderedSet', 'PyAgenda', 'ANSICOLOR']
