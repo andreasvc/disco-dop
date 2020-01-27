@@ -711,14 +711,15 @@ def draw():
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[engine].files}
+	filename = filenames[TEXTS[textno]]
 	if 'tgrep2' in CORPORA:
 		tree, sent = CORPORA['tgrep2'].extract(
-				list(CORPORA['tgrep2'].files)[textno],
-				[sentno], nofunc, nomorph).pop()
+				filename, [sentno], nofunc, nomorph).pop()
 	elif 'frag' in CORPORA:
 		tree, sent = CORPORA['frag'].extract(
-				list(CORPORA['frag'].files)[textno],
-				[sentno], nofunc, nomorph).pop()
+				filename, [sentno], nofunc, nomorph).pop()
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 	result = DrawTree(tree, sent).text(
@@ -739,18 +740,19 @@ def browsetrees():
 		maxtree = min(start + chunk, CORPUSINFO[engine][textno].len + 1)
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
+		filenames = {EXTRE.sub('', os.path.basename(a)): a
+				for a in CORPORA[engine].files}
+		filename = filenames[TEXTS[textno]]
 		if 'tgrep2' in CORPORA:
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True, funcsep='-')
 					for tree, sent in CORPORA['tgrep2'].extract(
-							list(CORPORA['tgrep2'].files)[textno],
-							range(start, maxtree), nofunc, nomorph)]
+							filename, range(start, maxtree), nofunc, nomorph)]
 		elif 'frag' in CORPORA:
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True, funcsep='-')
 					for tree, sent in CORPORA['frag'].extract(
-							list(CORPORA['tgrep2'].files)[textno],
-							range(start, maxtree), nofunc, nomorph)]
+							filename, range(start, maxtree), nofunc, nomorph)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = ['<pre id="t%s"%s>%s</pre>' % (n,
@@ -800,9 +802,11 @@ def browsesents():
 			except IndexError:
 				raise ValueError(
 						'no treebank available for "%s".' % TEXTS[textno])
+		filenames = {EXTRE.sub('', os.path.basename(a)): a
+				for a in CORPORA[engine].files}
+		filename = filenames[TEXTS[textno]]
 		results = CORPORA[engine].extract(
-				list(CORPORA[engine].files)[textno],
-				range(start, maxsent), sents=True)
+				filename, range(start, maxsent), sents=True)
 		# FIXME conflicts w/highlighting
 		# results = [htmlescape(a) for a in results]
 		legend = queryparams = ''
@@ -811,9 +815,6 @@ def browsesents():
 					query=request.args['query'],
 					engine=engine),
 					separator=b';')
-			filenames = {EXTRE.sub('', os.path.basename(a)): a
-					for a in CORPORA[engine].files}
-			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s\n' % ('\t'.join(
 					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'gray'),
@@ -1060,7 +1061,7 @@ def getcorpus():
 			pass
 	tfiles = [a for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*')))
 			if re.search(r'\.mrg(?:\.gz|\.zst)?$', a) is not None]
-	ffiles = [re.sub(r'\.ct$', '', a) for a in (
+	ffiles = [re.sub(r'\.ct$', '', a) for a in sorted(
 			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.ct'))
 			or glob.glob(os.path.join(CORPUS_DIR, '*.export.ct'))
