@@ -64,7 +64,7 @@ packages will be installed to your home directory. Make sure that
 To compile the latest development version of discodop, issue the following commands::
 
     sudo apt-get install build-essential python3-dev python3-pip git
-    git clone --recursive git://github.com/andreasvc/disco-dop.git
+    git clone --recursive https://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip3 install --user -r requirements.txt
     make install
