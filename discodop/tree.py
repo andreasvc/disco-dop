@@ -17,7 +17,7 @@ from itertools import count
 from operator import itemgetter
 from collections import defaultdict, OrderedDict
 from html import escape as htmlescape
-from .util import slice_bounds, ANSICOLOR
+from .util import slice_bounds, ANSICOLOR, graphemelength, graphemecenter
 
 HEAD, COMPLEMENT, MODIFIER = range(3)
 PTBPUNC = {'-LRB-', '-RRB-', '-LCB-', '-RCB-', '-LSB-', '-RSB-', '-NONE-'}
@@ -1564,7 +1564,9 @@ class DrawTree(object):
 				label = wrapre.sub(r'\1\n', label).strip()
 			label = label.split('\n')
 			maxnodeheight[row] = max(maxnodeheight[row], len(label))
-			maxnodewith[column] = max(maxnodewith[column], max(map(len, label)))
+			maxnodewith[column] = max(
+					maxnodewith[column],
+					max(map(graphemelength, label)))
 			labels[a] = label
 			if a not in self.edges:
 				continue  # e.g., root
@@ -1603,7 +1605,7 @@ class DrawTree(object):
 							branchrow[i] = line.center(maxnodewith[i], horzline)
 					else:  # if n and n in minchildcol:
 						branchrow[col] = crosscell(branchrow[col])
-				text = [a.center(maxnodewith[col]) for a in text]
+				text = [graphemecenter(a, maxnodewith[col]) for a in text]
 				if html:
 					text = [htmlescape(a) for a in text]
 				if (n in self.highlight or n in self.highlightfunc) and (

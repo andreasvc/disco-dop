@@ -3,3 +3,4 @@ numpy>=1.6.1
 roaringbitmap>=0.4
 pytest
 sphinx>=1.6.2
+grapheme

@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from heapq import heapify, heappush, heappop, heapreplace
 from functools import wraps
 from collections.abc import Set, Iterable
+import grapheme
 
 
 def which(program, exception=True):
@@ -449,6 +450,25 @@ def run(*popenargs, **kwargs):
 			raise
 		retcode = proc.poll()
 	return retcode, stdout, stderr
+
+
+def graphemelength(text):
+	"""Return number of graphemes in string."""
+	return grapheme.length(text)
+
+
+def graphemecenter(text, width, fillchar=' '):
+	"""Return text centered in a string of *grapheme* length width (not len()).
+
+	Padding is done using the specified fillchar (default is an ASCII space).
+	The original string is returned if width is less than or equal to len(s).
+	"""
+	length = grapheme.length(text)
+	if length > width:
+		return text
+	a = (width - length) // 2
+	b = a + (width - length) % 2
+	return (a * fillchar) + text + (b * fillchar)
 
 
 ANSICOLOR = {
