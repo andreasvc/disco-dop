@@ -711,6 +711,7 @@ def draw():
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
+	engine = request.args.get('engine') or next(iter(CORPORA))
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[engine].files}
 	filename = filenames[TEXTS[textno]]
