@@ -2,6 +2,9 @@
 import os
 import sys
 import glob
+import platform
+from distutils.sysconfig import get_config_vars
+from distutils.version import LooseVersion
 try:
 	from setuptools import Extension, setup
 	SETUPTOOLS = True
@@ -86,6 +89,20 @@ directives = {
 Options.fast_fail = True
 if 'auto_pickle' in Options.get_directive_defaults():
 	directives.update(auto_pickle=False)
+
+# Following is adapted from https://github.com/pandas-dev/pandas/pull/24274/
+# For Mac, ensure extensions are built for Mac OS 10.9 when compiling on a
+# 10.9 system or above, overriding distutils behavior which is to target
+# the version that Python was built for. This may be overridden by setting
+# MACOSX_DEPLOYMENT_TARGET before calling setup.py
+if (sys.platform == 'darwin'
+		and 'MACOSX_DEPLOYMENT_TARGET' not in os.environ):
+	currentsystem = LooseVersion(platform.mac_ver()[0])
+	pythontarget = LooseVersion(get_config_vars().get(
+			'MACOSX_DEPLOYMENT_TARGET', currentsystem))
+	if pythontarget < '10.9' and currentsystem >= '10.9':
+		os.environ['MACOSX_DEPLOYMENT_TARGET'] = '10.9'
+
 
 if __name__ == '__main__':
 	if sys.version_info[:2] < (3, 3):
