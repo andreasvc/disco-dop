@@ -23,7 +23,12 @@ DEBUG = False  # when True: enable debugging interface, disable multiprocessing
 PASSWD = None  # optionally, dict with user=>pass strings
 HEADRULES = '../alpino.headrules'
 
+logging.basicConfig(
+		format='%(asctime)s %(message)s',
+		datefmt='%Y-%m-%d %H:%M:%S',
+		level=logging.DEBUG)
 APP = Flask(__name__)
+log = APP.logger
 STANDALONE = __name__ == '__main__'
 CORPUS_DIR = "corpus/"
 
@@ -348,11 +353,6 @@ class QueryStringRedirectMiddleware(object):
 
 APP.wsgi_app = QueryStringRedirectMiddleware(APP.wsgi_app)
 
-logging.basicConfig()
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)
-log.handlers[0].setFormatter(logging.Formatter(
-		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.info('loading corpus.')
 if STANDALONE:
 	from getopt import gnu_getopt, GetoptError

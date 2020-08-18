@@ -18,8 +18,7 @@ import math
 from operator import itemgetter
 from flask import Flask, Markup, Response, redirect, url_for
 from flask import request, render_template, send_from_directory
-from flask.logging import create_logger
-from werkzeug.contrib.cache import SimpleCache
+from cachelib import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
 from discodop.tree import (Tree, DrawTree, DrawDependencies,
@@ -27,8 +26,15 @@ from discodop.tree import (Tree, DrawTree, DrawDependencies,
 from discodop.parser import Parser, readparam, readgrammars, probstr
 from discodop.util import tokenize
 
-LIMIT = 40  # maximum sentence length
+
+logging.basicConfig(
+		format='%(asctime)s %(message)s',
+		datefmt='%Y-%m-%d %H:%M:%S',
+		level=logging.DEBUG)
 APP = Flask(__name__)
+LOG = APP.logger
+
+LIMIT = 40  # maximum sentence length
 CACHE = SimpleCache()
 PARSERS = {}
 SHOWFUNC = True  # show function tags in results
@@ -253,12 +259,6 @@ def replacemorph(tree):
 		node.label = node.label.replace('[]', '')
 
 
-logging.basicConfig()
-LOG = create_logger(APP)
-for logger in (logging.getLogger(), LOG):
-	logger.setLevel(logging.DEBUG)
-	logger.handlers[0].setFormatter(logging.Formatter(
-			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 loadparsers()
 
 

@@ -50,7 +50,12 @@ LANG = 'nl'  # language to use when running style(1) or ucto(1)
 CORPUS_DIR = "corpus/"
 PASSWD = None  # optionally, dict with user=>pass strings
 
+logging.basicConfig(
+		format='%(asctime)s %(message)s',
+		datefmt='%Y-%m-%d %H:%M:%S',
+		level=logging.DEBUG)
 APP = Flask(__name__)
+LOG = APP.logger
 
 MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
@@ -1174,11 +1179,6 @@ DISPATCH = {
 	'fragments': fragmentsinresults,
 }
 
-logging.basicConfig()
-LOG = logging.getLogger()
-LOG.setLevel(logging.DEBUG)
-LOG.handlers[0].setFormatter(logging.Formatter(
-		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 LOG.info('loading corpus.')
 if __name__ == '__main__':
 	from getopt import gnu_getopt, GetoptError
