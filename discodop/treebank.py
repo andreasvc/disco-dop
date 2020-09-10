@@ -1162,7 +1162,9 @@ def segmentalpino(morphology, functions):
 			line = (yield None, CONSUMED)
 		elif line.startswith('</alpino_ds>'):
 			cur.append(line)
-			block = ElementTree.fromstring('\n'.join(cur).encode('utf8'))
+			rawblock = '\n'.join(cur).encode('utf8')
+			xmlblock = ElementTree.fromstring(rawblock)
+			block = rawblock, xmlblock
 			item = alpinotree(block, functions, morphology)
 			line = (yield ((item.tree, item.sent, item.comment), ), CONSUMED)
 			inblock = 0

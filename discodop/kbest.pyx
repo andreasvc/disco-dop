@@ -1,7 +1,7 @@
 """Extract the k-best derivations from a probabilistic parse forest.
 
 Implementation of Huang & Chiang (2005): Better k-best parsing.
-http://www.cis.upenn.edu/~lhuang3/huang-iwpt-correct.pdf"""
+https://web.engr.oregonstate.edu/~huanlian/papers/huang-iwpt-correct.pdf"""
 from __future__ import print_function
 from operator import itemgetter
 from .containers import Grammar
