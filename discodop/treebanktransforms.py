@@ -1622,9 +1622,9 @@ def getftbcompounds(trees, sents, cachedfile):
 		raise ValueError('need training trees or cached file.')
 
 
-def rindex(l, v):
+def rindex(seq, value):
 	"""Like list.index(), but go from right to left."""
-	return len(l) - 1 - l[::-1].index(v)
+	return len(seq) - 1 - seq[::-1].index(value)
 
 
 def labels(tree):

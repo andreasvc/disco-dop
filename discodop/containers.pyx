@@ -480,10 +480,9 @@ cdef class Ctrees:
 	def __len__(self):
 		return self.len
 
-	def __reduce__(self):
+	def __getstate__(self):
 		"""Helper function for pickling."""
-		return (Ctrees, (),
-				dict(nodes=<bytes>(<char *>self.nodes)[
+		return dict(nodes=<bytes>(<char *>self.nodes)[
 						:self.numnodes * sizeof(self.nodes[0])],
 					trees=<bytes>(<char *>self.trees)[
 						:self.len * sizeof(self.trees[0])],
@@ -491,7 +490,7 @@ cdef class Ctrees:
 					numnodes=self.numnodes,
 					numwords=self.numwords,
 					maxnodes=self.maxnodes,
-					prodindex=self.prodindex))
+					prodindex=self.prodindex)
 
 	def __setstate__(self, state):
 		self.len = self.max = state['len']
@@ -824,7 +823,7 @@ cdef class Vocabulary:
 		return 'labels: %d, prods: %d' % (len(set(self.labels)), len(self.prods))
 
 	def tofile(self, str filename):
-		"""Helper function for pickling."""
+		"""Serialize mutable Vocabulary object to file."""
 		cdef FILE *out = fopen(filename.encode('utf8'), b'wb')
 		cdef size_t written = 0
 		cdef uint32_t header[3]
@@ -894,45 +893,112 @@ cdef class Vocabulary:
 				for n in range(ob.labelidx.len - 1)}
 		return ob
 
+	def __getstate__(self):
+		"""Helper function for pickling."""
+		cdef bytes bheader, prodbuf, labelidx, labelbuf
+		cdef uint32_t header[3]
+		header[:] = [len(self.prods), len(self.labels) + 1, self.labelbuf.len]
+		bheader = (<char *>header)[:sizeof(header)]
+		prodbuf = (<char *>self.prodbuf.d.ptr)[:self.prodbuf.len]
+		labelidx = (<char *>self.labelidx.d.ptr)[
+				:self.labelidx.len * sizeof(uint32_t)]
+		labelbuf = (<char *>self.labelbuf.d.ptr)[:self.labelbuf.len]
+		return 'bytes', bheader + prodbuf + labelidx + labelbuf
+
+	def __setstate__(self, state):
+		"""Initialize this object by copying state from __getstate__."""
+		cdef bytes bstate
+		cdef char *buf
+		cdef uint32_t *header
+		cdef size_t offset = 0
+		_, bstate = state
+		buf = <char *>bstate
+		header = <uint32_t *>buf
+		offset += 3 * sizeof(uint32_t)
+		self.prodbuf.itemsize = sizeof(char)
+		self.prodbuf.capacity = self.prodbuf.len = header[0] * sizeof(Rule)
+		self.prodbuf.d.ptr = malloc(
+				self.prodbuf.capacity * self.prodbuf.itemsize)
+		self.labelidx.itemsize = sizeof(uint32_t)
+		self.labelidx.capacity = self.labelidx.len = header[1]
+		self.labelidx.d.ptr = malloc(
+				self.labelidx.capacity * self.labelidx.itemsize)
+		self.labelbuf.itemsize = sizeof(char)
+		self.labelbuf.capacity = self.labelbuf.len = header[2]
+		self.labelbuf.d.ptr = malloc(
+				self.labelbuf.capacity * self.labelbuf.itemsize)
+		if (self.prodbuf.d.ptr is NULL or self.labelidx.d.ptr is NULL
+				or self.labelbuf.d.ptr is NULL):
+			raise MemoryError
+		memcpy(self.prodbuf.d.ptr, &(buf[offset]), self.prodbuf.len)
+		offset += self.prodbuf.len
+		memcpy(self.labelidx.d.ptr, &(buf[offset]),
+				self.labelidx.len * sizeof(uint32_t))
+		offset += self.labelidx.len * sizeof(uint32_t)
+		memcpy(self.labelbuf.d.ptr, &(buf[offset]), self.labelbuf.len)
+		offset += self.labelbuf.len
+		self.prods = {<bytes>self.prodbuf.d.aschar[n * sizeof(Rule):
+				(n + 1) * sizeof(Rule)]: n
+				for n in range(self.prodbuf.len // sizeof(Rule))}
+		self.labels = {self.labelbuf.d.aschar[self.labelidx.d.asint[n]:
+				self.labelidx.d.asint[n + 1]].decode('utf8'): n
+				for n in range(self.labelidx.len - 1)}
+
 
 @cython.final
 cdef class FixedVocabulary(Vocabulary):
 	@classmethod
 	def fromfile(cls, filename):
-		"""Return an immutable Vocabulary object from a file."""
+		"""Return an immutable Vocabulary object from a file.
+
+		NB: call .makeindex() if you need .labels and .prods"""
 		cdef FixedVocabulary ob = FixedVocabulary.__new__(FixedVocabulary)
-		cdef size_t offset = 3 * sizeof(uint32_t)
 		cdef Py_buffer buffer
 		cdef Py_ssize_t size = 0
 		cdef char *ptr = NULL
-		cdef uint32_t *header
 		cdef int result
 		fileno = os.open(filename, os.O_RDONLY)
 		buf = mmap.mmap(fileno, 0, access=mmap.ACCESS_READ)
-		ob.state = (fileno, buf)
+		ob.state = ('mmap', fileno, buf)
 		result = getbufptr(buf, &ptr, &size, &buffer)
 		if result != 0:
 			raise ValueError('could not get buffer from mmap.')
-		header = <uint32_t *>ptr
-		ob.prodbuf.d.aschar = &(ptr[offset])
-		ob.prodbuf.len = header[0] * sizeof(Rule)
-		ob.prodbuf.capacity = 0
-		offset += header[0] * sizeof(Rule)
-		ob.labelidx.d.aschar = &(ptr[offset])
-		ob.labelidx.len = header[1]
-		ob.labelidx.capacity = 0
-		offset += header[1] * sizeof(uint32_t)
-		ob.labelbuf.d.aschar = &(ptr[offset])
-		ob.labelbuf.len = header[2]
-		ob.labelbuf.capacity = 0
+		ob._setptr(ptr)
 		PyBuffer_Release(&buffer)
 		return ob
+
+	def __setstate__(self, state):
+		"""Initialize this object with state from __getstate__."""
+		# This version copies pointers, so keep bytes objects alive
+		self.state = state
+		self._setptr(<char *>state[1])
+		self.makeindex()
+
+	cdef void _setptr(self, char *ptr) nogil:
+		cdef uint32_t *header
+		cdef size_t offset = 3 * sizeof(uint32_t)
+		header = <uint32_t *>ptr
+		self.prodbuf.d.aschar = &(ptr[offset])
+		self.prodbuf.len = header[0] * sizeof(Rule)
+		self.prodbuf.capacity = 0
+		self.prodbuf.itemsize = sizeof(char)
+		offset += header[0] * sizeof(Rule)
+		self.labelidx.d.aschar = &(ptr[offset])
+		self.labelidx.len = header[1]
+		self.labelidx.capacity = 0
+		self.labelidx.itemsize = sizeof(uint32_t)
+		offset += header[1] * sizeof(uint32_t)
+		self.labelbuf.d.aschar = &(ptr[offset])
+		self.labelbuf.len = header[2]
+		self.labelbuf.capacity = 0
+		self.labelbuf.itemsize = sizeof(char)
 
 	def close(self):
 		"""Close open files, if any."""
 		if self.state:
-			self.state[1].close()
-			os.close(self.state[0])
+			if self.state[0] == 'mmap':
+				self.state[2].close()
+				os.close(self.state[1])
 			self.state = None
 
 	def __enter__(self):

@@ -4,16 +4,18 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import os
 import re
+import pickle
 from unittest import TestCase
 from itertools import count, islice
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree, HEAD
 from discodop.treebank import incrementaltreereader
-from discodop.treetransforms import binarize, unbinarize, \
-		splitdiscnodes, mergediscnodes, \
-		addbitsets, fanout, canonicalize
+from discodop.treetransforms import (binarize, unbinarize, canonicalize,
+		splitdiscnodes, mergediscnodes, addbitsets, fanout)
 from discodop.punctuation import punctraise, balancedpunctraise
 from discodop.grammar import flatten, UniqueIDs
+from discodop.fragments import readtreebanks
+from discodop.containers import Ctrees, Vocabulary, FixedVocabulary
 
 
 class Test_treetransforms(object):
@@ -813,6 +815,68 @@ def test_runexp():
 			os.remove('sample/' + path)
 		os.rmdir('sample/')
 	cli.runexp(['sample.prm'])
+
+
+def test_serialization(tmp_path):
+	# assumes current working directory is project root
+	tb = readtreebanks('alpinosample.export', fmt='export')
+	vocab = tb['vocab']
+	trees = tb['trees1']
+	tmp = str(tmp_path / 'tmp')
+
+	# Vocabulary serialization to file
+	vocab.tofile(tmp)
+	vocab1 = Vocabulary.fromfile(tmp)
+	vocab2 = FixedVocabulary.fromfile(tmp)
+	vocab2.makeindex()
+	assert vocab.labels == vocab1.labels
+	assert vocab.prods == vocab1.prods
+	assert vocab.labels == vocab2.labels
+	assert vocab.prods == vocab2.prods
+	assert vocab.__getstate__() == vocab1.__getstate__()
+	assert vocab.__getstate__() == vocab2.__getstate__()
+
+	# Vocabulary pickling
+	pickledvocab = pickle.dumps(vocab)
+	vocab1 = pickle.loads(pickledvocab)
+	assert vocab.labels == vocab1.labels
+	assert vocab.prods == vocab1.prods
+	assert vocab.__getstate__() == vocab1.__getstate__()
+
+	# FixedVocabulary pickling
+	pickledvocab = pickle.dumps(vocab2)
+	vocab1 = pickle.loads(pickledvocab)
+	assert vocab.labels == vocab1.labels
+	assert vocab.prods == vocab1.prods
+	assert vocab.__getstate__() == vocab1.__getstate__()
+
+	# Ctrees serialization to file
+	trees.tofile(tmp)
+	trees1 = Ctrees.fromfile(tmp)
+	assert trees.numnodes == trees1.numnodes
+	assert trees.numwords == trees1.numwords
+	assert trees.len == trees1.len
+	assert len(trees.prodindex) == len(trees1.prodindex)
+	assert all(a == b for a, b in zip(trees.prodindex, trees1.prodindex))
+	# trees1.prodindex is a list, trees1.prodindex is a MultiRoaringBitmap
+
+	trees2 = Ctrees.fromfilemut(tmp)
+	assert trees.numnodes == trees2.numnodes
+	assert trees.numwords == trees2.numwords
+	assert trees.len == trees2.len
+	assert len(trees.prodindex) == len(trees2.prodindex)
+	assert all(a == b for a, b in zip(trees.prodindex, trees2.prodindex))
+	assert trees.__getstate__() == trees2.__getstate__()
+
+	# Ctrees pickling
+	pickledtrees = pickle.dumps(trees)
+	trees1 = pickle.loads(pickledtrees)
+	assert trees.numnodes == trees1.numnodes
+	assert trees.numwords == trees1.numwords
+	assert trees.len == trees1.len
+	assert len(trees.prodindex) == len(trees1.prodindex)
+	assert all(a == b for a, b in zip(trees.prodindex, trees1.prodindex))
+	assert trees.__getstate__() == trees1.__getstate__()
 
 
 def test_issue51():

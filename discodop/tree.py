@@ -931,7 +931,7 @@ class ParentedTree(Tree):
 		"""Replace this node with its children."""
 		i = self.parent_index
 		children = self.disown()
-		self.parent[i:i + 1] = children
+		self.parent[i:i + 1] = children  # pylint: disable=E1137
 
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):

@@ -13,7 +13,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 	from sklearn import linear_model, multiclass, pipeline
 	from sklearn import preprocessing, feature_extraction
 	from sklearn.model_selection import GridSearchCV
-	from sklearn.metrics import make_scorer, jaccard_similarity_score
+	from sklearn.metrics import make_scorer, jaccard_score
 	vectorizer = pipeline.Pipeline([
 			('vectorizer', feature_extraction.DictVectorizer(sparse=True)),
 			('scaler', preprocessing.StandardScaler(
@@ -54,7 +54,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 	else:
 		param_grid = dict(alpha=alphas)
 	classifier = GridSearchCV(estimator=classifier, param_grid=param_grid,
-			scoring=make_scorer(jaccard_similarity_score))
+			scoring=make_scorer(jaccard_score))
 	# train classifier
 	classifier.fit(trainfeats, trainfuncs)
 	msg = ('trained classifier; grid search results:\n%s\n'

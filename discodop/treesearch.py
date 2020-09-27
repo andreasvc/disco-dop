@@ -182,7 +182,6 @@ class CorpusSearcher(object):
 
 	def close(self):
 		"""Close files and free memory."""
-		pass
 
 	def _submit(self, func, *args, **kwargs):
 		"""Submit a job to the thread/process pool."""
@@ -241,7 +240,7 @@ class TgrepSearcher(CorpusSearcher):
 								'%s' % (filename, stderr.decode('utf8')))
 				finally:
 					if filename != origfile:
-						os.unlink(tmp.name)
+						os.unlink(origfile)
 			return filename
 
 		super().__init__(files, macros, numproc)

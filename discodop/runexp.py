@@ -177,12 +177,12 @@ def startexp(
 		parser.readgrammars(resultdir, prm.stages, prm.postagging,
 				prm.transformations, top)
 		if prm.predictfunctions:
-			from sklearn.externals import joblib
+			import joblib
 			funcclassifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
 	else:
 		logging.info('read training & test corpus')
 		if prm.predictfunctions:
-			from sklearn.externals import joblib
+			import joblib
 			from . import functiontags
 			logging.info('training function tag classifier')
 			funcclassifier, msg = functiontags.trainfunctionclassifier(

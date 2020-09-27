@@ -79,18 +79,18 @@ def main(argv=None):
 		if numproc != 1:
 			raise ValueError('Batch mode only supported in single-process '
 				'mode. Use the xargs command for multi-processing.')
-	tmp = None
+	readstdin = None
 	for n, fname in enumerate(args):
 		if fname == '-':
 			if numproc != 1:
 				# write to temp file so that contents can be read
 				# in multiple processes
-				if tmp is not None:
+				if readstdin is not None:
 					raise ValueError('can only read from stdin once.')
-				tmp = tempfile.NamedTemporaryFile()
-				tmp.write(open(sys.stdin.fileno(), 'rb').read())
-				tmp.flush()
-				args[n] = tmp.name
+				with tempfile.NamedTemporaryFile(delete=False) as tmp:
+					tmp.write(open(sys.stdin.fileno(), 'rb').read())
+					args[n] = tmp.name
+				readstdin = n
 		elif not os.path.exists(fname):
 			raise ValueError('not found: %r' % fname)
 	if PARAMS['complete']:
@@ -125,8 +125,8 @@ def main(argv=None):
 		if '--debin' in opts:
 			fragmentkeys = debinarize(fragmentkeys)
 		printfragments(fragmentkeys, counts, out=out)
-	if tmp is not None:
-		del tmp
+	if readstdin is not None:
+		os.unlink(args[readstdin])
 
 
 def regular(filenames, numproc, limit, encoding):

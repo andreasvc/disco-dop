@@ -477,9 +477,6 @@ class AlpinoCompactCorpusReader(AlpinoCorpusReader):
 					'cannot be overriden.')
 		# NB: could implement proper streaming, random access using .index file
 		# which lists offsets and sizes in base64 encoding.
-		sentids = set()
-		started = False
-		lines = []
 		for filename in self._filenames:
 			dzfile = re.sub(r'\.index$', '.data.dz', filename)
 			dirname = os.path.basename(re.sub(r'\.index$', '', filename))

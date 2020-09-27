@@ -711,6 +711,7 @@ cdef class Vocabulary:
 
 cdef class FixedVocabulary(Vocabulary):
 	cdef object state  # to keep buffer alive
+	cdef void _setptr(self, char *ptr) nogil
 
 
 # end fragments stuff

@@ -48,7 +48,7 @@ Installation
 
 Requirements:
 
-- Python 3.3+     http://www.python.org (headers required, e.g. python3-dev package)
+- Python 3.4+     http://www.python.org (headers required, e.g. python3-dev package)
 - Cython 0.21+    http://www.cython.org
 - Numpy 1.6+      http://numpy.org/
 
