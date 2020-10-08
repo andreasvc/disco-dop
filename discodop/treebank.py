@@ -415,9 +415,9 @@ class TigerXMLCorpusReader(CorpusReader):
 				raise ValueError('%s does not have a parent: %r' % (
 						idref, nodes[idref]))
 		item = exporttree(
-				['#BOS ' + block.get('id')]
+				['#BOS ' + xmlblock.get('id')]
 				+ ['\t'.join(a) for a in nodes.values()]
-				+ ['#EOS ' + block.get('id')],
+				+ ['#EOS ' + xmlblock.get('id')],
 				self.functions, self.morphology, self.lemmas)
 		item.tree.label = root.split('_', 1)[1]
 		item.block = rawblock
