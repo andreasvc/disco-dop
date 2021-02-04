@@ -1350,10 +1350,11 @@ def writecounts(results, flat=False, columns=None):
 		return
 	writer = csv.writer(sys.stdout)
 	if columns is None:
-		writer.writerow(['filename']
-				+ list(next(iter(results.values())).keys()))
+		columns = sorted({col for res in results.values()
+					for col in res})
+		writer.writerow(['filename'] + columns)
 		writer.writerows(
-				[filename] + list(results[filename].values())
+				[filename] + [results[filename].get(col, 0) for col in columns]
 				for filename in results)
 	else:
 		writer.writerow(['filename'] + list(columns))
