@@ -321,7 +321,7 @@ class NegraCorpusReader(CorpusReader):
 									'while previous one still open: %s' % line)
 						started = True
 						sentid = line.split(None, 2)[1]
-						lines[:] = [line]
+						lines = [line]
 					elif line.startswith('#EOS '):
 						if not started:
 							raise ValueError('end of sentence marker while '
