@@ -472,7 +472,7 @@ class Parser(object):
 						part = parts[-1]
 						parttree, partprob, _partfrags = max(
 								part.parsetrees, key=itemgetter(1))
-						prob *= partprob
+						prob = probmult(prob, partprob)
 						parttree = ParentedTree(parttree)
 						for node in parttree.subtrees(
 								lambda n: isinstance(n[0], int)):
@@ -482,8 +482,8 @@ class Parser(object):
 							print('part:', parttree)
 						# msg += 'part %s %g\n%s' % ((label, a, b), partprob,
 						# 		''.join(part.msg for part in parts))
-						msg += 'part %s %g\n%s' % ((label, a, b), partprob,
-								part.msg)
+						msg += 'part %s %s\n%s' % (
+								(label, a, b), probstr(partprob), part.msg)
 				tree = ParentedTree('(ROOT %s)' % ' '.join(tmp))
 				from .runexp import dobinarization
 				tree = dobinarization([tree], [sent],
@@ -809,10 +809,19 @@ def readgrammars(resultdir, stages, postagging=None,
 
 
 def probstr(prob):
-	"""Render probability / number of subtrees as string."""
+	"""Render probability (and optionally number of subtrees) as string."""
 	if isinstance(prob, tuple):
 		return 'subtrees=%d, p=%.4g ' % (abs(prob[0]), prob[1])
 	return 'p=%.4g' % prob
+
+
+def probmult(prob1, prob2):
+	"""Multiply probabilities (and optionally number of subtrees)."""
+	if prob1 == 1:
+		return prob2
+	elif isinstance(prob2, tuple):
+		return (prob1[0] + prob2[1], prob1[1] * prob2[1])
+	return prob1 * prob2
 
 
 def estimateitems(sent, prune, mode, dop):
