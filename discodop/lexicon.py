@@ -63,20 +63,15 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	wordsfortag = defaultdict(set)
 	tags = Counter()
 	wordtags = Counter()
-	sigs = Counter()
-	sigtag = Counter()
 	words = Counter(word for sent in tagged_sents for word, tag in sent)
 	lexicon = {word for word, freq in words.items()
 			if freq > unknownthreshold}
-	wordsig = {}
 	for sent in tagged_sents:
 		for n, (word, tag) in enumerate(sent):
 			wordsfortag[tag].add(word)
 			tags[tag] += 1
 			wordtags[word, tag] += 1
-			sig = unknownword(word, n, lexicon)
-			wordsig[word] = sig  # NB: sig may also depend on n and lexicon
-			sigtag[sig, tag] += 1
+	openclasstags = {}
 	if openclassthreshold:
 		# consider POS tags with different function tags together
 		wordsforcollapsedtags = defaultdict(set)
@@ -85,10 +80,9 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			if match is not None:
 				tag1 = match.group(2)
 				wordsforcollapsedtags[tag1].update(w.lower() for w in ws)
-		openclasstags = {}
 		for tag, ws in wordsfortag.items():
 			match = REMOVESTATESPLITS.match(tag)
-			if match is None:
+			if match is None:  # should not happen (tm), only for robustness
 				if len({w.lower() for w in ws}) >= openclassthreshold:
 					openclasstags[tag] = len({w.lower() for w in ws})
 			elif (len(wordsforcollapsedtags[match.group(2)])
@@ -96,6 +90,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 				openclasstags[tag] = len({w.lower() for w in ws})
 		closedclasstags = {tag: len({w.lower() for w in wordsfortag[tag]})
 				for tag in tags if tag not in openclasstags}
+		# FIXME: do we want to preserve case? could simplify code otherwise
 		closedclasswords = {word for tag in closedclasstags
 				for word in wordsfortag[tag]}
 		# NB: words below unknown word threshold are included
@@ -103,18 +98,23 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		# add rare closed-class words back to lexicon
 		lexicon.update(closedclasswords)
 	else:
-		openclasstags = {}
+		closedclasswords = set()
+	sigs = Counter()
 	for sent in tagged_sents:
 		for n, (word, _) in enumerate(sent):
 			if word not in lexicon:
+				# NB: sig depends on n and lexicon
 				sig = unknownword(word, n, lexicon)
 				sigs[sig] += 1
 	msg = 'word types: %d, signature types: %d\n' % (
 			len(lexicon), len(sigs))
+	msg += 'number of words per collapsed tag: %s\n' % ' '.join(sorted(
+			'%s:%d' % (a, len(b)) for a, b in wordsforcollapsedtags.items()))
 	msg += 'open class tags: %s\n\n' % ' '.join(sorted(
 			'%s:%d' % a for a in openclasstags.items()))
-	msg += 'closed class tags: %s' % ' '.join(sorted(
+	msg += 'closed class tags: %s\n' % ' '.join(sorted(
 			'%s:%d' % a for a in closedclasstags.items()))
+	msg += 'closed class words: %s\n' % ' '.join(sorted(closedclasswords))
 	return (sigs, words, lexicon, closedclasswords, tags, wordtags), msg
 
 
@@ -160,7 +160,7 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	"""Collect new lexical productions.
 
-	- include productions for rare words with words in addition to signatures.
+	- for rare words, include productions with words in addition to signatures.
 	- map unobserved signatures to ``_UNK`` and associate w/all potential tags.
 	- (unobserved combinations of open class (word, tag) handled in parser).
 
