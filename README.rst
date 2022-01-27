@@ -176,8 +176,8 @@ by the Stanford parser, Berkeley parser, Bubs parser, &c.
 
 References
 ==========
-Please cite the following paper if you use this code in the context of a
-publication::
+Please cite `the following paper <http://dx.doi.org/10.15398/jlm.v4i1.100>`_
+if you use this code in the context of a publication::
 
     @article{vancranenburgh2016disc,
         title={Data-Oriented Parsing with discontinuous constituents and function tags},
