@@ -104,9 +104,10 @@ class CorpusReader(object):
 			self._filenames = (sorted(glob(path), key=numbase)
 					if path != '-' else ['-'])
 		except TypeError:
-			print('all sentence IDs must have the same type signature '
-					'(number, string)')
-			raise
+			# print('all sentence IDs must have the same type signature '
+			# 		'(number, string)')
+			# raise
+			self._filenames = sorted(glob(path))
 		for opt, opts in (
 				(functions, (None, 'leave', 'add', 'replace', 'remove',
 					'between')),
