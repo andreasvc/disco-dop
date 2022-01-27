@@ -142,7 +142,8 @@ function parse() {
 			;
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
-	document.queryform.sent.value = '';
+	// document.queryform.sent.value = '';
+	document.queryform.sent.select();
 }	
 
 function checkall(name, val) {
