@@ -21,7 +21,7 @@ import re
 from operator import attrgetter
 from itertools import islice
 from collections import defaultdict, Counter
-from .tree import Tree, ImmutableTree, isdisc, bitfanout, HEAD
+from .tree import Tree, ParentedTree, ImmutableTree, isdisc, bitfanout, HEAD
 from .util import OrderedSet, PyAgenda
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
@@ -331,7 +331,8 @@ def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 				node[0:] = [child for child in node[0]]
                 # remove previous parents from the children
                 for i, child in enumerate(node[0]):
-                    node[0]._delparent(child, i)
+                    if isinstance(child, ParentedTree):
+                        node[0]._delparent(child, i)
 				# since we assigned the child's children to the current node,
 				# evaluate the current node again
 				agenda.append(node)
