@@ -328,11 +328,11 @@ def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 			if (len(node) == 1 and isinstance(node[0], Tree)
 					and (collapsepos or isinstance(node[0, 0], Tree))):
 				node.label += joinchar + node[0].label
-				node[0:] = [child for child in node[0]]
 				# remove previous parents from the children
 				for i, child in enumerate(node[0]):
 					if isinstance(child, ParentedTree):
 						node[0]._delparent(child, i)
+				node[0:] = [child for child in node[0]]
 				# since we assigned the child's children to the current node,
 				# evaluate the current node again
 				agenda.append(node)
