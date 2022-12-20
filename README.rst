@@ -73,13 +73,13 @@ Debian, Ubuntu based systems (installation to a virtual environment)
 --------------------------------------------------------------------
 
 The following instructions are suitable for installing disco-dop to a virtual
-environment. The first steps are as above:
+environment. The first steps are as above::
 
     sudo apt-get install build-essential python3-dev python3-pip git
     git clone --recursive https://github.com/andreasvc/disco-dop.git
     cd disco-dop
 
-Now make sure the virtual environment is activated, then run:
+Now make sure the virtual environment is activated, then run::
 
     pip3 install -r requirements.txt
     make install-venv
