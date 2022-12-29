@@ -110,7 +110,7 @@ Mac OS X
 - Install dependencies using Homebrew::
 
     brew install gcc python3 git
-    git clone --recursive git://github.com/andreasvc/disco-dop.git
+    git clone --recursive https://github.com/andreasvc/disco-dop.git
     cd disco-dop
     sudo pip3 install -r requirements.txt
     env CC=gcc sudo python3 setup.py install
