@@ -115,7 +115,7 @@ if __name__ == '__main__':
 	if (sys.platform == 'darwin'
 			and LooseVersion(platform.mac_ver()[0]) >= '10.15'):
 		# https://github.com/andreasvc/disco-dop/issues/68
-		extra_compile_args += ['-DCPP_BTREE_CXX11']
+		extra_compile_args += ['-DCPP_BTREE_CXX11', '-DSPP_CXX11']
 
 	if DEBUG:
 		directives.update(wraparound=True, boundscheck=True)

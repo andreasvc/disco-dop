@@ -29,17 +29,13 @@ debug:
 	python3-dbg setup.py install --user --debug
 	cp build/lib.*/discodop/*.so discodop/
 
-debug35:
-	python3.5-dbg setup.py install --user --debug
-	cp build/lib.*/discodop/*.so discodop/
-
-debugvalgrind: debug35
+debugvalgrind: debug
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python3.5-dbg `which py.test` --doctest-modules discodop/ tests/unittests.py
+		python3-dbg `which py.test` --doctest-modules discodop/ tests/unittests.py
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python3.5-dbg -bb -tt tests.py
+		python3-dbg -bb -tt tests.py
 
 valgrind: discodop
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
