@@ -62,6 +62,21 @@ def parse():
 
 	Output is either in a HTML fragment or in plain text. To be invoked by an
 	AJAX call."""
+	# allowed options. first option is default value.
+	allowed = {
+			'objfun': ('mpp', 'mpd', 'shortest', 'sl-dop', 'sl-dop-simple'),
+			'est': ('rfe', 'ewe', 'bon'),
+			'marg': ('nbest', ),
+			'coarse': ('pcfg', ),
+				# 'pcfg-posterior', 'plcfrs', 'dop-rerank', 'mc-rerank'
+			'lang': ('detect', ) + tuple(PARSERS.keys()),
+			}
+	for key, allowedoptions in allowed.items():
+		default = allowedoptions[0]
+		given = request.args.get(key, default)
+		if given not in allowedoptions:
+			return 'invalid %r argument %r; should be one of %r' % (
+					key, given, allowedoptions)
 	sent = request.args.get('sent', None)
 	objfun = request.args.get('objfun', 'mpp')
 	est = request.args.get('est', 'rfe')
@@ -69,10 +84,10 @@ def parse():
 	coarse = request.args.get('coarse', 'pcfg')
 	html = 'html' in request.args
 	lang = request.args.get('lang', 'detect')
-	require = request.args.get('require', None)
-	block = request.args.get('block', None)
+	require = block = None
+
 	if not sent:
-		return ''
+		return 'no sentence'
 	nbest = None
 	if POSTAGS.match(sent):
 		senttok, tags = zip(*(a.rsplit('/', 1) for a in sent.split()))
@@ -84,12 +99,15 @@ def parse():
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
 		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
-	if require:
-		require = tuple((label, tuple(indices))
-				for label, indices in sorted(json.loads(require)))
-	if block:
-		block = tuple((label, tuple(indices))
-				for label, indices in sorted(json.loads(block)))
+	if 'require' in request.args:
+		require = validatespans(request.args.get('require', None), senttok)
+		if not require:
+			return 'incorrect require argument'
+	if 'block' in request.args:
+		block = validatespans(request.args.get('block', None), senttok)
+		if not block:
+			return 'incorrect block argument'
+
 	key = (senttok, tags, est, marg, objfun, coarse, lang, require, block)
 	resp = CACHE.get(key)
 	if resp is None:
@@ -222,7 +240,8 @@ def loadparsers():
 					params.transformations, top=getattr(params, 'top', 'ROOT'))
 			PARSERS[lang] = Parser(params)
 			LOG.info('Grammar for %s loaded.', lang)
-	assert PARSERS, 'no grammars found!'
+	if not PARSERS:
+		raise ValueError('no grammars found!')
 
 
 def randid():
@@ -260,6 +279,21 @@ def replacemorph(tree):
 		if x and x != '--':
 			treebank.handlemorphology('replace', None, node, node.source)
 		node.label = node.label.replace('[]', '')
+
+
+def validatespans(spans, sent):
+	"""Convert json string to tuples; e.g., ('NP', [0, 1, 2]); checks types."""
+	try:
+		spans = json.loads(spans)
+	except json.decoder.JSONDecodeError:
+		return None
+	spans = tuple((label, tuple(indices)) for label, indices in sorted(spans))
+	for label, indices in spans:
+		if not isinstance(label, str):
+			return None
+		if not all(isinstance(a, int) and 0 <= a < len(sent) for a in indices):
+			return None
+	return spans
 
 
 loadparsers()
