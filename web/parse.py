@@ -87,7 +87,7 @@ def parse():
 	require = block = None
 
 	if not sent:
-		return 'no sentence'
+		return ''
 	nbest = None
 	if POSTAGS.match(sent):
 		senttok, tags = zip(*(a.rsplit('/', 1) for a in sent.split()))
