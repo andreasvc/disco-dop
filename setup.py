@@ -112,6 +112,11 @@ if __name__ == '__main__':
 			'-Wno-strict-prototypes', '-Wno-unused-function',
 			'-Wno-unreachable-code', '-Wno-sign-compare',
 			'-D__STDC_LIMIT_MACROS']  # http://stackoverflow.com/a/3233069
+	if (sys.platform == 'darwin'
+			and LooseVersion(platform.mac_ver()[0]) >= '10.15'):
+		# https://github.com/andreasvc/disco-dop/issues/68
+		extra_compile_args += ['-DCPP_BTREE_CXX11', '-DSPP_CXX11']
+
 	if DEBUG:
 		directives.update(wraparound=True, boundscheck=True)
 		extra_compile_args += ['-g', '-O0',
