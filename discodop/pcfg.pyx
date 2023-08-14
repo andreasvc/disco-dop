@@ -11,7 +11,7 @@ from .tree import Tree
 from .util import which
 
 cimport cython
-from cython.operator cimport postincrement, dereference
+from cython.operator cimport dereference
 from libc.math cimport HUGE_VAL as INFINITY
 include "constants.pxi"
 

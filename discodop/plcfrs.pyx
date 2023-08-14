@@ -7,7 +7,7 @@ import logging
 import numpy as np
 from math import exp, log as pylog
 cimport cython
-from cython.operator cimport postincrement, dereference
+from cython.operator cimport preincrement, dereference
 from libc.math cimport HUGE_VAL as INFINITY
 include "constants.pxi"
 
@@ -480,10 +480,10 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					sib = dereference(itemidxit).first
 					sibidx = dereference(itemidxit).second
 					sibvec.push_back(sibidx)
-					postincrement(itemidxit)
+					preincrement(itemidxit)
 				for sibidx in sibvec:
 					sib = chart.items[sibidx]
-					postincrement(itemidxit)
+					preincrement(itemidxit)
 					if concat[LCFRSItem_fused](rule, &sib, &item):
 						newitem.label = rule.lhs
 						combine_item[LCFRSItem_fused](&newitem, &sib, &item)
@@ -544,7 +544,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					sib = dereference(itemidxit).first
 					sibidx = dereference(itemidxit).second
 					sibvec.push_back(sibidx)
-					postincrement(itemidxit)
+					preincrement(itemidxit)
 				for sibidx in sibvec:
 					sib = chart.items[sibidx]
 					if concat[LCFRSItem_fused](rule, &item, &sib):
