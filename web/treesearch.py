@@ -16,7 +16,7 @@ from collections import Counter, OrderedDict, defaultdict
 from itertools import islice, groupby
 from functools import wraps
 import pickle
-from urllib.parse import quote  # pylint: disable=F0401,E0611
+from urllib.parse import quote, urlencode  # pylint: disable=F0401,E0611
 from html import escape as htmlescape
 try:
 	import matplotlib
@@ -31,7 +31,6 @@ except ImportError:
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
-from werkzeug.urls import url_encode
 # disco-dop
 from discodop import fragments, treesearch
 from discodop.tree import Tree, DiscTree, DrawTree
@@ -211,7 +210,7 @@ def counts(form, doexport=False):
 	target = METADATA[form['target']] if form.get('target') else None
 	target2 = METADATA[form['target2']] if form.get('target2') else None
 	if not doexport:
-		url = 'counts?' + url_encode(dict(export='csv', **form),
+		url = 'counts?' + urlencode(dict(export='csv', **form),
 				separator=b';')
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
@@ -292,7 +291,7 @@ def counts(form, doexport=False):
 				out = ('%s (<a href="browsesents?%s">browse</a>)    '
 						'%5d %5.2f %%' % (
 						text.ljust(COLWIDTH)[:COLWIDTH],
-						url_encode(
+						urlencode(
 							dict(text=textno, sent=1,
 								query=query or form['query'],
 								engine=engine),
@@ -378,7 +377,7 @@ def trees(form):
 	start, end = getslice(form.get('slice'))
 	maxresults = min(int(form.get('maxresults') or TREELIMIT), TREELIMIT)
 	# NB: we do not hide function or morphology tags when exporting
-	url = 'trees?' + url_encode(dict(export='csv', **form), separator=b';')
+	url = 'trees?' + urlencode(dict(export='csv', **form), separator=b';')
 	yield ('<pre>Query: %s\n'
 			'Trees (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -417,7 +416,7 @@ def trees(form):
 					'|<a href="browsesents?%s">context</a>' % (
 					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
-					url_encode(dict(text=textno, sent=sentno,
+					urlencode(dict(text=textno, sent=sentno,
 						query=form['query'], engine=engine), separator=b';')))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
@@ -442,7 +441,7 @@ def sents(form, dobrackets=False):
 	start, end = getslice(form.get('slice'))
 	maxresults = min(int(form.get('maxresults') or SENTLIMIT), SENTLIMIT)
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
-			url_encode(dict(export='csv', **form), separator=b';'))
+			urlencode(dict(export='csv', **form), separator=b';'))
 	yield ('<pre>Query: %s\n'
 			'Sentences (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -486,7 +485,7 @@ def sents(form, dobrackets=False):
 					'|<a href="browsesents?%s">context</a>' % (
 					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
-					url_encode(dict(text=textno, sent=sentno, highlight=sentno,
+					urlencode(dict(text=textno, sent=sentno, highlight=sentno,
 						query=form['query'], engine=engine), separator=b';')))
 			if dobrackets:
 				sent = htmlescape(sent.replace(" )", " -NONE-)"))
@@ -558,7 +557,7 @@ def fragmentsinresults(form, doexport=False):
 	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
 	if not doexport:
-		url = 'fragments?' + url_encode(dict(export='csv', **form),
+		url = 'fragments?' + urlencode(dict(export='csv', **form),
 				separator=b';')
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
@@ -817,7 +816,7 @@ def browsesents():
 		# results = [htmlescape(a) for a in results]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
-			queryparams = ';' + url_encode(dict(
+			queryparams = ';' + urlencode(dict(
 					query=request.args['query'],
 					engine=engine),
 					separator=b';')

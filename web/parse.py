@@ -16,10 +16,11 @@ import random
 import logging
 import math
 from operator import itemgetter
-from flask import Flask, Markup, Response, redirect, url_for
+from urllib.parse import urlencode
+from flask import Flask, Response, redirect, url_for
 from flask import request, render_template, send_from_directory
+from markupsafe import Markup
 from cachelib import SimpleCache
-from werkzeug.urls import url_encode
 from discodop import treebank
 from discodop.tree import (Tree, DrawTree, DrawDependencies,
 		writediscbrackettree)
@@ -117,7 +118,7 @@ def parse():
 			urlparams['require'] = json.dumps(require)
 		if block:
 			urlparams['block'] = json.dumps(block)
-		link = '?' + url_encode(urlparams)
+		link = '?' + urlencode(urlparams)
 		PARSERS[lang].stages[-1].estimator = est
 		PARSERS[lang].stages[-1].objective = objfun
 		PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
