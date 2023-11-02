@@ -75,8 +75,8 @@ def parse():
 		default = allowedoptions[0]
 		given = request.args.get(key, default)
 		if given not in allowedoptions:
-			return 'invalid %r argument %r; should be one of %r' % (
-					key, given, allowedoptions)
+			return 'invalid %r argument; should be one of %r' % (
+					key, allowedoptions)
 	sent = request.args.get('sent', None)
 	objfun = request.args.get('objfun', 'mpp')
 	est = request.args.get('est', 'rfe')
@@ -98,7 +98,7 @@ def parse():
 	if lang == 'detect':
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
-		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
+		return 'unrecognized lang value; languages: %r' % (PARSERS.keys())
 	if 'require' in request.args:
 		require = validatespans(request.args.get('require', None), senttok)
 		if not require:
