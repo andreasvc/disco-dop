@@ -16,12 +16,25 @@ discodop:
 	python3 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
 
+discodop-venv:
+	@set -u; echo Installing disco-dop to virtual environment $$VIRTUAL_ENV
+	python3 setup.py install
+	cp build/lib.*/discodop/*.so discodop/
+
 docs:
 	mkdir -p ~/.local/man/man1
 	cd docs && make man && cp _build/man/* ~/.local/man/man1/
 	cd docs && make html
 
+docs-venv:
+	@set -u; echo Installing disco-dop man pages to virtual environment $$VIRTUAL_ENV
+	mkdir -p $$VIRTUAL_ENV/man/man1
+	cd docs && make man && cp _build/man/* $$VIRTUAL_ENV/man/man1
+	cd docs && make html
+
 install: discodop docs
+
+install-venv : discodop-venv docs-venv
 
 debug:
 	# NB: debug build requires all external modules to be compiled
