@@ -52,8 +52,8 @@ Requirements:
 - Cython 0.21+    http://www.cython.org
 - Numpy 1.6+      http://numpy.org/
 
-Debian, Ubuntu based systems
-----------------------------
+Debian, Ubuntu based systems (installation to home directory)
+-------------------------------------------------------------
 The following instructions employ the ``--user`` option which means that Python
 packages will be installed to your home directory. Make sure that
 ``~/.local/bin`` is in your PATH, or add it as follows
@@ -68,6 +68,21 @@ To compile the latest development version of discodop, issue the following comma
     cd disco-dop
     pip3 install --user -r requirements.txt
     make install
+
+Debian, Ubuntu based systems (installation to a virtual environment)
+--------------------------------------------------------------------
+
+The following instructions are suitable for installing disco-dop to a virtual
+environment. The first steps are as above::
+
+    sudo apt-get install build-essential python3-dev python3-pip git
+    git clone --recursive https://github.com/andreasvc/disco-dop.git
+    cd disco-dop
+
+Now make sure the virtual environment is activated, then run::
+
+    pip3 install -r requirements.txt
+    make install-venv
 
 Other Linux systems
 -------------------
