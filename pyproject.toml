@@ -1,0 +1,45 @@
+[project]
+name = "disco-dop"
+version = "0.6a0"
+readme = "README.rst"
+description = "Discontinuous Data-Oriented Parsing"
+authors = [
+    {name = "Andreas van Cranenburgh", email = "A.W.van.Cranenburgh@rug.nl"},
+]
+license = "GPL-2.0-or-later"
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 2.7",
+    "Programming Language :: Python :: 3.3",
+    "Programming Language :: Cython",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+[project.urls]
+Documentation = "https://discodop.readthedocs.io"
+Repository = "https://github.com/andreasvc/disco-dop/"
+
+[project.entry-points."console_scripts"]
+discodop = "discodop.cli:main"
+
+[build-system]
+requires = [
+    "setuptools>=64",
+    "Cython>=3",
+    "numpy",  # ">=1.6.1",
+    "roaringbitmap",  # ">=0.4",
+]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=3.0.0",
+    "pycodestyle",
+]
+
+[tool.setuptools]
+packages = ["discodop"]

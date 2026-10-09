@@ -5,7 +5,7 @@ import gzip
 import codecs
 from operator import mul, itemgetter
 from itertools import count, islice, repeat
-from collections import defaultdict, Counter, OrderedDict
+from collections import defaultdict, Counter
 import numpy as np
 from .tree import (Tree, ParentedTree, ImmutableTree, DiscTree,
 		escape, unescape, brackettree, writediscbrackettree)
@@ -396,16 +396,15 @@ def inducetagfromtsg(elemtrees):
 	>>> inducetagfromtsg([(
 	... '(S (NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) (NP (DT 3=a) '
 	... '(NN 4=plan)))))', 3)])  # doctest: +NORMALIZE_WHITESPACE
-	(OrderedDict([('(S (NP (DT 0=a) (NN 1=man)))', 3),
-		('(S (NP (DT 0=a) (NN 1=plan)))', 3)]),
-	OrderedDict([('(NP (NP 0=*) (PP (IN 1=with) (NP (DT 2=a) (NN 3=plan))))',
-		3), ('(NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) (NP 3=*)))', 3)]))
+	({'(S (NP (DT 0=a) (NN 1=man)))': 3, '(S (NP (DT 0=a) (NN 1=plan)))': 3},
+	{'(NP (NP 0=*) (PP (IN 1=with) (NP (DT 2=a) (NN 3=plan))))': 3,
+	'(NP (NP (DT 0=a) (NN 1=man)) (PP (IN 2=with) (NP 3=*)))': 3})
 	"""
 	import logging
 	from discodop._fragments import pygetsent
-	inittrees = OrderedDict()
-	newinittrees = OrderedDict()
-	auxtrees = OrderedDict()
+	inittrees = {}
+	newinittrees = {}
+	auxtrees = {}
 	for tree, weight in elemtrees:
 		tree, sent = brackettree(tree, detectdisc=True)
 		extractedadjunction = False
@@ -1072,7 +1071,7 @@ def writegrammar(grammar, bitpar=False):
 		supports LCFRS is used.
 	:returns: tuple of strings``(rules, lexicon)``"""
 	rules, lexicon = [], []
-	lexical = OrderedDict()
+	lexical = {}
 	for (r, yf), w in grammar:
 		w = '%g' % w
 		if len(r) == 2 and r[1] == 'Epsilon':

@@ -52,6 +52,10 @@ Requirements:
 - Cython 0.21+    http://www.cython.org
 - Numpy 1.6+      http://numpy.org/
 
+``make`` installs the checkout in editable mode and builds Cython extensions in
+place. By default, installation uses ``--user``. In a virtual environment, run
+``make PIP_INSTALL_FLAGS=``.
+
 Debian, Ubuntu based systems
 ----------------------------
 The following instructions employ the ``--user`` option which means that Python
@@ -143,25 +147,7 @@ discodop can be used in three ways:
    and `example notebooks <http://discodop.readthedocs.io/en/latest/intro.html#ipython-notebooks>`_
 3. `Web interfaces <http://discodop.readthedocs.io/en/latest/intro.html#web-interfaces>`_
 
-NB: avoid running discodop from within the source tree, to ensure that the
-installed versions of modules are imported.
-
 The documentation can be found at http://discodop.readthedocs.io
-
-Grammars, demo
-==============
-A interactive demo of the parser is available at:
-https://lang.science.uva.nl/parser/
-
-The pretrained grammars used in this demo are available at:
-https://lang.science.uva.nl/grammars/
-
-The English, German, and Dutch grammars are described in
-`van Cranenburgh et al., (2016) <http://dx.doi.org/10.15398/jlm.v4i1.100>`_;
-the French grammar appears in `Sangati & van Cranenburgh (2015)
-<http://aclweb.org/anthology/W15-0902>`_.
-For comparison, there is also an English grammar without discontinuous
-constituents (``ptb-nodisc``).
 
 Acknowledgments
 ===============

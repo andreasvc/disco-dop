@@ -1,4 +1,8 @@
-.PHONY: clean install test testdebug lint docs discodop py2
+.PHONY: all clean install test testdebug lint docs discodop debug debugvalgrind valgrind
+
+PYTHON3 ?= python3
+PYTHON3_DEBUG ?= python3-dbg
+PIP_INSTALL_FLAGS ?= --user
 
 all: discodop
 
@@ -13,8 +17,7 @@ clean:
 	cd docs && make clean
 
 discodop:
-	python3 setup.py install --user
-	cp build/lib.*/discodop/*.so discodop/
+	CYTHON_DEBUG=0 $(PYTHON3) -m pip install $(PIP_INSTALL_FLAGS) --no-build-isolation --editable .
 
 docs:
 	mkdir -p ~/.local/man/man1
@@ -26,25 +29,24 @@ install: discodop docs
 debug:
 	# NB: debug build requires all external modules to be compiled
 	# with debug symbols as well (e.g., install python-numpy-dbg package)
-	python3-dbg setup.py install --user --debug
-	cp build/lib.*/discodop/*.so discodop/
+	CYTHON_DEBUG=1 $(PYTHON3_DEBUG) -m pip install $(PIP_INSTALL_FLAGS) --no-build-isolation --editable .
 
 debugvalgrind: debug
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python3-dbg `which py.test` --doctest-modules discodop/ tests/unittests.py
+		$(PYTHON3_DEBUG) -m pytest --doctest-modules discodop/ tests/unittests.py tests/test_build.py
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python3-dbg -bb -tt tests.py
+		$(PYTHON3_DEBUG) -bb -tt tests.py
 
 valgrind: discodop
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		python3 tests.py
+		$(PYTHON3) tests.py
 
 test: discodop
-	python3 `which py.test` --doctest-modules discodop/ tests/unittests.py \
-	&& python3 -bb -tt tests.py \
+	$(PYTHON3) -m pytest --doctest-modules discodop/ tests/unittests.py tests/test_build.py \
+	&& $(PYTHON3) -bb -tt tests.py \
 	&& cd tests/ && sh run.sh
 
 # pylint: R=refactor, I=informational, e.g. "I0011: Locally disabling %s"
@@ -58,7 +60,7 @@ lint: discodop
 		discodop/*.py web/*.py tests/*.py \
 	&& pycodestyle --ignore=F,W1,W503,E1,E211,E225,E226,E227,E402,E901 \
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
-	&& python3 `which pylint` --indent-string='\t' --max-line-length=80 \
+	&& $(PYTHON3) -m pylint --indent-string='\t' --max-line-length=80 \
 		--disable=I,R,bad-continuation,invalid-name,star-args,wrong-import-position,wrong-import-order,ungrouped-imports,import-outside-toplevel,superfluous-parens \
 		--enable=cyclic-import \
 		--extension-pkg-whitelist=discodop,faulthandler,roaringbitmap \

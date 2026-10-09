@@ -347,7 +347,7 @@ def getestimates(Grammar grammar, uint32_t maxlen, str rootlabel):
 			* (maxlen + 1) / 1024 ** 2), 'MB')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
-	insidescores[...] = np.NAN
+	insidescores.fill(np.nan)
 	outside[...] = np.inf
 	print("getting inside estimates")
 	simpleinside(grammar, maxlen, insidescores)
@@ -390,10 +390,10 @@ cpdef getpcfgestimates(Grammar grammar, uint32_t maxlen, str rootlabel,
 		for lspan in range(maxlen + 1):
 			for rspan in range(maxlen - lspan + 1):
 				for lhs in range(grammar.nonterminals):
-					if outside[lhs, lspan, rspan] < INFINITY:
+					if outside[lhs, lspan, rspan, 0] < INFINITY:
 						print("%s[%d-%d] %g" % (
 								grammar.tolabel[lhs], lspan,
-								rspan, exp(-outside[lhs, lspan, rspan])))
+								rspan, exp(-outside[lhs, lspan, rspan, 0])))
 	return outside
 
 
@@ -696,7 +696,7 @@ cpdef testestimates(Grammar grammar, uint32_t maxlen, str rootlabel):
 			# 		exp(insidescores[a][b]))
 	print(len(insidescores) * sum(map(len, insidescores.values())), '\n')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
-	insidescores[...] = np.NAN
+	insidescores.fill(np.nan)
 	simpleinside(grammar, maxlen, insidescores)
 	insidescores[np.isnan(insidescores)] = np.inf
 	print("inside")

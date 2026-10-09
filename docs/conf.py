@@ -52,7 +52,7 @@ copyright = u'2019, Andreas van Cranenburgh'
 # built documents.
 
 # The short X.Y version.
-version = re.match('[0-9]+\.[0-9]+', __version__).group(0)
+version = re.match(r'[0-9]+\.[0-9]+', __version__).group(0)
 # The full version, including alpha/beta/rc tags.
 release = __version__
 

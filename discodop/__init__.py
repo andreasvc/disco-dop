@@ -7,4 +7,6 @@ Main components:
 - Facilities to extract and parse with tree fragments using data-oriented
   parsing (DOP) grammars.
 """
-__version__ = '0.6a0'
+from importlib.metadata import version
+
+__version__ = version('disco-dop')
