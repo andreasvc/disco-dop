@@ -26,6 +26,9 @@ docs:
 
 install: discodop docs
 
+test: discodop
+	$(PYTHON3) -bb -tt -m pytest --doctest-modules discodop/ tests/
+
 debug:
 	# NB: debug build requires all external modules to be compiled
 	# with debug symbols as well (e.g., install python-numpy-dbg package)
@@ -34,20 +37,12 @@ debug:
 debugvalgrind: debug
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		$(PYTHON3_DEBUG) -m pytest --doctest-modules discodop/ tests/unittests.py tests/test_build.py
-	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
-		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		$(PYTHON3_DEBUG) -bb -tt tests.py
+		$(PYTHON3_DEBUG) -bb -tt -m pytest --doctest-modules discodop/ tests/
 
 valgrind: discodop
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
 		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
-		$(PYTHON3) tests.py
-
-test: discodop
-	$(PYTHON3) -m pytest --doctest-modules discodop/ tests/unittests.py tests/test_build.py \
-	&& $(PYTHON3) -bb -tt tests.py \
-	&& cd tests/ && sh run.sh
+		$(PYTHON3) -m pytest tests/test_modules.py
 
 # pylint: R=refactor, I=informational, e.g. "I0011: Locally disabling %s"
 # pycodestyle: W503 line break before binary operator; E402 module level import not at top of file

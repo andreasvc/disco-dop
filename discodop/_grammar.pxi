@@ -1028,6 +1028,49 @@ cdef class Grammar:
 			return []
 		return [self.lexical[n].prob for n in dereference(it).second]
 
+	cdef vector[pair[uint32_t, Prob]] getlexrules(self, str word,
+			short wordidx, postagging, bint allow_smoothing=True):
+		"""Recover runtime lexical rules and weights in the active model.
+
+		Keep the same policy as populatepos in the PCFG and PLCFRS parsers:
+		prefer observed tags, then add signature tags for open-class words.
+		Rule numbers retain their identity across probability-model switches.
+		"""
+		cdef vector[pair[uint32_t, Prob]] result
+		cdef pair[uint32_t, Prob] entry
+		cdef sparse_hash_set[Label] observed
+		cdef uint32_t n
+		cdef Prob factor
+		cdef bint smooth = (allow_smoothing and postagging
+				and postagging.method == 'unknownword'
+				and not word.startswith('_UNK')
+				and postagging.closedclasswords
+				and word not in postagging.closedclasswords)
+		it = self.lexicalbyword.find(word.encode('utf8'))
+		if it == self.lexicalbyword.end():
+			it = self.lexicalbyword.find(word.lower().encode('utf8'))
+		if it != self.lexicalbyword.end():
+			factor = 1 - OPENCLASSFACTOR if smooth else 1
+			for n in dereference(it).second:
+				observed.insert(self.lexical[n].lhs)
+				entry.first = n
+				entry.second = (self.lexical[n].prob - log(factor)
+						if self.logprob else self.lexical[n].prob * factor)
+				result.push_back(entry)  # NB: entry is copied by value
+		if smooth:
+			sig = postagging.unknownwordfun(word, wordidx, postagging.lexicon)
+			it = self.lexicalbyword.find(sig.encode('utf8'))
+			if it != self.lexicalbyword.end():
+				for n in dereference(it).second:
+					if observed.count(self.lexical[n].lhs):
+						continue
+					entry.first = n
+					entry.second = (self.lexical[n].prob - log(OPENCLASSFACTOR)
+							if self.logprob
+							else self.lexical[n].prob * OPENCLASSFACTOR)
+					result.push_back(entry)  # NB: entry is copied by value
+		return result
+
 	def __str__(self):
 		rules = '\n'.join(filter(None,
 			[self.rulestr(n) for n in range(self.numrules)]))

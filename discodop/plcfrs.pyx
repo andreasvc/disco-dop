@@ -688,7 +688,9 @@ cdef populatepos(Grammar grammar,
 		int length = 1, left = 0, right = 0, gaps = 0
 		Label lhs
 		bint recognized
-		Prob openclassfactor = 0.001
+		Prob openclassfactor = OPENCLASSFACTOR, reservefactor
+	chart.postagging = postagging
+	chart.tags = tags
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
@@ -723,8 +725,10 @@ cdef populatepos(Grammar grammar,
 					and postagging.method == 'unknownword'
 					and postagging.closedclasswords
 					and word not in postagging.closedclasswords):
-				reserveprob = -pylog(1 - openclassfactor)
+				reservefactor = 1 - openclassfactor
+				reserveprob = -pylog(reservefactor)
 			else:
+				reservefactor = 1
 				reserveprob = 0
 			for n in dereference(it).second:
 				lexrule = grammar.lexical[n]
@@ -752,6 +756,7 @@ cdef populatepos(Grammar grammar,
 							newitem, lexrule.prob + reserveprob,
 							score + reserveprob, wordidx, agenda, chart,
 							whitelist):
+						chart.setlexrule(wordidx, lexrule.lhs, n, reservefactor)
 						if LCFRSItem_fused is SmallChartItem:
 							newitem = SmallChartItem(0, 0)
 						elif LCFRSItem_fused is FatChartItem:
@@ -779,6 +784,7 @@ cdef populatepos(Grammar grammar,
 					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
 							newitem, lexrule.prob - pylog(openclassfactor),
 							score, wordidx, agenda, chart, whitelist):
+						chart.setlexrule(wordidx, lexrule.lhs, n, openclassfactor)
 						if LCFRSItem_fused is SmallChartItem:
 							newitem = SmallChartItem(0, 0)
 						elif LCFRSItem_fused is FatChartItem:
@@ -809,6 +815,7 @@ cdef populatepos(Grammar grammar,
 					# prevent pruning of provided tags in whitelist
 					if process_lexedge[LCFRSItem_fused, LCFRSChart_fused](
 							newitem, 0.0, score, wordidx, agenda, chart, None):
+						chart.setlexrule(wordidx, lhs, -1, 1)
 						if LCFRSItem_fused is SmallChartItem:
 							newitem = SmallChartItem(0, 0)
 						elif LCFRSItem_fused is FatChartItem:

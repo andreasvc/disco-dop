@@ -17,3 +17,6 @@ DEF MAX_LOGPROB = 300.0
 # The maximum length of the path to the root node and any terminal node.
 # Prevents unary cycles from causing stack overflows in k-best extraction.
 DEF MAX_DEPTH = 200
+
+# Share the runtime lexical smoothing scale with lexical score recovery.
+DEF OPENCLASSFACTOR = 0.001

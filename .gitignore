@@ -2,7 +2,6 @@
 /*
 
 # except these files
-!tests.py
 !setup.py
 !LICENSE
 !MANIFEST.in

@@ -630,7 +630,9 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 		uint64_t cell, ccell = 0
 		uint32_t n
 		short left, right, lensent = len(sent)
-		Prob openclassfactor = 0.001
+		Prob openclassfactor = OPENCLASSFACTOR, reservefactor
+	chart.postagging = postagging
+	chart.tags = tags
 	for left, word in enumerate(sent):
 		tag = tags[left] if tags and tags[left] else None
 		# if we are given gold tags, make sure we only allow matching
@@ -656,8 +658,10 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 					and postagging.method == 'unknownword'
 					and postagging.closedclasswords
 					and word not in postagging.closedclasswords):
-				reserveprob = -pylog(1 - openclassfactor)
+				reservefactor = 1 - openclassfactor
+				reserveprob = -pylog(reservefactor)
 			else:
+				reservefactor = 1
 				reserveprob = 0
 			for n in dereference(it).second:
 				lexrule = grammar.lexical[n]
@@ -671,6 +675,7 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 					chart.updateprob(cell + lhs,
 							lexrule.prob + reserveprob, 0.0)
 					chart.addedge(cell + lhs, right, NULL)
+					chart.setlexrule(left, lhs, n, reservefactor)
 					recognized = True
 					if midfilter is not NULL:
 						updatemidfilter(midfilter[0], left, right, lhs, nts)
@@ -698,6 +703,7 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 					chart.updateprob(cell + lhs,
 							lexrule.prob - pylog(openclassfactor), 0.0)
 					chart.addedge(cell + lhs, right, NULL)
+					chart.setlexrule(left, lhs, n, openclassfactor)
 					recognized = True
 					if midfilter is not NULL:
 						updatemidfilter(midfilter[0], left, right, lhs, nts)
@@ -708,6 +714,7 @@ cdef populatepos(CFGChart_fused chart, sent, tags,
 				if tagre.match(grammar.tolabel[lhs]):
 					chart.updateprob(cell + lhs, 0.0, 0.0)
 					chart.addedge(cell + lhs, right, NULL)
+					chart.setlexrule(left, lhs, -1, 1)
 					recognized = True
 					if midfilter is not NULL:
 						updatemidfilter(midfilter[0], left, right, lhs, nts)

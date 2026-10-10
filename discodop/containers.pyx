@@ -18,10 +18,6 @@ from cython.operator cimport dereference
 from libc.string cimport strchr
 from libc.stdio cimport FILE, fopen, fread, fclose
 
-cdef extern from "<algorithm>" namespace "std" nogil:
-	Iter lower_bound[Iter, T, Compare](
-			Iter first, Iter last, const T& value, Compare comp)
-
 include "constants.pxi"
 
 cdef array chararray = array('b')
@@ -119,32 +115,39 @@ cdef class Chart:
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
+	cdef void setlexrule(self, short wordidx, Label label,
+			int ruleno, Prob factor):
+		"""Remember the source rule and smoothing scale of an accepted edge."""
+		cdef pair[int, Prob] entry
+		entry.first, entry.second = ruleno, factor
+		self.lexicalrules[(<uint64_t>wordidx << 32) | label] = entry
+
 	cdef int lexruleno(self, ItemNo itemidx, Edge edge) except -1:
 		"""Return lexical rule number given a lexical edge."""
-		cdef Label label = self.label(itemidx)
-		cdef string word = self.sent[self.lexidx(edge)].encode('utf8')
-		it = self.grammar.lexicalbyword.find(word)
-		if it == self.grammar.lexicalbyword.end():
-			raise ValueError('unknown word: %r' % word)
-		# do binary search among rules for word for rule with given lhs
-		it2 = lower_bound(
-				dereference(it).second.begin(),
-				dereference(it).second.end(),
-				label,
-				LexLabelCmp(self.grammar.lexical))
-		if it2 != dereference(it).second.end():
-			n = dereference(it2)
-			if self.grammar.lexical[n].lhs == label:
-				return n
-		raise ValueError('no lexical rule found for %r, %r' % (label, word))
+		cdef int ruleno = self.lexrule(itemidx, edge).first
+		if ruleno < 0:
+			raise ValueError('forced POS tag has no lexical rule')
+		return ruleno
+
+	cdef pair[int, Prob] lexrule(self, ItemNo itemidx, Edge edge):
+		"""Recover the source rule and its effective weight in the active model."""
+		cdef uint64_t key = (<uint64_t>self.lexidx(edge) << 32) | self.label(itemidx)
+		cdef pair[int, Prob] entry
+		it = self.lexicalrules.find(key)
+		if it == self.lexicalrules.end():
+			raise ValueError('no lexical rule recorded for chart edge')
+		entry = dereference(it).second
+		if entry.first < 0:  # Forced POS tag, with unit lexical weight.
+			entry.second = 0 if self.grammar.logprob else 1
+		else:
+			entry.second = (self.grammar.lexical[entry.first].prob - log(entry.second)
+					if self.grammar.logprob
+					else self.grammar.lexical[entry.first].prob * entry.second)
+		return entry
 
 	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1:
-		"""Return lexical probability given a lexical edge."""
-		cdef int ruleno = self.lexruleno(itemidx, edge)
-		if ruleno >= 0:
-			prob = self.grammar.lexical[ruleno].prob
-			return exp(-prob) if self.logprob else prob
-		return 0 if self.logprob else 1
+		"""Return lexical weight in the grammar's current representation."""
+		return self.lexrule(itemidx, edge).second
 
 	def numitems(self):
 		"""Number of items in chart."""
@@ -180,9 +183,10 @@ cdef class Chart:
 	cdef edgestr(self, ItemNo itemidx, Edge edge):
 		"""Return string representation of item and edge belonging to it."""
 		if edge.rule is NULL:
+			prob = self.lexprob(itemidx, edge)
 			return "'%s' %g" % (
 					self.sent[self.lexidx(edge)],
-					self.lexprob(itemidx, edge))
+					exp(-prob) if self.grammar.logprob else prob)
 		else:
 			return '%s %s %g' % (
 					self.itemstr(self._left(itemidx, edge)),

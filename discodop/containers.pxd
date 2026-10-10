@@ -568,6 +568,8 @@ cdef class Grammar:
 	cpdef noderuleno(self, node)
 	cpdef getruleno(self, tuple r, tuple yf)
 	cdef yfstr(self, ProbRule rule)
+	cdef vector[pair[uint32_t, Prob]] getlexrules(self, str word,
+			short wordidx, postagging, bint allow_smoothing=*)
 
 
 # chart improvements todo:
@@ -586,6 +588,8 @@ cdef class Chart:
 	cdef readonly list derivations
 	cdef Grammar grammar
 	cdef readonly list sent
+	cdef readonly object postagging, tags
+	cdef sparse_hash_map[uint64_t, pair[int, Prob]] lexicalrules
 	cdef short lensent
 	cdef Label start
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
@@ -593,6 +597,9 @@ cdef class Chart:
 	cdef int lexidx(self, Edge edge) except -1
 	cdef Prob subtreeprob(self, ItemNo itemidx)
 	cdef Prob lexprob(self, ItemNo itemidx, Edge edge) except -1
+	cdef pair[int, Prob] lexrule(self, ItemNo itemidx, Edge edge)
+	cdef void setlexrule(self, short wordidx, Label label,
+			int ruleno, Prob factor)
 	cdef int lexruleno(self, ItemNo itemidx, Edge edge) except -1
 	cdef edgestr(self, ItemNo itemidx, Edge edge)
 	cdef ItemNo _left(self, ItemNo itemidx, Edge edge)

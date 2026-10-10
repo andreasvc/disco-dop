@@ -28,7 +28,7 @@ from .bit import pyintnextset, pyintbitcount
 cimport cython
 from cython.operator cimport dereference
 from libc.string cimport memset
-from libc.stdint cimport uint64_t
+from libc.stdint cimport uint32_t, uint64_t
 from libc.math cimport HUGE_VAL as INFINITY
 from libcpp.string cimport string
 from libcpp.vector cimport vector
@@ -452,9 +452,11 @@ cdef sldop(Chart chart, list sent, list tags, int m, int sldop_n):
 	model = chart.grammar.currentmodel
 	chart.grammar.switch(u'shortest', logprob=True)
 	shortestderivations, msg, chart2 = treeparsing(
-			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags=tags,
-			maskrules=False)
+			nmostlikelytrees, sent, chart.grammar, m, backtransform,
+			tags=chart.tags if tags is None else tags,
+			maskrules=False, postagging=chart.postagging)
 	if not chart2:
+		chart.grammar.switch(model, logprob=True)
 		return [], 'SL-DOP couldn\'t find parse for tree'
 	result = {}
 	root = chart2.root()
@@ -736,6 +738,8 @@ cdef fragmentsinderiv_re_(ItemNo v, RankedEdge deriv, Chart chart,
 				lexruleno = chart.lexruleno(v, child.edge)
 				lexcount = chart.grammar.lexcounts[lexruleno]
 				lexprob = chart.lexprob(v, child.edge)
+				if chart.grammar.logprob:
+					lexprob = exp(-lexprob)
 			except ValueError:
 				lexcount = lexprob = 0
 			result.append((
@@ -770,7 +774,7 @@ def splitfrag(node):
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
-		maskrules=True):
+		maskrules=True, postagging=None):
 	"""Assign probabilities to a sequence of trees with a DOP grammar.
 
 	Given a sequence of trees (as strings), parse them with a DOP grammar
@@ -833,7 +837,8 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	# Do not parse with the PCFG parser even if possible, because that
 	# requires a different way of pruning.
 	# FIXME: two pruning mechanisms; want both?
-	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist)
+	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist,
+			postagging=postagging)
 	if maskrules:
 		grammar.setmask(None)
 
@@ -870,14 +875,16 @@ cpdef viterbiderivation(Chart chart):
 	return derivations[0]
 
 
-def doprerank(parsetrees, sent, k, Grammar coarse, Grammar fine):
+def doprerank(parsetrees, sent, k, Grammar coarse, Grammar fine,
+		postagging=None, tags=None):
 	"""Rerank *k*-best coarse trees w/parse probabilities of DOP reduction.
 
 	cf. ``dopparseprob()``."""
 	cdef list results = []
 	for derivstr, _, _ in nlargest(k, parsetrees, key=itemgetter(1)):
 		deriv = addbitsets(derivstr)
-		results.append((derivstr, exp(dopparseprob(deriv, sent, coarse, fine)),
+		results.append((derivstr, exp(dopparseprob(deriv, sent, coarse, fine,
+				postagging=postagging, tags=tags)),
 				None))
 	msg = 're-ranked %d parse trees; best tree at %d. ' % (
 			len(results),
@@ -885,7 +892,8 @@ def doprerank(parsetrees, sent, k, Grammar coarse, Grammar fine):
 	return results, msg
 
 
-def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
+def dopparseprob(tree, sent, Grammar coarse, Grammar fine,
+		postagging=None, tags=None):
 	"""Compute the exact DOP parse probability of a Tree in a DOP reduction.
 
 	This follows up on a suggestion made by Goodman (2003, p. 143) of
@@ -903,6 +911,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 	Expects a mapping which gives a list of consistent rules from the reduction
 	as produced by ``fine.getrulemapping(coarse, re.compile('@[-0-9]+$'))``.
+	Pass ``postagging`` to apply runtime lexical smoothing in the fine grammar;
+	``tags`` disables smoothing at positions with a supplied POS tag.
 
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
@@ -911,6 +921,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	cdef dict cell  # chart[bitset] = cell; cell[label] = prob
 	cdef ProbRule *rule
 	cdef LexicalRule lexrule
+	cdef pair[uint32_t, Prob] lexical
+	cdef vector[pair[uint32_t, Prob]] lexicalrules
 	cdef object n  # pyint
 	cdef str pos
 	if not fine.logprob:
@@ -923,15 +935,19 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	for n, pos in tree.pos():
 		word = sent[n]
 		chart[1 << n] = cell = {}
-		it = fine.lexicalbyword.find(word.encode('utf8'))
-		if it == fine.lexicalbyword.end():
-			cell[fine.toid[pos]] = -0.0
+		lexicalrules = fine.getlexrules(word, n, postagging,
+				not tags or not tags[n])
+		if lexicalrules.empty():
+			# Preserve the unit-weight fallback for unknown, forced POS tags.
+			it = fine.lexicalbyword.find(word.encode('utf8'))
+			if it == fine.lexicalbyword.end():
+				cell[fine.toid[pos]] = -0.0
 			continue
-		for lexruleno in dereference(it).second:
-			lexrule = fine.lexical[lexruleno]
+		for lexical in lexicalrules:
+			lexrule = fine.lexical[lexical.first]
 			if (fine.tolabel[lexrule.lhs] == pos
 					or fine.tolabel[lexrule.lhs].startswith(pos + '@')):
-				cell[lexrule.lhs] = -lexrule.prob
+				cell[lexrule.lhs] = -lexical.second
 
 	# do post-order traversal (bottom-up)
 	for node, (r, yf) in list(zip(tree.subtrees(),

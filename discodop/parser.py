@@ -364,7 +364,8 @@ class Parser(object):
 					if prevparsetrees[stage.prune]:
 						parsetrees, msg1 = disambiguation.doprerank(
 								prevparsetrees[stage.prune], sent, stage.k,
-								self.stages[prevn].grammar, stage.grammar)
+								self.stages[prevn].grammar, stage.grammar,
+								postagging=self.postagging, tags=tags)
 				elif stage.mode == 'mc-rerank':
 					if prevparsetrees[stage.prune]:
 						parsetrees, msg1 = disambiguation.mcrerank(
