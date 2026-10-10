@@ -210,8 +210,7 @@ def counts(form, doexport=False):
 	target = METADATA[form['target']] if form.get('target') else None
 	target2 = METADATA[form['target2']] if form.get('target2') else None
 	if not doexport:
-		url = 'counts?' + urlencode(dict(export='csv', **form),
-				separator=b';')
+		url = 'counts?' + urlencode(dict(export='csv', **form))
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
 	# Combined results of all queries on each file
@@ -294,8 +293,7 @@ def counts(form, doexport=False):
 						urlencode(
 							dict(text=textno, sent=1,
 								query=query or form['query'],
-								engine=engine),
-							separator=b';'),
+								engine=engine)),
 						cnt, relfreq[text]))
 				barcode = ''
 				if resultsindices is not None:
@@ -377,14 +375,14 @@ def trees(form):
 	start, end = getslice(form.get('slice'))
 	maxresults = min(int(form.get('maxresults') or TREELIMIT), TREELIMIT)
 	# NB: we do not hide function or morphology tags when exporting
-	url = 'trees?' + urlencode(dict(export='csv', **form), separator=b';')
+	url = 'trees?' + urlencode(dict(export='csv', **form))
 	yield ('<pre>Query: %s\n'
 			'Trees (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				maxresults, url, url + ';linenos=1'))
+				maxresults, url, url + '&linenos=1'))
 	try:
 		tmp = CORPORA[engine].trees(form['query'],
 				selected, start, end, maxresults=maxresults,
@@ -412,12 +410,12 @@ def trees(form):
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			link = ('<a href="browse?text=%d;sent=%d%s%s">browse</a>'
+			link = ('<a href="browse?text=%d&sent=%d%s%s">browse</a>'
 					'|<a href="browsesents?%s">context</a>' % (
-					textno, sentno, ';nofunc' if 'nofunc' in form else '',
-					';nomorph' if 'nomorph' in form else '',
+					textno, sentno, '&nofunc' if 'nofunc' in form else '',
+					'&nomorph' if 'nomorph' in form else '',
 					urlencode(dict(text=textno, sent=sentno,
-						query=form['query'], engine=engine), separator=b';')))
+						query=form['query'], engine=engine))))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True, funcsep='-')
@@ -441,14 +439,14 @@ def sents(form, dobrackets=False):
 	start, end = getslice(form.get('slice'))
 	maxresults = min(int(form.get('maxresults') or SENTLIMIT), SENTLIMIT)
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
-			urlencode(dict(export='csv', **form), separator=b';'))
+			urlencode(dict(export='csv', **form)))
 	yield ('<pre>Query: %s\n'
 			'Sentences (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				maxresults, url, url + ';linenos=1'))
+				maxresults, url, url + '&linenos=1'))
 	try:
 		tmp = CORPORA[engine].sents(form['query'],
 					selected, start, end, maxresults=maxresults,
@@ -481,12 +479,12 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = ('<a href="browse?text=%d;sent=%d%s%s">tree</a>'
+			link = ('<a href="browse?text=%d&sent=%d%s%s">tree</a>'
 					'|<a href="browsesents?%s">context</a>' % (
-					textno, sentno, ';nofunc' if 'nofunc' in form else '',
-					';nomorph' if 'nomorph' in form else '',
+					textno, sentno, '&nofunc' if 'nofunc' in form else '',
+					'&nomorph' if 'nomorph' in form else '',
 					urlencode(dict(text=textno, sent=sentno, highlight=sentno,
-						query=form['query'], engine=engine), separator=b';')))
+						query=form['query'], engine=engine))))
 			if dobrackets:
 				sent = htmlescape(sent.replace(" )", " -NONE-)"))
 				out = sent.replace(high1, "<span class=r>%s</span>" % high1)
@@ -557,8 +555,7 @@ def fragmentsinresults(form, doexport=False):
 	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
 	if not doexport:
-		url = 'fragments?' + urlencode(dict(export='csv', **form),
-				separator=b';')
+		url = 'fragments?' + urlencode(dict(export='csv', **form))
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
 				'in the first %d search results from selected texts;\n'
@@ -615,7 +612,7 @@ def fragmentsinresults(form, doexport=False):
 				yield '%s\t%s\n' % (tree, freq)
 		else:
 			if disc:
-				link = '<a href="draw?tree=%s;sent=%s">draw</a>' % (
+				link = '<a href="draw?tree=%s&sent=%s">draw</a>' % (
 						quote(tree.encode('utf8')), quote(sent.encode('utf8')))
 				sent = GETLEAVES.sub(' <font color=red>\\1</font>',
 						htmlescape(' ' + sent + ' '))
@@ -768,11 +765,11 @@ def browsetrees():
 
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
-			prevlink = '<a href="browse?text=%d;sent=%d" id=prev>prev</a>' % (
+			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
 					textno, sentno - chunk + 1)
 		nextlink = '<a id=next>next</a>'
 		if sentno < CORPUSINFO[engine][textno].len - chunk:
-			nextlink = '<a href="browse?text=%d;sent=%d" id=next>next</a>' % (
+			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk + 1)
 		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=TEXTS[textno], totalsents=CORPUSINFO[engine][textno].len,
@@ -780,7 +777,7 @@ def browsetrees():
 				chunk=chunk, nofunc=nofunc, nomorph=nomorph,
 				mintree=start, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browse?text=%d;sent=1;nomorph">%s</a> '
+			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences; %d words)' % (
 			n, text, CORPUSINFO[engine][n].len, CORPUSINFO[engine][n].numwords)
 			for n, text in enumerate(TEXTS))
@@ -816,10 +813,9 @@ def browsesents():
 		# results = [htmlescape(a) for a in results]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
-			queryparams = ';' + urlencode(dict(
+			queryparams = '&' + urlencode(dict(
 					query=request.args['query'],
-					engine=engine),
-					separator=b';')
+					engine=engine))
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s\n' % ('\t'.join(
 					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'gray'),
@@ -843,11 +839,11 @@ def browsesents():
 				for n, a in enumerate(results, start)]
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
-			prevlink = ('<a href="browsesents?text=%d;sent=%d%s" id=prev>'
+			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
 					'prev</a>' % (textno, sentno - chunk, queryparams))
 		nextlink = '<a id=next>next</a>'
 		if sentno < CORPUSINFO[engine][textno].len - chunk:
-			nextlink = ('<a href="browsesents?text=%d;sent=%d%s" id=next>'
+			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
 					'next</a>' % (textno, sentno + chunk, queryparams))
 		return render_template('browsesents.html', textno=textno,
 				sentno=sentno, text=TEXTS[textno],
@@ -857,7 +853,7 @@ def browsesents():
 				query=request.args.get('query', ''),
 				engine=engine)
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browsesents?text=%d;sent=1;nomorph">%s</a> '
+			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences; %d words)' % (
 			n, text, CORPUSINFO[engine][n].len, CORPUSINFO[engine][n].numwords)
 			for n, text in enumerate(TEXTS))
@@ -895,15 +891,15 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 				seaborn.violinplot(x=target.name, y=title, data=df,
 						split=True, inner="stick", palette='Set1')
 			else:
-				seaborn.barplot(target.name, title, data=df, hue=target2.name,
-						palette='Set1')
+				seaborn.barplot(x=target.name, y=title, data=df,
+						hue=target2.name, palette='Set1')
 			fig = plt.gcf()
 			fig.autofmt_xdate()
 		else:  # treat X-axis as continuous
 			if target2 is None:
-				seaborn.jointplot(target.name, title, data=df, kind='reg')
+				seaborn.jointplot(x=target.name, y=title, data=df, kind='reg')
 			else:
-				seaborn.lmplot(target.name, title, data=df,
+				seaborn.lmplot(x=target.name, y=title, data=df,
 						hue=target2.name, palette='Set1')
 		# Convert to D3, SVG, javascript etc.
 		# import mpld3
@@ -1103,10 +1099,10 @@ def getcorpus():
 				for a in tfiles + ffiles + tokfiles)
 				or corpusinfo.keys() != corpora.keys()):
 		corpusinfo = {}
-		for engine in corpora:
+		for engine, corpus in corpora.items():
 			corpusinfo[engine] = []
-			for filename in sorted(corpora[engine].files):
-				corpusinfo[engine].append(corpora[engine].getinfo(filename))
+			for filename in sorted(corpus.files):
+				corpusinfo[engine].append(corpus.getinfo(filename))
 		if not corpusinfo:
 			raise ValueError('no texts found.')
 		texts = [EXTRE.sub('', os.path.basename(filename))
@@ -1141,7 +1137,7 @@ def stream_template(template_name, **context):
 
 class JsonSetEncoder(json.JSONEncoder):
 	"""Convert sets to lists for JSON encoding."""
-	def default(self, obj):  # pylint: disable=method-hidden
+	def default(self, obj):  # pylint: disable=method-hidden,arguments-renamed
 		"""Do conversion."""
 		if isinstance(obj, set):
 			return list(obj)
@@ -1196,7 +1192,7 @@ if __name__ == '__main__':
 (TEXTS, CORPUSINFO, STYLETABLE, CORPORA, METADATA) = getcorpus()
 LOG.info('corpus loaded.')
 try:
-	with open('treesearchpasswd.txt', 'rt') as fileobj:
+	with open('treesearchpasswd.txt', 'rt', encoding='utf8') as fileobj:
 		PASSWD = {a.strip(): b.strip() for a, b
 				in (line.split(':', 1) for line in fileobj)}
 	LOG.info('password protection enabled.')

@@ -368,7 +368,7 @@ if STANDALONE:
 (TEXTS, CORPORA, METADATA) = getcorpus()
 log.info('corpus loaded.')
 try:
-	with open('treesearchpasswd.txt', 'rt') as fileobj:
+	with open('treesearchpasswd.txt', 'rt', encoding='utf8') as fileobj:
 		PASSWD = {a.strip(): b.strip() for a, b
 				in (line.split(':', 1) for line in fileobj)}
 	log.info('password protection enabled.')

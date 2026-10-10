@@ -13,7 +13,7 @@ dt { font-variant: small-caps; }
 <h3>Texts</h3>
 <ol>
 {% for text in texts %}
-<li><a href="browsesents?text={{ loop.index0 }};sent=1;feat=average dependency length">
+<li><a href="browsesents?text={{ loop.index0 }}&amp;sent=1&amp;feat=average dependency length">
 	{{ text }}</a>
 {% endfor %}
 </ol>
